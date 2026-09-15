@@ -1,10 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────
-// Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-// 适配游戏 r150：
-//  - 优先加载新的 BuildTechniqueHitEventsEx 导出（逐事件速度倍率），
-//    旧版 DLL 自动回退到 BuildTechniqueHitEvents
-// ─────────────────────────────────────────────────────────────
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;

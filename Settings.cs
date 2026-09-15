@@ -1,9 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────
-// Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-// 手法面板「变速容差」滑块即时写回当前配置档，
-// 修复重启后 SelectedTechniqueProfileIndex 加载档位时把该值覆盖为 0
-// ─────────────────────────────────────────────────────────────
-using ADOFAIMacro.Macro;
+﻿using ADOFAIMacro.Macro;
 using ADOFAIMacro.Localization;
 using HarmonyLib;
 using Newgrounds;

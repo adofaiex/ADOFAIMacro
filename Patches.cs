@@ -1,13 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────
-// Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-// 适配游戏 r150：
-//  - 判定探针改用 scrMisc.GetAdjustedAngleBoundaryInDeg(GCS.difficulty, …)
-//    并读取返回结构体的 .Counted；AddHit 会原地改写 angleDiff，
-//    改为在 Prefix 捕获原始弧度角
-//  - CountValidKeysPressed 由前缀整方法替换改为 Transpiler，
-//    保留游戏新增的触屏/合作/键位限制器逻辑
-// ─────────────────────────────────────────────────────────────
-using ADOFAIMacro.Macro;
+﻿using ADOFAIMacro.Macro;
 using ADOFAIMacro.Platform;
 using HarmonyLib;
 using SkyHook;

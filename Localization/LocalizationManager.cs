@@ -122,7 +122,7 @@ namespace ADOFAIMacro.Localization
             ["tech.speed_segments"] = "变速分段设置",
             ["tech.segment_inherit"] = "留空的按键字段将继承全局配置。",
             ["tech.multi_chord_balance"] = "多押按键均分",
-            ["tech.multi_chord_balance_desc"] = "开：同一时刻按键数超过单手按键数时对半均分到两只手（6押R3 L3、7押R4 L3、8押R4 L4，单数时多的一键给主手）；关：主手取满后余数给另一手（如6押R5 L1）。",
+            ["tech.multi_chord_balance_desc"] = "开：同一时刻按键数超过单手按键数时对半均分到两只手；关：主手取满后余数给另一手。",
             ["tech.add_segment"] = "+ 添加分段",
             ["tech.segment_start_floor"] = "起始地板",
             ["tech.segment_end_floor"] = "结束地板",

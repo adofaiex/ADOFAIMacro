@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ─────────────────────────────────────────────────────────────
-     Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-     - GameManaged 默认指向本机 Steam 安装目录（可用 -p:GameManaged=… 覆盖）
-     - 缺失的 NuGet 引用改指游戏 Managed 目录；
-       System.Memory 使用本地 packages 目录（从旧版发布包恢复）
-     ───────────────────────────────────────────────────────────── -->
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>

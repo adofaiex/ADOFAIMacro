@@ -1,9 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────
-// Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-// 内置按键显示改用 KeyMap.GetDisplayText；多字符标签（N7、ENT…）
-// 自适应框宽；未知键回退显示 0xXX（不再显示 '?'）
-// ─────────────────────────────────────────────────────────────
-using UnityEngine;
+﻿using UnityEngine;
 using System;
 using System.Collections.Generic;
 using ADOFAIMacro.Macro;

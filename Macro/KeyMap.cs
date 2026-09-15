@@ -1,8 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-// 新增 GetDisplayText：内置按键显示覆盖层的 VK→短标签映射
-// （小键盘 N0–N9 / N* N+ N- N. N/、F1–F24、方向键、修饰键、标点等）
-// ─────────────────────────────────────────────────────────────
 using System.Collections.Generic;
 
 namespace ADOFAIMacro.Macro

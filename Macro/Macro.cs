@@ -1,12 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────
-// Fork 修改声明（Daoguan-king，2026-09；AGPL-3.0 §5a）
-// 适配游戏 r150：
-//  - player.Hit(false) → player.Hit(null, false)（r150 新增 long? hitTick）
-//  - 不兼容当前编译器的集合表达式 [with(n)] → new(n)
-//  - 手法模拟构建新增逐层 floor.speed 数组并传入原生层
-//  - 段边界仅在有效键位配置变化时重置手序（修复起始手连按两次）
-// ─────────────────────────────────────────────────────────────
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -347,9 +339,6 @@ namespace ADOFAIMacro.Macro
             // 而游戏 scrMisc.SelectHitMarginByTimeBoundary 里正号才是 Late
             // （>+Counted→TooLate），两者相差一个负号——因此探针 err<0 表示迟发。
             // 迟发必须【减小】触发偏移把按键提前，故这里为 `+= step`。
-            // 旧实现 `-= step` 方向相反：密集多押（16 押）时按键爆发式迟发使
-            // err 持续为负，偏移被一路推到 +60ms 钳制位（见 Player.log 的
-            // Macro-Cali 全程为正且 36 次饱和），整张谱系统性迟发→打不过。
             _autoOffsetMs += step;
             if (_autoOffsetMs > 60f) _autoOffsetMs = 60f;
             else if (_autoOffsetMs < -60f) _autoOffsetMs = -60f;
