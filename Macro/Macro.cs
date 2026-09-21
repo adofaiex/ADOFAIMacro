@@ -556,6 +556,9 @@ namespace ADOFAIMacro.Macro
         private static double _fireErrMax;
         private static int _fireCount;
         private static int _fireStatLastMs;
+        // 诊断：实际使用的 rate（= song.pitch）与批锚定次数，定位高密度段漂移
+        private static double _diagLastRate = -1.0;
+        private static int _diagBatchCount;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void RecordFireError(double lateSec)
@@ -571,8 +574,8 @@ namespace ADOFAIMacro.Macro
             int now = Environment.TickCount;
             if (unchecked(now - _fireStatLastMs) < 3000) return;
             _fireStatLastMs = now;
-            Main.Mod?.Logger.Log($"[Macro-Diag] 击发 {_fireCount} 次 | 平均迟发 {_fireErrSum / _fireCount * 1000.0:F3}ms | 最大 {_fireErrMax * 1000.0:F3}ms");
-            _fireErrSum = 0; _fireErrMax = 0; _fireCount = 0;
+            Main.Mod?.Logger.Log($"[Macro-Diag] 击发 {_fireCount} 次 | 平均迟发 {_fireErrSum / _fireCount * 1000.0:F3}ms | 最大 {_fireErrMax * 1000.0:F3}ms | rate={_diagLastRate:F4} | 批锚定 {_diagBatchCount}");
+            _fireErrSum = 0; _fireErrMax = 0; _fireCount = 0; _diagBatchCount = 0;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -591,6 +594,13 @@ namespace ADOFAIMacro.Macro
                 int localLastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
                 int localResetVer = Volatile.Read(ref _resetVersion);
 
+                // 事件时间戳“批锚定”状态（跨 while 迭代保持）：
+                // 批首事件发出时的本地 tick + 其理想歌曲时刻。批内其余事件按
+                // 各自理想歌曲时间差折算真实秒排到基准上（见事件处理段）。
+                long batchBaseTicks = 0;
+                double batchBaseTriggerAt = double.NaN;
+                const double kBatchWindowSec = 0.05;   // 批窗口 50ms
+
                 while (_workerRunning)
                 {
                     var anchor = Volatile.Read(ref _currentAnchor);
@@ -605,6 +615,7 @@ namespace ADOFAIMacro.Macro
                     {
                         localResetVer = curResetVer;
                         localLastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
+                        batchBaseTicks = 0; batchBaseTriggerAt = double.NaN;
                         continue;
                     }
 
@@ -673,6 +684,29 @@ namespace ADOFAIMacro.Macro
                         RecordFireError(audioNow - triggerAt);
                         bool enableTechnique = Main.Settings.EnableTechniqueSimulation;
 
+                        // ── 事件时间戳“批锚定” ────────────────────────
+                        // 游戏判定只认事件时间戳（亚帧）。同一时刻/极近的多个事件
+                        // （双押、八押）是在本线程逐个 Send 的，每次 Send 要花 0.1~2ms，排在后面的键实际发送时刻已晚于理想，时间戳若取发送瞬间就会被判迟发（八押可累积 5~10ms）。
+                        // 这里以“批首事件的真实发送本地时刻”为基准，批内其余事件按各自理想歌曲时间差折算真实秒排上去；基准来自批首的实际发送时刻，不使用 audioNow 的绝对外推，高密度连打段不会因外推累积误差越走越偏。
+                        // 批窗口 50ms，超出即重新锚定。
+                        long targetTicks;
+                        _diagLastRate = rate;
+                        if (!double.IsNaN(batchBaseTriggerAt)
+                            && triggerAt >= batchBaseTriggerAt
+                            && triggerAt - batchBaseTriggerAt <= kBatchWindowSec)
+                        {
+                            double relSec = (triggerAt - batchBaseTriggerAt)
+                                            / ((rate > 1e-9) ? rate : 1.0);
+                            targetTicks = batchBaseTicks + (long)(relSec * 10_000_000.0);
+                        }
+                        else
+                        {
+                            targetTicks = PreciseNow.LocalTicks();
+                            batchBaseTicks = targetTicks;
+                            batchBaseTriggerAt = triggerAt;
+                            _diagBatchCount++;
+                        }
+
                         if (!simulateKey)
                         {
                             hitCount++;
@@ -685,7 +719,7 @@ namespace ADOFAIMacro.Macro
                                 byte keyToRelease = ev.IsHoldRelated
                                     ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
                                     : ev.ReleaseKeyCode;
-                                SendKey(keyToRelease, false);
+                                SendKey(keyToRelease, false, targetTicks);
                                 if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
                                 Log($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={i} audioNow={audioNow:F6}");
                             }
@@ -700,8 +734,8 @@ namespace ADOFAIMacro.Macro
                         {
                             if (enableTechnique)
                             {
-                                if (_isHoldDown) { SendKey(_holdKey, false); _holdKey = 0; _isHoldDown = false; }
-                                SendKey(ev.KeyCode, true);
+                                if (_isHoldDown) { SendKey(_holdKey, false, targetTicks); _holdKey = 0; _isHoldDown = false; }
+                                SendKey(ev.KeyCode, true, targetTicks);
                                 _holdKey = ev.KeyCode; _isHoldDown = true;
                                 Log($"[Macro-Worker] 直接长按 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
                             }
@@ -715,7 +749,7 @@ namespace ADOFAIMacro.Macro
                         {
                             if (enableTechnique)
                             {
-                                SendKey(ev.KeyCode, true);
+                                SendKey(ev.KeyCode, true, targetTicks);
                                 Log($"[Macro-Worker] 直接按下 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
                             }
                             else
@@ -823,7 +857,7 @@ namespace ADOFAIMacro.Macro
         private static bool _keyPathProbeDone;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void SendKey(byte keyCode, bool isDown)
+        private static unsafe void SendKey(byte keyCode, bool isDown, long targetLocalTicks = 0)
         {
             // 一次性路径探针：定位镜像链路断点（每次会话首键输出）
             // 注意用 UMM Logger 直调——Macro.Log 是 [Conditional("DEBUG")]，Release 会整体剥除
@@ -837,8 +871,9 @@ namespace ADOFAIMacro.Macro
 
             if (Main.Settings.BlockInputWhenUnfocused && !IsGameWindowFocused()) return;
 
-            // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）
-            if (VirtualAsyncInput.Active && VirtualAsyncInput.Send(keyCode, isDown)) return;
+            // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）。
+            // targetLocalTicks：事件时间戳（批锚定后的理想本地时刻；0=用当前时刻）。
+            if (VirtualAsyncInput.Active && VirtualAsyncInput.Send(keyCode, isDown, targetLocalTicks)) return;
 
             if (_cachedSkyHookMode)
             {

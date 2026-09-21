@@ -92,8 +92,13 @@ namespace ADOFAIMacro.Macro
         /// <summary>
         /// 合成并直喂一个按键事件。返回 false 表示本次未发送（调用方应回退到系统注入路径）。
         /// 仅由宏工作线程调用；keyQueue 是 ConcurrentQueue，跨线程入队即钩子线程的同款用法。
-        /// </summary>
-        public static bool Send(byte keyCode, bool isDown)
+        ///
+        /// targetLocalTicks：事件时间戳（本地 .NET ticks）。游戏判定只认事件时间戳（亚帧），
+        /// 宏的 WorkerLoop 用“批锚定”给出每个事件的理想本地时刻（批首真实发送时刻 +
+        /// 理想相对时间），避免双押/多押逐个发送的累积延迟与高密度段的外推漂移。
+        /// 传 0 = 用当前时刻（非批锚定路径/释放兜底）。
+
+        public static bool Send(byte keyCode, bool isDown, long targetLocalTicks = 0)
         {
             if (!_active) return false;
 
@@ -103,7 +108,8 @@ namespace ADOFAIMacro.Macro
                 if (label == KeyLabel.Unknown)
                     return false; // 无 KeyLabel 的键走掩码相等性会互相合并，必须回退注入路径
 
-                PreciseNow.SplitLocalUnix(PreciseNow.LocalTicks(), out long sec, out uint nano);
+                long localTicks = targetLocalTicks != 0 ? targetLocalTicks : PreciseNow.LocalTicks();
+                PreciseNow.SplitLocalUnix(localTicks, out long sec, out uint nano);
 
                 SkyHookEvent evt = BuildEvent(sec, nano,
                     isDown ? EventType.KeyPressed : EventType.KeyReleased,

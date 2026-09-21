@@ -118,7 +118,7 @@ namespace ADOFAIMacro.Localization
             ["tech.left_hand"] = "左手",
             ["tech.right_hand"] = "右手",
             ["tech.global_bpm_limit"] = "全局·速度阈值 (BPM)",
-            ["tech.bpm_explanation"] = "超过此BPM时自动细分时间片，允许同一只手连续承担多个事件",
+            ["tech.bpm_explanation"] = "单指敲击上限：音符速率超过该值时左右手交替；未超阈值时切回起始手单指连打。",
             ["tech.speed_segments"] = "变速分段设置",
             ["tech.segment_inherit"] = "留空的按键字段将继承全局配置。",
             ["tech.multi_chord_balance"] = "多押按键均分",

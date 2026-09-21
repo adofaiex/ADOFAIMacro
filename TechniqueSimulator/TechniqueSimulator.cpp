@@ -28,6 +28,10 @@ static const double kSameMomentEps = 3e-3;
 static const double kChordGap = 1.2e-2;   // 簇内相邻事件最大间隔（12ms）
 static const double kChordSpan = 3.5e-2;  // 整簇最大时间跨度（35ms）
 
+// 拟人最短按压：真人一次点按约 40~60ms，也保证跨过至少一帧（60fps 约 16.7ms）。
+
+static const double kMinPressDuration = 5.0e-2;  // 50ms
+
 static int ChordClusterSize(const vector<double>& evTime, int idx)
 {
     int n = (int)evTime.size();
@@ -206,30 +210,15 @@ static double GetLegacyPressLength(double bpm, double speed, double limit)
     return (r > 1e-9) ? (30.0 / r) : 0.0;
 }
 
-// 计算松键时刻偏移量（按分片结构）
-static double CalculateReleaseTime(double pStart, const PieceInfo& cur, const PieceInfo& next,
-    double t, double ratio)
-{
-    if (next.pieceLen > cur.pieceLen + 5e-6) {
-        if (pStart + cur.pieceLen > cur.endTime + 5e-6)
-            return (next.endTime - t) * ratio / 2.0;
-        else
-            return (pStart + cur.pieceLen * 2.0 - t) * ratio / 2.0;
-    }
-    else {
-        if (pStart + cur.pieceLen + 5e-6 < cur.endTime)
-            return (pStart + cur.pieceLen + next.pieceLen - t) * ratio / 2.0;
-        else
-            return (next.endTime - t) * ratio / 2.0;
-    }
-}
-
-// 该音与前后相邻“不同时刻”音符的较小间隔（同刻双押/和弦按 kSameMomentEps
-// 跳过后取另一侧，孤立音回退 fallback）。用于限制按压时长，避免跨暂停/长空拍
-// 一直按住。
+// 计算松键时刻偏移量（已废弃：按住时长改为直接跟随实际音符间隔，见生成阶段的 dur = unit × ratio。保留注释以免后来者再走回头路。
+// 该音与前后相邻“不同簇”音符的较小间隔，用作按压时长的基准。
+// 同刻（≤ kSameMomentEps）与近同刻密簇（相邻间隔 ≤ kChordGap，如 1° 砖 +midspin 多押、相差几毫秒的偏移双押）整体视为一次按压：
+// 若按簇内间隔算，按住时长会缩到 2~4ms（不足一帧，帧采样输入链路可能丢键），因此簇内音一律退到“簇外”第一个正常间隔（> kChordGap）计算，使同一密簇内所有音的按压时长一致。孤立音回退 fallback。
 static double GetLocalPressInterval(const vector<double>& evTime, int idx, double fallback)
 {
     int n = (int)evTime.size();
+
+    // 紧邻的不同刻间隔（同刻按 kSameMomentEps 跳过）
     double gp = 0.0, gn = 0.0;
     int k = idx - 1;
     while (k >= 0 && evTime[idx] <= evTime[k] + kSameMomentEps) k--;
@@ -238,6 +227,21 @@ static double GetLocalPressInterval(const vector<double>& evTime, int idx, doubl
     while (j < n && evTime[j] <= evTime[idx] + kSameMomentEps) j++;
     if (j < n) gn = evTime[j] - evTime[idx];
 
+    // 近同刻密簇：把连续 ≤ kChordGap 的事件并为一簇，取簇外间隔
+    bool tiny = (gp > 1e-9 && gp <= kChordGap + 1e-9) ||
+                (gn > 1e-9 && gn <= kChordGap + 1e-9);
+    if (tiny) {
+        int lo = idx, hi = idx;
+        while (lo > 0 && evTime[lo] - evTime[lo - 1] <= kChordGap + 1e-9) lo--;
+        while (hi + 1 < n && evTime[hi + 1] - evTime[hi] <= kChordGap + 1e-9) hi++;
+        double outPrev = (lo > 0) ? (evTime[idx] - evTime[lo - 1]) : 0.0;
+        double outNext = (hi + 1 < n) ? (evTime[hi + 1] - evTime[idx]) : 0.0;
+        double out;
+        if (outPrev > 1e-9 && outNext > 1e-9) out = (outPrev < outNext) ? outPrev : outNext;
+        else                                  out = (outPrev > outNext) ? outPrev : outNext;
+        if (out > 1e-9) return out;
+    }
+
     double unit;
     if (gp > 1e-9 && gn > 1e-9) unit = (gp < gn) ? gp : gn;
     else                        unit = (gp > gn) ? gp : gn;
@@ -245,7 +249,7 @@ static double GetLocalPressInterval(const vector<double>& evTime, int idx, doubl
     return unit;
 }
 
-// 按“实际音符间隔”计算折叠按压基准（仿人可见的最短按压，约半拍），
+// 按“实际音符间隔”计算折叠按压基准（仿人可见的最短按压）。
 // 与 GetLegacyPressLength 的区别是：速率由真实音符间隔 60/gap 折算，而不是局部地板 BPM(bpm*speed)。
 // 匀速谱面（各音符间隔相同、但 SetSpeed 让局部 speed 不同）因此得到一致的按压时长；同刻双押/和弦也共享同一基准。
 static double GetNoteFoldedPressLength(const vector<double>& evTime, int idx, double limit)
@@ -265,8 +269,7 @@ static double GetNoteFoldedPressLength(const vector<double>& evTime, int idx, do
 
     double r = (unit > 1e-9) ? (60.0 / unit) : 0.0;
     if (r < 1e-9) r = 1e-9;
-    if (limit > 1e-9) {
-        while (r > limit)         r /= 2.0;
+    if (limit > 1e-9 && r <= limit) {
         while (r <= limit / 2.0)  r *= 2.0;
     }
     return (r > 1e-9) ? (30.0 / r) : 0.0;
@@ -427,13 +430,8 @@ HitEvent* BuildTechniqueHitEventsEx(
             }
 
             // 基础片长跟随“实际音符间隔” gapNext，而不是把 floor 半拍量化：
-            // 事件网格才是决定换手相位的网格。非 90° 砖 / SetSpeed 组合下，
-            // 局部半拍的整数倍与实际音符间隔不整除，量化片长（如 4×半拍=
-            // 86ms）会跨过下一个音符（79ms），把单音与紧跟的双押/和弦并到
-            // 同一只手，导致换手相位漂移——雪花谱表现为 R2 L1 R1 L3… 而
-            // 不是稳定的 R2 L1 R1 L1。
-            // 片长 = gapNext × k，k = round(音符速率/(2·阈值))：对 90° 砖
-            // （音符间隔 = 局部半拍）与旧公式完全一致，不影响常规谱面。
+            // 事件网格才是决定换手相位的网格。
+
             double gapNext = 0.0;
             {
                 int j = nowD + 1;
@@ -447,9 +445,17 @@ HitEvent* BuildTechniqueHitEventsEx(
             }
             if (gapNext > 1e-9 && lastSegLimit > 1e-9) {
                 double noteRateLen = 60.0 / gapNext;
-                double kk = floor(noteRateLen / (2.0 * lastSegLimit) + 0.5);
-                if (kk < 1.0) kk = 1.0;
-                baseLen = gapNext * kk;
+                int fingers = 1;
+                if (noteRateLen > lastSegLimit + 1e-9) {
+                    // -1e-6 容差：把 359.99999 这类浮点误差算回 360（3 指）
+                    fingers = (int)ceil(noteRateLen / lastSegLimit - 1e-6);
+                    if (fingers < 1) fingers = 1;
+                }
+                int mainCount = (fingers + 1) / 2;   // 主手本片音数
+                int otherCount = fingers / 2;        // 副手本片音数
+                int myCount = (hand == mainHand) ? mainCount : otherCount;
+                if (myCount < 1) myCount = 1;
+                baseLen = gapNext * myCount;
             } else {
                 baseLen = GetBasePieceLength(bpm, localSpeed, lastSegLimit);
             }
@@ -465,9 +471,8 @@ HitEvent* BuildTechniqueHitEventsEx(
             int maxK = (csH == 0) ? ec.leftKeyCount : ec.rightKeyCount;
 
             // ── 多押按键均分 ──────────────────────────────────
-            // 同一“时刻”（自适应多押簇：内部间隔小、整簇跨度小）的事件数超过
-            // 单手按键数时：开启开关则把这一簇多押对半均分到两只手（单数时多的
-            // 一键给主手），整簇作为一片提交，生成阶段再逐事件交替取手/取键；
+            // 同一“时刻”的事件数超过单手按键数时：
+            // 开启开关则把这一簇多押对半均分到两只手，整簇作为一片提交，生成阶段再逐事件交替取手/取键；
             // 关闭则沿用“主手取满 maxK，余数交给另一手”的旧行为。
             {
                 int chordN = ChordClusterSize(evTime, nowD);
@@ -497,10 +502,7 @@ HitEvent* BuildTechniqueHitEventsEx(
             }
 
             // 按键数超限：本片直接取满该手全部按键（maxK 个事件）。
-            // 旧实现按 2 的幂细分片长，片内事件数可能停在 maxK 以下
-            // （例如 5 指只用 3 指），且随速率升高不单调；高密度下应让
-            // 单手滚完所有手指再换手。pLen 对准第 maxK 个事件的切点，
-            // 使下面的评分保持该片长而不是把它缩回更小的片。
+            // 旧实现按 2 的幂细分片长，片内事件数可能停在 maxK 以下，且随速率升高不单调；高密度下应让单手滚完所有手指再换手。pLen 对准第 maxK 个事件的切点，使下面的评分保持该片长而不是把它缩回更小的片。
             if (cnt > maxK) {
                 cnt = maxK;
                 int cut = nowD + maxK;
@@ -589,7 +591,6 @@ HitEvent* BuildTechniqueHitEventsEx(
         for (size_t pcnt = 0; pcnt + 1 < pieces.size(); pcnt++) {
             auto& cur = pieces[pcnt];
             auto& next = pieces[pcnt + 1];
-            double pStart = (pcnt > 0) ? pieces[pcnt - 1].endTime : 0.0;
 
             // 多押均分片：预先算好各手分到的事件数（片内事件按手交替）
             vector<int> splitSizes;
@@ -714,26 +715,31 @@ HitEvent* BuildTechniqueHitEventsEx(
                 }
 
                 // ── 计算松键时刻 ──────────────────────────────────
-                // 默认：按分片结构计算，再以“本片自身音符跨度 + 最小内部间隔”
-                // 为上限截断——片尾跨暂停/长空拍时不会把整段时间一直按住。
-                // pressDurationMode=1：旧版（1.3.0.30）风格，基于八度折叠后的半拍。
+                // 默认：按住时长跟随“该音的实际音符间隔”（占空比 = ratio）。
+                // 早期实现用分片结构推算“到下一片结束的一半”：片长随速率
+                // 阶跃为 2k×间隔，按住时长因此在 2·阈值（240BPM）附近从
+                // 150ms 跳成 267ms，并随 k 变化反复锯动，与 <240 的平滑段
+                // 明显不同。改用实际间隔后时长随速率平滑单调（240→150ms、
+                // 270→133ms、360→100ms…），且片内各音等长（含双押/和弦）。
+                // pressDurationMode=1：旧版（1.3.0.30）风格，基于折叠半拍。
                 double dur;
                 if (g_config.pressDurationMode == 1) {
                     dur = GetNoteFoldedPressLength(evTime, idx, ec.bpmLimit) * ratio;
                 } else {
-                    dur = CalculateReleaseTime(pStart, cur, next, t, ratio);
+                    double unit = GetLocalPressInterval(evTime, idx, cur.pieceLen);
+                    dur = unit * ratio;
+
+                    // 上限：本片自身音符跨度 + 最小内部间隔——片尾跨暂停/
+                    // 长空拍时不会把整段时间一直按住。
                     double span = 0.0, mi = 0.0;
                     if (cur.evCount > 1) {
                         int first = cur.evStart, last = cur.evStart + cur.evCount - 1;
                         span = evTime[last] - evTime[first];
-                        // 取“有意义”的内部间隔，跳过同刻双押/和弦的 ~0 间隙；
-                        // 纯和弦（整片同刻）没有内部间隔，回退到与前后相邻音的
-                        // 间隔。否则 cap 会被 ~0 的内部间隙压成 0，和弦音只能退
-                        // 到仿人下限，和同速率的单音按压时长不一致。
+                        // 取“有意义”的内部间隔
                         bool found = false;
                         for (int q = first; q < last; q++) {
                             double g = evTime[q + 1] - evTime[q];
-                            if (g > kSameMomentEps && (!found || g < mi)) { mi = g; found = true; }
+                            if (g > kChordGap + 1e-9 && (!found || g < mi)) { mi = g; found = true; }
                         }
                         if (!found) mi = GetLocalPressInterval(evTime, first, cur.pieceLen);
                     } else {
@@ -741,14 +747,10 @@ HitEvent* BuildTechniqueHitEventsEx(
                     }
                     double cap = ratio * (span + mi);
                     if (dur > cap) dur = cap;
-
-                    // 仿人下限：不低于“实际音符间隔折叠基准 × 比例”（约 40~80ms）。
-                    // 极快连打时避免短到看不出按键（实测真人约 50ms）。
-                    // 注意：用实际音符间隔而不是局部地板 BPM，保证匀速谱面
-                    // （含双押/和弦）按压时长一致，不随 SetSpeed 忽长忽短。
-                    double floorDur = GetNoteFoldedPressLength(evTime, idx, ec.bpmLimit) * ratio;
-                    if (dur < floorDur) dur = floorDur;
                 }
+
+                // 拟人最短按压：真人一次点按约 50ms，也保证超过一帧
+                if (dur < kMinPressDuration) dur = kMinPressDuration;
                 double rel = t + dur;
 
                 if (next.hand != cur.hand || next.evCount == 0) {
