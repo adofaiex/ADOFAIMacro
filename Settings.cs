@@ -253,7 +253,11 @@ namespace ADOFAIMacro
         private int GetBetaVersionFromAssembly()
         {
             try { return Assembly.GetExecutingAssembly().GetName().Version.Revision; }
-            catch { return 0; }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning($"[Settings] 读取 Beta 版本号失败，按正式版处理: {ex.Message}");
+                return 0;
+            }
         }
 
         // ── 输入模式 ──────────────────────────────────
@@ -506,34 +510,16 @@ namespace ADOFAIMacro
         private string _levelConfigStatus = "";
 
         // ─────────────────────────────────────────────
-        //  按键代码映射
+        //  按键代码映射（统一走 Macro.KeyMap 单一数据源）
         // ─────────────────────────────────────────────
-        private static readonly Dictionary<string, int> KeyCodeMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            {"A",0x41},{"B",0x42},{"C",0x43},{"D",0x44},{"E",0x45},{"F",0x46},
-            {"G",0x47},{"H",0x48},{"I",0x49},{"J",0x4A},{"K",0x4B},{"L",0x4C},
-            {"M",0x4D},{"N",0x4E},{"O",0x4F},{"P",0x50},{"Q",0x51},{"R",0x52},
-            {"S",0x53},{"T",0x54},{"U",0x55},{"V",0x56},{"W",0x57},{"X",0x58},
-            {"Y",0x59},{"Z",0x5A},
-            {"0",0x30},{"1",0x31},{"2",0x32},{"3",0x33},{"4",0x34},
-            {"5",0x35},{"6",0x36},{"7",0x37},{"8",0x38},{"9",0x39},
-            {"F1",0x70},{"F2",0x71},{"F3",0x72},{"F4",0x73},{"F5",0x74},
-            {"F6",0x75},{"F7",0x76},{"F8",0x77},{"F9",0x78},{"F10",0x79},
-            {"F11",0x7A},{"F12",0x7B},
-            {"SPACE",0x20},{"ENTER",0x0D},{"RETURN",0x0D},{"ESC",0x1B},
-            {"TAB",0x09},{"SHIFT",0x10},{"CTRL",0x11},{"ALT",0x12},
-            {"BACKSPACE",0x08},{"DELETE",0x2E},{"INSERT",0x2D},
-            {"HOME",0x24},{"END",0x23},{"PAGEUP",0x21},{"PAGEDOWN",0x22},
-            {"UP",0x26},{"DOWN",0x28},{"LEFT",0x25},{"RIGHT",0x27}
-        };
-
         private int? GetKeyCodeFromString(string keyString)
         {
             if (string.IsNullOrEmpty(keyString)) return null;
-            if (keyString.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                if (int.TryParse(keyString.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hex))
+            string key = keyString.Trim();
+            if (key.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                if (int.TryParse(key.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hex))
                     return hex;
-            if (KeyCodeMap.TryGetValue(keyString, out int code)) return code;
+            if (ADOFAIMacro.Macro.KeyMap.TryGetKeyCode(key.ToUpperInvariant(), out byte code)) return code;
             return null;
         }
 
@@ -625,7 +611,7 @@ namespace ADOFAIMacro
             GUILayout.BeginVertical(UIUtils.CardStyle);
             GUILayout.Label(Localization.LocalizationManager.Get("tab.macro"), UIUtils.HeaderStyle);
             bool newMacro = UIUtils.M3Switch(Macro, Localization.LocalizationManager.Get("macro.enable_macro"));
-            if (newMacro != Macro) { Macro = newMacro; ADOBase.controller.Restart(); }
+            if (newMacro != Macro) { Macro = newMacro; ADOFAIMacro.Macro.Macro.RequestRestart(); }
             GUILayout.EndVertical();
         }
 
@@ -692,7 +678,7 @@ namespace ADOFAIMacro
 
             GUILayout.Space(2);
             bool newSim = UIUtils.M3Switch(SimulateKeyPress, Localization.LocalizationManager.Get("key_settings.key_simulation"));
-            if (newSim != SimulateKeyPress) { SimulateKeyPress = newSim; ADOBase.controller.Restart(); }
+            if (newSim != SimulateKeyPress) { SimulateKeyPress = newSim; ADOFAIMacro.Macro.Macro.RequestRestart(); }
 
             if (SimulateKeyPress)
             {
@@ -717,10 +703,7 @@ namespace ADOFAIMacro
                     GUILayout.Space(2);
 
                     GUILayout.Space(6);
-                    Color oc = GUI.color;
-                    GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-                    GUILayout.Box("", GUILayout.Height(1), GUILayout.ExpandWidth(true));
-                    GUI.color = oc;
+                    UIUtils.DrawSeparator();
                     GUILayout.Space(4);
 
                     GUILayout.BeginHorizontal();
@@ -747,15 +730,7 @@ namespace ADOFAIMacro
                     for (int i = 0; i < 4; i++)
                     {
                         bool available = i switch { 1 => hasInject, 2 => hasNtSend, _ => true };
-                        string modeKey = i switch
-                        {
-                            0 => "key_mode.auto",
-                            1 => "key_mode.ntinject",
-                            2 => "key_mode.ntsendinput",
-                            3 => "key_mode.sendinput",
-                            _ => ""
-                        };
-                        string lbl = Localization.LocalizationManager.Get(modeKey);
+                        string lbl = Localization.LocalizationManager.Get(_modeNameKeys[i]);
                         if (!available)
                             lbl += Localization.LocalizationManager.Get("key_mode_not_supported");
                         if (GUILayout.Button(lbl, UIUtils.ButtonStyle, GUILayout.Height(24)) && available && InputMode != i)
@@ -765,28 +740,18 @@ namespace ADOFAIMacro
 
                     GUILayout.Space(4);
                     GUIStyle descStyle = UIUtils.LabelStyleVariant(0.75f, 0.75f, 0.75f, 0.8f, 10, wordWrap: true);
-                    string descKey = InputMode switch
-                    {
-                        0 => "key_mode_desc.auto",
-                        1 => "key_mode_desc.ntinject",
-                        2 => "key_mode_desc.ntsendinput",
-                        3 => "key_mode_desc.sendinput",
-                        _ => ""
-                    };
+                    string descKey = (InputMode >= 0 && InputMode < _modeDescKeys.Length) ? _modeDescKeys[InputMode] : "";
                     GUILayout.Label(Localization.LocalizationManager.Get(descKey), descStyle);
                 }
             }
             GUILayout.EndVertical();
         }
 
-        private string GetModeLabel(Macro.InputMode mode) => mode switch
+        private static string GetModeLabel(Macro.InputMode mode)
         {
-            ADOFAIMacro.Macro.InputMode.Auto => LocalizationManager.Get("key_mode.auto"),
-            ADOFAIMacro.Macro.InputMode.NtUserInjectKeyboard => LocalizationManager.Get("key_mode.ntinject"),
-            ADOFAIMacro.Macro.InputMode.NtUserSendInput => LocalizationManager.Get("key_mode.ntsendinput"),
-            ADOFAIMacro.Macro.InputMode.SendInput => LocalizationManager.Get("key_mode.sendinput"),
-            _ => mode.ToString()
-        };
+            int i = (int)mode;
+            return (i >= 0 && i < _modeNameKeys.Length) ? LocalizationManager.Get(_modeNameKeys[i]) : mode.ToString();
+        }
 
         // ─────────────────────────────────────────────
         //  按键过滤卡
@@ -803,10 +768,7 @@ namespace ADOFAIMacro
             if (EnableKeyFilter)
             {
                 GUILayout.Space(6);
-                Color oc = GUI.color;
-                GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-                GUILayout.Box("", GUILayout.Height(1), GUILayout.ExpandWidth(true));
-                GUI.color = oc;
+                UIUtils.DrawSeparator();
                 GUILayout.Space(4);
 
                 GUILayout.BeginHorizontal();
@@ -857,23 +819,14 @@ namespace ADOFAIMacro
 
                 void QuickSet(string k) { FilteredKeys = k; if (SkyHookMode) FilteredAsyncKeys = k; }
 
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(Localization.LocalizationManager.Get("common.f1") + "," + Localization.LocalizationManager.Get("common.f2") + ",F3,F4", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F1,F2,F3,F4");
-                if (GUILayout.Button("F5,F6,F7,F8", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F5,F6,F7,F8");
-                if (GUILayout.Button("F9,F10,F11,F12", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F9,F10,F11,F12");
-                GUILayout.EndHorizontal();
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("A,S,D,F", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("A,S,D,F");
-                if (GUILayout.Button("J,K,L", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("J,K,L");
-                if (GUILayout.Button("1,2,3,4", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("1,2,3,4");
-                GUILayout.EndHorizontal();
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("SPACE,ENTER,ESC", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("SPACE,ENTER,ESC");
-                if (GUILayout.Button("UP,DOWN,LEFT,RIGHT", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("UP,DOWN,LEFT,RIGHT");
-                if (GUILayout.Button("CTRL,ALT,SHIFT", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("CTRL,ALT,SHIFT");
-                GUILayout.EndHorizontal();
+                for (int row = 0; row < _filterQuickSets.Length; row += 3)
+                {
+                    GUILayout.BeginHorizontal();
+                    for (int c = row; c < row + 3 && c < _filterQuickSets.Length; c++)
+                        if (GUILayout.Button(_filterQuickSets[c], UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
+                            QuickSet(_filterQuickSets[c]);
+                    GUILayout.EndHorizontal();
+                }
 
                 GUILayout.Space(8);
                 GUIStyle tipStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.7f, 10, wordWrap: true);
@@ -898,10 +851,7 @@ namespace ADOFAIMacro
             if (EnableDeathKey)
             {
                 GUILayout.Space(6);
-                Color oc = GUI.color;
-                GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-                GUILayout.Box("", GUILayout.Height(1), GUILayout.ExpandWidth(true));
-                GUI.color = oc;
+                UIUtils.DrawSeparator();
                 GUILayout.Space(4);
 
                 GUILayout.BeginHorizontal();
@@ -945,7 +895,7 @@ namespace ADOFAIMacro
             if (LockLevelEditor != newLock)
             {
                 LockLevelEditor = newLock;
-                if (ADOBase.sceneName == GCNS.sceneEditor) ADOBase.controller.Restart();
+                if (ADOBase.sceneName == GCNS.sceneEditor) ADOFAIMacro.Macro.Macro.RequestRestart();
             }
 
             BlockInputWhenUnfocused = UIUtils.M3Switch(BlockInputWhenUnfocused,
@@ -957,6 +907,20 @@ namespace ADOFAIMacro
         //  作者卡
         // ─────────────────────────────────────────────
         private static readonly string[] _deathKeyQuickSet = ["R", "SPACE", "ENTER", "F2", "ESC"];
+
+        // 输入模式：索引与 InputMode 枚举一一对应（名称/描述各一份表，替代三处 switch）
+        private static readonly string[] _modeNameKeys =
+            ["key_mode.auto", "key_mode.ntinject", "key_mode.ntsendinput", "key_mode.sendinput"];
+        private static readonly string[] _modeDescKeys =
+            ["key_mode_desc.auto", "key_mode_desc.ntinject", "key_mode_desc.ntsendinput", "key_mode_desc.sendinput"];
+
+        // 按键过滤快捷组（标签与写入值一致；原先 9 个按钮硬编码）
+        private static readonly string[] _filterQuickSets =
+        [
+            "F1,F2,F3,F4", "F5,F6,F7,F8", "F9,F10,F11,F12",
+            "A,S,D,F", "J,K,L", "1,2,3,4",
+            "SPACE,ENTER,ESC", "UP,DOWN,LEFT,RIGHT", "CTRL,ALT,SHIFT",
+        ];
 
         private void DrawAuthorCard()
         {
@@ -974,10 +938,7 @@ namespace ADOFAIMacro
             GUILayout.EndHorizontal();
 
             GUILayout.Space(4);
-            Color oc = GUI.color;
-            GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-            GUILayout.Box("", GUILayout.Height(10), GUILayout.ExpandWidth(true));
-            GUI.color = oc;
+            UIUtils.DrawSeparator(height: 10);
             GUILayout.Space(4);
 
             GUIStyle thanksStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.4f, 9, alignment: TextAnchor.MiddleCenter);
@@ -1021,6 +982,18 @@ namespace ADOFAIMacro
         // ─────────────────────────────────────────────
         //  手法模拟主卡
         // ─────────────────────────────────────────────
+
+        /// <summary>左右手镜像输入行（标签 + 文本框 + 焦点状态），返回最新文本。</summary>
+        private string DrawTechHandInput(string labelKey, string current,
+            ref string input, ref bool focused, string controlName)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(LocalizationManager.Get(labelKey), UIUtils.LabelStyle, GUILayout.Width(80));
+            string newValue = UIUtils.M3TextField(current, ref input, ref focused, UIUtils.TextFieldStyle, controlName);
+            GUILayout.EndHorizontal();
+            return newValue;
+        }
+
         private void DrawTechniqueSimCard()
         {
             GUILayout.BeginVertical(UIUtils.CardStyle);
@@ -1172,10 +1145,7 @@ namespace ADOFAIMacro
             }
 
             GUILayout.Space(6);
-            Color orig = GUI.color;
-            GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-            GUILayout.Box("", GUILayout.Height(1), GUILayout.ExpandWidth(true));
-            GUI.color = orig;
+            UIUtils.DrawSeparator();
             GUILayout.Space(4);
 
             // ── 配置管理 ────────────────────────────────────
@@ -1285,46 +1255,34 @@ namespace ADOFAIMacro
             GUILayout.Label($"── {_handPairCache[0]} ──", UIUtils.LabelStyle);
             GUILayout.Space(2);
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(LocalizationManager.Get("tech.left_keys"), UIUtils.LabelStyle, GUILayout.Width(80));
-            string newLK = UIUtils.M3TextField(TechLeftHandKeys, ref _techLeftKeysState.input, ref _techLeftKeysState.focused, UIUtils.TextFieldStyle, "TechLeftKeys");
+            string newLK = DrawTechHandInput("tech.left_keys", TechLeftHandKeys,
+                ref _techLeftKeysState.input, ref _techLeftKeysState.focused, "TechLeftKeys");
             if (newLK != TechLeftHandKeys) { TechLeftHandKeys = newLK; _techniqueProfiles[SelectedTechniqueProfileIndex].leftHandKeys = newLK; }
-            GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(LocalizationManager.Get("tech.left_press_ratio"), UIUtils.LabelStyle, GUILayout.Width(80));
-            string newLP = UIUtils.M3TextField(TechLeftHandPressTimes, ref _techLeftPressTimesState.input, ref _techLeftPressTimesState.focused, UIUtils.TextFieldStyle, "TechLeftPressTimes");
+            string newLP = DrawTechHandInput("tech.left_press_ratio", TechLeftHandPressTimes,
+                ref _techLeftPressTimesState.input, ref _techLeftPressTimesState.focused, "TechLeftPressTimes");
             if (newLP != TechLeftHandPressTimes) { TechLeftHandPressTimes = newLP; _techniqueProfiles[SelectedTechniqueProfileIndex].leftHandPressTimes = newLP; }
-            GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(LocalizationManager.Get("tech.left_orders"), UIUtils.LabelStyle, GUILayout.Width(80));
-            string newLO = UIUtils.M3TextField(TechLeftHandOrders, ref _techLeftOrdersState.input, ref _techLeftOrdersState.focused, UIUtils.TextFieldStyle, "TechLeftOrders");
+            string newLO = DrawTechHandInput("tech.left_orders", TechLeftHandOrders,
+                ref _techLeftOrdersState.input, ref _techLeftOrdersState.focused, "TechLeftOrders");
             if (newLO != TechLeftHandOrders) { TechLeftHandOrders = newLO; _techniqueProfiles[SelectedTechniqueProfileIndex].leftHandOrders = newLO; }
-            GUILayout.EndHorizontal();
 
             GUILayout.Space(6);
 
             GUILayout.Label($"── {_handPairCache[1]} ──", UIUtils.LabelStyle);
             GUILayout.Space(2);
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(LocalizationManager.Get("tech.right_keys"), UIUtils.LabelStyle, GUILayout.Width(80));
-            string newRK = UIUtils.M3TextField(TechRightHandKeys, ref _techRightKeysState.input, ref _techRightKeysState.focused, UIUtils.TextFieldStyle, "TechRightKeys");
+            string newRK = DrawTechHandInput("tech.right_keys", TechRightHandKeys,
+                ref _techRightKeysState.input, ref _techRightKeysState.focused, "TechRightKeys");
             if (newRK != TechRightHandKeys) { TechRightHandKeys = newRK; _techniqueProfiles[SelectedTechniqueProfileIndex].rightHandKeys = newRK; }
-            GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(LocalizationManager.Get("tech.right_press_ratio"), UIUtils.LabelStyle, GUILayout.Width(80));
-            string newRP = UIUtils.M3TextField(TechRightHandPressTimes, ref _techRightPressTimesState.input, ref _techRightPressTimesState.focused, UIUtils.TextFieldStyle, "TechRightPressTimes");
+            string newRP = DrawTechHandInput("tech.right_press_ratio", TechRightHandPressTimes,
+                ref _techRightPressTimesState.input, ref _techRightPressTimesState.focused, "TechRightPressTimes");
             if (newRP != TechRightHandPressTimes) { TechRightHandPressTimes = newRP; _techniqueProfiles[SelectedTechniqueProfileIndex].rightHandPressTimes = newRP; }
-            GUILayout.EndHorizontal();
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(LocalizationManager.Get("tech.right_orders"), UIUtils.LabelStyle, GUILayout.Width(80));
-            string newRO = UIUtils.M3TextField(TechRightHandOrders, ref _techRightOrdersState.input, ref _techRightOrdersState.focused, UIUtils.TextFieldStyle, "TechRightOrders");
+            string newRO = DrawTechHandInput("tech.right_orders", TechRightHandOrders,
+                ref _techRightOrdersState.input, ref _techRightOrdersState.focused, "TechRightOrders");
             if (newRO != TechRightHandOrders) { TechRightHandOrders = newRO; _techniqueProfiles[SelectedTechniqueProfileIndex].rightHandOrders = newRO; }
-            GUILayout.EndHorizontal();
 
             // ── 预设 ──────────────────────────────────────────
             GUILayout.Space(6);
@@ -1438,10 +1396,7 @@ namespace ADOFAIMacro
 
                 // 分隔线
                 GUILayout.Space(4);
-                Color oc = GUI.color;
-                GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.2f);
-                GUILayout.Box("", GUILayout.Height(1), GUILayout.ExpandWidth(true));
-                GUI.color = oc;
+                UIUtils.DrawSeparator(alpha: 0.2f);
                 GUILayout.Space(4);
 
                 // ── 按键覆盖（可选）──────────────────────────

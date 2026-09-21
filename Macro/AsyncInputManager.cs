@@ -50,7 +50,7 @@ namespace ADOFAIMacro.Macro
         {
             if (_isInitialized)
             {
-                Macro.Log("[InputSystem] 已在运行中");
+                Main.Mod?.Logger.Log("[InputSystem] 已在运行中");
                 return;
             }
 
@@ -77,11 +77,11 @@ namespace ADOFAIMacro.Macro
 
                 _isInitialized = true;
 
-                Macro.Log("[InputSystem] 启动成功（直接调用模式）");
+                Main.Mod?.Logger.Log("[InputSystem] 启动成功（直接调用模式）");
             }
             catch (Exception ex)
             {
-                Macro.Log($"[InputSystem] 启动失败: {ex.Message}");
+                Main.Mod?.Logger.Log($"[InputSystem] 启动失败: {ex.Message}");
                 _isInitialized = false;
                 timeEndPeriod(1);
             }
@@ -102,7 +102,7 @@ namespace ADOFAIMacro.Macro
             timeEndPeriod(1);
 
             _isInitialized = false;
-            Macro.Log($"[InputSystem] 已停止 | 处理: {_totalProcessed} | 丢弃: {Interlocked.Read(ref _totalDropped)}");
+            Main.Mod?.Logger.Log($"[InputSystem] 已停止 | 处理: {_totalProcessed} | 丢弃: {Interlocked.Read(ref _totalDropped)}");
         }
 
         // ══════════════════════════════════════════════════════
@@ -154,7 +154,7 @@ namespace ADOFAIMacro.Macro
             if (_isInitialized)
                 InputSystem.ClearQueue();
 
-            Macro.Log("[InputSystem] 队列已清空");
+            Main.Mod?.Logger.Log("[InputSystem] 队列已清空");
         }
 
         // ══════════════════════════════════════════════════════

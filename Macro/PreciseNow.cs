@@ -12,7 +12,7 @@ namespace ADOFAIMacro.Macro
     ///  - SkyHookEvent.GetTimeInTicks() = 本地Unix秒*1e7 + ns/100 + Unix纪元ticks
     ///    ≈ DateTime.Now.Ticks（本地 .NET ticks）；
     ///  - scrConductor 的 currFrameTick = DateTime.Now.Ticks —— 与事件同域。
-    /// 因此：conductor 高精度补丁（Patches.Update_1）与虚拟异步键盘
+    /// 因此：conductor 高精度补丁（Patches.GetPreciseLocalTicks）与虚拟异步键盘
     /// （VirtualAsyncInput 合成事件时间戳）必须使用同一套"精确本地 ticks"，
     /// 即 GetSystemTimePreciseAsFileTime（UTC，精确）+ 本地时区偏移（缓存）。
     /// </summary>

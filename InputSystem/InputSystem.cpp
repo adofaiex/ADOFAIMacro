@@ -151,6 +151,13 @@ private:
     std::unique_ptr<std::thread> workerThread_;
     std::atomic<bool> running_{ false };
     std::atomic<bool> processing_{ true };
+    // 暂停确认：clearQueue 等待工作线程真正停下（替代 sleep_for(1ms) 赌时序）。
+    // workerParked_ = 工作线程当前停靠在条件变量上；pauseEpoch_ 每次停靠自增，
+    // 用于区分“新一次停靠”和“上一次的旧状态”。
+    std::atomic<bool>     workerParked_{ false };
+    std::atomic<unsigned> pauseEpoch_{ 0 };
+    std::mutex              pauseMutex_;
+    std::condition_variable pauseCond_;
 
     std::atomic<int>  processedCount_{ 0 };
     std::atomic<size_t> approxQueueSize_{ 0 };   // 近似的队列大小，用于外部查询
@@ -216,14 +223,19 @@ private:
     }
 
     // ── 按键状态追踪 ──────────────────────────
-    void updateKeyState(BYTE keyCode, BOOL isDown) {
-        std::lock_guard<std::mutex> lock(pressedKeysMutex_);
+    // 须持有 pressedKeysMutex_ 时调用
+    void applyKeyStateLocked(BYTE keyCode, BOOL isDown) {
         if (isDown) {
             if (!pressedKeys_[keyCode]) { pressedKeys_[keyCode] = true; ++pressedKeyCount_; }
         }
         else {
             if (pressedKeys_[keyCode]) { pressedKeys_[keyCode] = false; --pressedKeyCount_; }
         }
+    }
+
+    void updateKeyState(BYTE keyCode, BOOL isDown) {
+        std::lock_guard<std::mutex> lock(pressedKeysMutex_);
+        applyKeyStateLocked(keyCode, isDown);
     }
 
     void releaseAllPressedKeys() {
@@ -285,9 +297,16 @@ private:
             // 1. 检查是否暂停处理
             if (!processing_.load(std::memory_order_relaxed)) {
                 std::unique_lock<std::mutex> lock(queueMutex_);
+                {
+                    std::lock_guard<std::mutex> pauseLock(pauseMutex_);
+                    workerParked_.store(true, std::memory_order_release);
+                    pauseEpoch_.fetch_add(1, std::memory_order_release);
+                }
+                pauseCond_.notify_all();
                 queueCond_.wait(lock, [this] {
                     return processing_.load(std::memory_order_relaxed) || !running_;
                     });
+                workerParked_.store(false, std::memory_order_release);
                 if (!running_) break;
                 continue;
             }
@@ -318,22 +337,18 @@ private:
                 size_t batchCount = 0;
                 batch[batchCount++] = evt;
 
+                // 延迟事件暂存：不能在已收集的零延迟事件之前发送（会乱序），
+                // 也不能丢弃 delayMs（旧实现两者都犯）。先记下，等本批按序发完
+                // 再单独按单事件语义处理。
+                bool hasDelayed = false;
+                KeyEvent delayedEvt;
+
                 while (batchCount < BATCH_MAX) {
                     KeyEvent next;
-                    if (!ringBuffer_.pop(next) || next.delayMs > 0) {
-                        // 队列空或遇到延迟事件，停止收集
-                        if (next.delayMs > 0) {
-                            // 将延迟事件重新放回？不能直接放回，这里简单处理：停止收集，延迟事件留在队列中留给下次循环
-                            // 由于我们已经pop了next，需要把它放回队列？但无锁队列不支持回退。
-                            // 更好的做法：如果next.delayMs>0，则停止收集，并将next重新入队？但重新入队可能乱序。
-                            // 简化：遇到延迟事件就停止，本次不处理该延迟事件，让它留在队列中？但我们已pop它，无法留回。
-                            // 因此，我们必须在pop前检查，但无法在不pop的情况下查看。所以只能pop出来再判断。
-                            // 如果next.delayMs>0，我们把它单独处理，不加入batch。
-                            // 这样可以保持顺序。
-                            sendKeyCore(next.keyCode, next.isDown);
-                            updateKeyState(next.keyCode, next.isDown);
-                            ++processedCount_;
-                        }
+                    if (!ringBuffer_.pop(next)) break;   // 队列空，停止收集
+                    if (next.delayMs > 0) {
+                        delayedEvt = next;
+                        hasDelayed = true;
                         break;
                     }
                     batch[batchCount++] = next;
@@ -347,18 +362,19 @@ private:
                 // 一次性更新按键状态（减少锁竞争）
                 {
                     std::lock_guard<std::mutex> lock(pressedKeysMutex_);
-                    for (size_t i = 0; i < batchCount; ++i) {
-                        const auto& e = batch[i];
-                        if (e.isDown) {
-                            if (!pressedKeys_[e.keyCode]) { pressedKeys_[e.keyCode] = true; ++pressedKeyCount_; }
-                        }
-                        else {
-                            if (pressedKeys_[e.keyCode]) { pressedKeys_[e.keyCode] = false; --pressedKeyCount_; }
-                        }
-                    }
+                    for (size_t i = 0; i < batchCount; ++i)
+                        applyKeyStateLocked(batch[i].keyCode, batch[i].isDown);
                 }
 
                 processedCount_ += static_cast<int>(batchCount);
+
+                // 延迟事件：发送后按 delayMs 休眠，保持队列顺序与延迟语义
+                if (hasDelayed) {
+                    sendKeyCore(delayedEvt.keyCode, delayedEvt.isDown);
+                    updateKeyState(delayedEvt.keyCode, delayedEvt.isDown);
+                    ++processedCount_;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(delayedEvt.delayMs));
+                }
             }
 
             // 更新近似队列大小（用于外部查询）
@@ -485,8 +501,16 @@ public:
     void clearQueue() {
         // 暂停处理
         processing_.store(false, std::memory_order_relaxed);
-        // 等待一下让工作线程暂停（可选）
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        // 等待工作线程确认暂停（带超时：工作线程可能正在 delayMs 睡眠，
+        // 超时后按原语义继续清空，不会永久阻塞调用线程）
+        if (!workerParked_.load(std::memory_order_acquire)) {
+            unsigned epoch = pauseEpoch_.load(std::memory_order_acquire);
+            std::unique_lock<std::mutex> pauseLock(pauseMutex_);
+            pauseCond_.wait_for(pauseLock, std::chrono::milliseconds(100), [this, epoch] {
+                return pauseEpoch_.load(std::memory_order_acquire) != epoch || !running_;
+                });
+        }
 
         // 清空现有事件（只清空已入队的，新事件保留）
         size_t drained = ringBuffer_.drain();

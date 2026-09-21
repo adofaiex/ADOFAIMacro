@@ -63,7 +63,7 @@ namespace ADOFAIMacro.Macro
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] CheckAndLoadLevelConfig error: {ex.Message}");
+                Main.Mod?.Logger.Log($"[LevelTechnique] CheckAndLoadLevelConfig error: {ex.Message}");
             }
         }
 
@@ -85,7 +85,7 @@ namespace ADOFAIMacro.Macro
                 string configPath = GetConfigPath(levelPath);
                 if (!File.Exists(configPath))
                 {
-                    Macro.Log($"[LevelTechnique] 关卡配置不存在: {configPath}");
+                    Main.Mod?.Logger.Log($"[LevelTechnique] 关卡配置不存在: {configPath}");
                     CacheVersion++;
                     return;
                 }
@@ -96,13 +96,13 @@ namespace ADOFAIMacro.Macro
                 if (config != null)
                 {
                     _loadedConfigs[levelPath] = config;
-                    Macro.Log($"[LevelTechnique] 已加载关卡配置: {config.name} ({config.techniqueSegments?.Count ?? 0} 个分段)");
+                    Main.Mod?.Logger.Log($"[LevelTechnique] 已加载关卡配置: {config.name} ({config.techniqueSegments?.Count ?? 0} 个分段)");
                 }
                 CacheVersion++;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] 加载配置失败: {ex.Message}");
+                Main.Mod?.Logger.Log($"[LevelTechnique] 加载配置失败: {ex.Message}");
             }
         }
 
@@ -194,7 +194,7 @@ namespace ADOFAIMacro.Macro
             string? levelPath = ADOBase.levelPath;
             if (string.IsNullOrEmpty(levelPath) || !File.Exists(levelPath))
             {
-                Macro.Log("[LevelTechnique] 无法保存配置：没有有效的关卡路径");
+                Main.Mod?.Logger.Log("[LevelTechnique] 无法保存配置：没有有效的关卡路径");
                 return false;
             }
 
@@ -222,12 +222,12 @@ namespace ADOFAIMacro.Macro
 
                 _loadedConfigs[levelPath] = profile;
                 CacheVersion++;
-                Macro.Log($"[LevelTechnique] 已保存关卡配置到: {configPath}");
+                Main.Mod?.Logger.Log($"[LevelTechnique] 已保存关卡配置到: {configPath}");
                 return true;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] 保存配置失败: {ex.Message}");
+                Main.Mod?.Logger.Log($"[LevelTechnique] 保存配置失败: {ex.Message}");
                 return false;
             }
         }
@@ -270,14 +270,14 @@ namespace ADOFAIMacro.Macro
                     File.Delete(configPath);
                     _loadedConfigs.Remove(levelPath!); // levelPath 已检查过非 null
                     CacheVersion++;
-                    Macro.Log($"[LevelTechnique] 已删除关卡配置: {configPath}");
+                    Main.Mod?.Logger.Log($"[LevelTechnique] 已删除关卡配置: {configPath}");
                     return true;
                 }
                 return false;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] 删除配置失败: {ex.Message}");
+                Main.Mod?.Logger.Log($"[LevelTechnique] 删除配置失败: {ex.Message}");
                 return false;
             }
         }

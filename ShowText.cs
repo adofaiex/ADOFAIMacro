@@ -51,6 +51,8 @@ namespace ADOFAIMacro
         {
             // 每帧更新 AudioDSPManager
             DSPTimeSimulater.Update();
+            // 消费 UI 延迟动作（OnGUI 只置标志，避免渲染期直接改游戏状态）
+            Macro.Macro.ProcessPendingActions();
         }
         public void OnGUI()
         {

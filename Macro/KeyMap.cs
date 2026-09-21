@@ -8,7 +8,8 @@ namespace ADOFAIMacro.Macro
     /// </summary>
     internal static class KeyMap
     {
-        public static readonly Dictionary<string, byte> KeyNameToCode = new()
+        // 私有：外部只能通过 TryGetKeyCode 查询，避免任何代码改写全局映射表
+        private static readonly Dictionary<string, byte> KeyNameToCode = new()
         {
             // 字母
             ["A"] = 0x41, ["B"] = 0x42, ["C"] = 0x43, ["D"] = 0x44, ["E"] = 0x45,
@@ -26,11 +27,18 @@ namespace ADOFAIMacro.Macro
             ["`"] = 0xC0, ["-"] = 0xBD, ["="] = 0xBB, ["["] = 0xDB, ["]"] = 0xDD,
             ["\\"] = 0xDC, [";"] = 0xBA, ["'"] = 0xDE, [","] = 0xBC, ["."] = 0xBE,
             ["/"] = 0xBF, [" "] = 0x20,
+            // 符号键英文别名（与原 Settings/异步表兼容）
+            ["BACKQUOTE"] = 0xC0, ["MINUS"] = 0xBD, ["EQUALS"] = 0xBB,
+            ["LBRACKET"] = 0xDB, ["RBRACKET"] = 0xDD, ["BACKSLASH"] = 0xDC,
+            ["SEMICOLON"] = 0xBA, ["QUOTE"] = 0xDE, ["COMMA"] = 0xBC,
+            ["PERIOD"] = 0xBE, ["SLASH"] = 0xBF,
 
             // 功能键
             ["F1"] = 0x70, ["F2"] = 0x71, ["F3"] = 0x72, ["F4"] = 0x73, ["F5"] = 0x74,
             ["F6"] = 0x75, ["F7"] = 0x76, ["F8"] = 0x77, ["F9"] = 0x78, ["F10"] = 0x79,
-            ["F11"] = 0x7A, ["F12"] = 0x7B,
+            ["F11"] = 0x7A, ["F12"] = 0x7B, ["F13"] = 0x7C, ["F14"] = 0x7D, ["F15"] = 0x7E,
+            ["F16"] = 0x7F, ["F17"] = 0x80, ["F18"] = 0x81, ["F19"] = 0x82, ["F20"] = 0x83,
+            ["F21"] = 0x84, ["F22"] = 0x85, ["F23"] = 0x86, ["F24"] = 0x87,
 
             // 控制键
             ["CTRL"] = 0x11, ["LCTRL"] = 0xA2, ["RCTRL"] = 0xA3,
@@ -41,11 +49,12 @@ namespace ADOFAIMacro.Macro
             // 导航键
             ["LEFT"] = 0x25, ["UP"] = 0x26, ["RIGHT"] = 0x27, ["DOWN"] = 0x28,
             ["HOME"] = 0x24, ["END"] = 0x23, ["PAGEUP"] = 0x21, ["PAGEDOWN"] = 0x22,
-            ["INSERT"] = 0x2D, ["DELETE"] = 0x2E,
+            ["INSERT"] = 0x2D, ["DELETE"] = 0x2E, ["INS"] = 0x2D, ["DEL"] = 0x2E,
 
             // 编辑键
             ["BACKSPACE"] = 0x08, ["TAB"] = 0x09, ["ENTER"] = 0x0D, ["RETURN"] = 0x0D,
             ["ESC"] = 0x1B, ["ESCAPE"] = 0x1B, ["SPACE"] = 0x20, ["SPACEBAR"] = 0x20,
+            ["PGUP"] = 0x21, ["PGDN"] = 0x22, ["CAPS"] = 0x14,
 
             // 小键盘
             ["NUMPAD0"] = 0x60, ["NUMPAD1"] = 0x61, ["NUMPAD2"] = 0x62, ["NUMPAD3"] = 0x63,
@@ -54,6 +63,12 @@ namespace ADOFAIMacro.Macro
             ["NUMPADADD"] = 0x6B, ["NUMPADSEPARATOR"] = 0x6C, ["NUMPADSUBTRACT"] = 0x6D,
             ["NUMPADDECIMAL"] = 0x6E, ["NUMPADDIVIDE"] = 0x6F, ["NUMPADENTER"] = 0x0D,
             ["NUMLOCK"] = 0x90,
+            // 小键盘简写别名（与原异步表兼容）
+            ["NUM0"] = 0x60, ["NUM1"] = 0x61, ["NUM2"] = 0x62, ["NUM3"] = 0x63,
+            ["NUM4"] = 0x64, ["NUM5"] = 0x65, ["NUM6"] = 0x66, ["NUM7"] = 0x67,
+            ["NUM8"] = 0x68, ["NUM9"] = 0x69,
+            ["NUM*"] = 0x6A, ["NUM+"] = 0x6B, ["NUM-"] = 0x6D,
+            ["NUM."] = 0x6E, ["NUM/"] = 0x6F, ["NUMENTER"] = 0x0D,
 
             // 其他
             ["PRINTSCREEN"] = 0x2C, ["SCROLLLOCK"] = 0x91, ["PAUSE"] = 0x13, ["BREAK"] = 0x13,
@@ -67,7 +82,15 @@ namespace ADOFAIMacro.Macro
             ["BROWSER_FORWARD"] = 0xA7, ["BROWSER_BACK"] = 0xA6,
             ["LAUNCH_MAIL"] = 0xB4, ["LAUNCH_MEDIA_SELECT"] = 0xB5, ["LAUNCH_APP1"] = 0xB6,
             ["LAUNCH_APP2"] = 0xB7,
+            // 多媒体简写别名（与原异步表兼容）
+            ["MUTE"] = 0xAD, ["VOLUMEDOWN"] = 0xAE, ["VOLDOWN"] = 0xAE,
+            ["VOLUMEUP"] = 0xAF, ["VOLUP"] = 0xAF, ["MEDIANEXT"] = 0xB0,
+            ["MEDIAPREV"] = 0xB1, ["MEDIASTOP"] = 0xB2, ["MEDIAPLAY"] = 0xB3,
         };
+
+        /// <summary>按键名（不区分大小写）→ 虚拟键码；未知返回 false。</summary>
+        public static bool TryGetKeyCode(string name, out byte code)
+            => KeyNameToCode.TryGetValue(name, out code);
 
         /// <summary>
         /// 虚拟键码 → 覆盖层按键显示的短标签（1~4 字符）。

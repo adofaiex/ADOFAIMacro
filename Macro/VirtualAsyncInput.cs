@@ -40,6 +40,7 @@ namespace ADOFAIMacro.Macro
 
         private static volatile bool _layoutOk;
         private static volatile bool _active;
+        private static volatile bool _sendErrorLogged;
 
         // 焦点缓存：SkyHookManager.IsFocused 是静态 bool 默认 false，仅在其 Update 里
         // requireFocus==true 时才同步——本游戏的实例不同步它（僵尸值恒 false，曾把
@@ -147,8 +148,14 @@ namespace ADOFAIMacro.Macro
 
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                // 直喂失败必须回退系统注入；只记录首次异常，避免热路径刷屏
+                if (!_sendErrorLogged)
+                {
+                    _sendErrorLogged = true;
+                    Main.Mod?.Logger.Log($"[VirtualAsyncInput] 直喂事件异常（仅记录首次），已回退系统注入: {ex.Message}");
+                }
                 return false;
             }
         }
