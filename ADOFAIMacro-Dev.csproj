@@ -179,9 +179,14 @@
     <Compile Include="Patches.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings.cs" />
+    <Compile Include="Settings.UI.cs" />
     <Compile Include="Macro\SkyHookSystem.cs" />
     <Compile Include="Macro\Macro.cs" />
     <Compile Include="UIUtils.cs" />
+    <Compile Include="UI\Canvas.cs" />
+    <Compile Include="UI\IridiumLayout.cs" />
+    <Compile Include="UI\KeyBinder.cs" />
+    <Compile Include="UI\Trigger.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -194,6 +199,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Localization\en-US.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\ui\Colors.iml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
@@ -238,6 +246,8 @@
     <!-- Localization 与运行时依赖（与 Release 包布局对齐） -->
     <Copy SourceFiles="$(ProjectDir)Localization\zh-CN.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(ProjectDir)Localization\zh-CN.json')" />
     <Copy SourceFiles="$(ProjectDir)Localization\en-US.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(ProjectDir)Localization\en-US.json')" />
+    <!-- UI 主题资源（Iridium 布局读取 Resources/ui/Colors.iml） -->
+    <Copy SourceFiles="$(ProjectDir)Resources\ui\Colors.iml" DestinationFolder="$(_OutDir)Resources\ui" Condition="Exists('$(ProjectDir)Resources\ui\Colors.iml')" />
     <Copy SourceFiles="$(OutDir)System.Memory.dll" DestinationFolder="$(_OutDir)" Condition="Exists('$(OutDir)System.Memory.dll')" />
   </Target>
 </Project>

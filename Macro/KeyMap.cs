@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace ADOFAIMacro.Macro
 {
@@ -88,9 +90,95 @@ namespace ADOFAIMacro.Macro
             ["MEDIAPREV"] = 0xB1, ["MEDIASTOP"] = 0xB2, ["MEDIAPLAY"] = 0xB3,
         };
 
-        /// <summary>按键名（不区分大小写）→ 虚拟键码；未知返回 false。</summary>
+        /// <summary>按键名（不区分大小写）→ 虚拟键码；支持 "0xNN" 十六进制；未知返回 false。</summary>
         public static bool TryGetKeyCode(string name, out byte code)
-            => KeyNameToCode.TryGetValue(name, out code);
+        {
+            if (name.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+                byte.TryParse(name.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out code))
+                return true;
+            return KeyNameToCode.TryGetValue(name, out code);
+        }
+
+        /// <summary>虚拟键码 → 可回写按键名（TryGetKeyCode 能解析）；未知返回 "0xNN"。</summary>
+        public static string GetName(byte vk)
+        {
+            if (vk >= 0x41 && vk <= 0x5A) return ((char)vk).ToString();
+            if (vk >= 0x30 && vk <= 0x39) return ((char)vk).ToString();
+            if (vk >= 0x60 && vk <= 0x69) return "NUMPAD" + (char)('0' + vk - 0x60);
+            if (vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);
+            switch (vk)
+            {
+                case 0x6A: return "NUMPADMULTIPLY";
+                case 0x6B: return "NUMPADADD";
+                case 0x6C: return "NUMPADSEPARATOR";
+                case 0x6D: return "NUMPADSUBTRACT";
+                case 0x6E: return "NUMPADDECIMAL";
+                case 0x6F: return "NUMPADDIVIDE";
+                case 0xC0: return "`";
+                case 0xBD: return "-";
+                case 0xBB: return "=";
+                case 0xDB: return "[";
+                case 0xDD: return "]";
+                case 0xDC: return "\\";
+                case 0xBA: return ";";
+                case 0xDE: return "'";
+                case 0xBC: return ",";
+                case 0xBE: return ".";
+                case 0xBF: return "/";
+                case 0x08: return "BACKSPACE";
+                case 0x09: return "TAB";
+                case 0x0D: return "ENTER";
+                case 0x1B: return "ESC";
+                case 0x20: return "SPACE";
+                case 0x14: return "CAPSLOCK";
+                case 0x90: return "NUMLOCK";
+                case 0x91: return "SCROLLLOCK";
+                case 0x13: return "PAUSE";
+                case 0x2C: return "PRINTSCREEN";
+                case 0x2D: return "INSERT";
+                case 0x2E: return "DELETE";
+                case 0x2F: return "HELP";
+                case 0x25: return "LEFT";
+                case 0x26: return "UP";
+                case 0x27: return "RIGHT";
+                case 0x28: return "DOWN";
+                case 0x24: return "HOME";
+                case 0x23: return "END";
+                case 0x21: return "PAGEUP";
+                case 0x22: return "PAGEDOWN";
+                case 0xA2: return "LCTRL";
+                case 0xA3: return "RCTRL";
+                case 0x11: return "CTRL";
+                case 0xA0: return "LSHIFT";
+                case 0xA1: return "RSHIFT";
+                case 0x10: return "SHIFT";
+                case 0xA4: return "LALT";
+                case 0xA5: return "RALT";
+                case 0x12: return "ALT";
+                case 0x5B: return "LWIN";
+                case 0x5C: return "RWIN";
+                case 0x5D: return "MENU";
+                case 0xAD: return "VOLUME_MUTE";
+                case 0xAE: return "VOLUME_DOWN";
+                case 0xAF: return "VOLUME_UP";
+                case 0xB0: return "MEDIA_NEXT_TRACK";
+                case 0xB1: return "MEDIA_PREV_TRACK";
+                case 0xB2: return "MEDIA_STOP";
+                case 0xB3: return "MEDIA_PLAY_PAUSE";
+                case 0xB4: return "LAUNCH_MAIL";
+                case 0xB5: return "LAUNCH_MEDIA_SELECT";
+                case 0xB6: return "LAUNCH_APP1";
+                case 0xB7: return "LAUNCH_APP2";
+                case 0xA6: return "BROWSER_BACK";
+                case 0xA7: return "BROWSER_FORWARD";
+                case 0xA8: return "BROWSER_REFRESH";
+                case 0xA9: return "BROWSER_STOP";
+                case 0xAA: return "BROWSER_SEARCH";
+                case 0xAB: return "BROWSER_FAVORITES";
+                case 0xAC: return "BROWSER_HOME";
+            }
+            return "0x" + vk.ToString("X2");
+        }
 
         /// <summary>
         /// 虚拟键码 → 覆盖层按键显示的短标签（1~4 字符）。
