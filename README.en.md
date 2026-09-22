@@ -144,44 +144,59 @@ Organized by UMM panel tab. "Internal name" is the field used in the config file
 
 ## Technique Simulation Guide
 
-When enabled (requires **Key simulation**), the macro stops simply rotating the key list and instead simulates two human hands: time is divided into slices, each slice is assigned to one hand, alternating left/right. When event density exceeds the **Speed Threshold (BPM)**, slices are subdivided so one hand plays multiple events in a row — single-hand multi-finger streams.
+When enabled (requires **Key simulation**), the macro no longer simply rotates the key sequence; instead, it simulates two human hands. Time is divided into “slices”: at or below the **Speed Threshold**, each note is one slice and the **starting (main) hand** keeps tapping; above the threshold, slices are subdivided and handled alternately by the left and right hands. After a fast section, entering a slow section automatically returns to the main hand.
+
+> The actual rate is derived from note intervals (notes/minute), not tile BPM: straight tiles ×1, 90° tiles (half-beat) ×2, 45° tiles ×4. SetSpeed changes are reflected by the actual intervals as well.
 
 ### Basic parameters
 
 | Panel item | Default | Description |
 |---|---|---|
-| Enable Technique Simulation (L/R alternation) | off | Master switch (requires Key simulation). |
-| Starting Hand | Right | Which hand plays the first slice. |
-| Global · Speed Threshold (BPM) | 500 | Subdivide slices above this BPM (range 50 ~ 2000). |
+| Enable Technique Simulation (L/R alternation) | off | Master switch; requires **Key simulation**. |
+| Starting Hand | Right | Main hand for slow sections / each slice. |
+| Global · Speed Threshold (BPM) | 500 | Subdivide slices when the actual note rate exceeds this value (50 ~ 2000). |
 | L/R Keys | `D,F` / `J,K` | Keys available to each hand; presets DF/JK, DS/JK, ASDF/JKL. |
 | L/R Order | empty | See format below; empty = default rotation. |
-| L/R Ratio | `0.8,0.8` | Press-duration ratio (0 ~ 1): how much of the slice a key stays held; hold notes are handled automatically. |
-| Speed Change Tolerance | 0 | Auto-adjusts BPM to align slices with event timing. 0 = off, 0.2 = moderate, 0.5 = aggressive; for charts with continuous speed changes. |
+| L/R Ratio | `0.8,0.8` | Press-duration ratio (0 ~ 1). |
+| Speed Change Tolerance | 0 | Auto-adjusts BPM to align slices with event timing. 0 = off, 0.2 = moderate, 0.5 = aggressive. |
+| Balance multi-press across hands | off | Multi-press defaults to the main hand filling all its keys, with the rest to the other hand; on = split evenly. |
 
-**Order format**: pipe separates key-count groups, commas separate 1-based indices. Example `1,2 | 1,2 | 1,2,1`: one-key slices alternate keys 1 and 2, three-key slices play 1→2→1. Empty = default order.
+**Order format**: use `|` to separate groups with different key counts, and commas to separate 1-based key indices. Example `1,2 | 1,2 | 1,2,1`: one-key slices rotate keys 1 and 2; three-key slices play 1→2→1. Empty = default order.
+
+### Slice rules
+
+- Slice length is based on the **actual note interval**: the time gap to the next note after skipping same-time doubles/chords; cuts snap to event gaps.
+- At or below the threshold: one note per slice, single-finger tapping by that hand.
+- Above the threshold: the finger count is `n = ceil(note rate / threshold)`, where the threshold is the single-finger tap limit. Each slice is handled by one hand taking half of those `n` notes: when `n` is even, both hands take `n/2` notes alternately; when `n` is odd, the main hand takes the extra finger. If a slice has more events than that hand has keys, all its keys are used.
+- Multi-press: when one moment has more notes than a hand has keys, the main hand fills all its keys by default and the rest goes to the other hand; with **Balance multi-press across hands** enabled, notes are split evenly across both hands, with an odd extra note to the main hand.
+- “One moment” is detected adaptively: consecutive events with internal gaps ≤12 ms and a total span ≤35 ms count as one multi-press.
+
+### Hold time
+
+Hold time = `max(the note's actual interval × L/R duration ratio, 50 ms)`, capped by “this slice's note span + smallest internal gap (skipping ≤12 ms gaps inside a cluster)”. Inside tight clusters it falls back to the gap outside the cluster; same-time doubles/chords share one base, and a hold is never shorter than one frame.
 
 ### Profiles
 
-Save multiple complete technique parameter sets (keys, orders, durations, starting hand, tolerance, segments); create / delete / switch from the panel.
+Save multiple complete technique parameter sets (keys, orders, durations, starting hand, speed-change tolerance, segments); create / delete / switch from the panel.
 
 ### Speed Segments
 
-Override global settings within a floor range: each segment can set its own **BPM limit** and **L/R keys / orders / ratios** (empty fields inherit global). Hand order resets and cross-segment holds are released at segment boundaries.
+Override global settings within a floor range: each segment can set its own **BPM threshold** and **L/R keys / orders / durations** (empty fields inherit global). At segment boundaries, hand order resets and cross-segment holds are released.
 
 ### Level-specific Configs
 
 Each level can have its own config:
 
 - Stored next to the level file, named `LevelName.adofaimacro.json`;
-- Auto-loaded on entry ("Auto-load from level folder", on by default);
-- Load / Save / Delete from the bottom of the panel, with current status display.
+- Auto-loaded on entry (the “Auto-load from level folder” toggle, on by default);
+- Load / Save to level folder / Delete from the bottom of the panel, with current status display.
 
-Useful for smaller key sets on high-BPM sections, custom orders for specific patterns, or per-level fine-tuning.
+Useful for smaller key sets on high-BPM sections, custom key orders for specific patterns, or per-level fine-tuning.
 
 ### Notes
 
-- **The first time you enter the game you need to die once to calibrate the time** (same note as in the panel).
-- The core algorithm runs in the native `TechniqueSimulator.dll` — make sure it is in `Mods/ADOFAIMacro/`. **Release builds produce no technique output without the DLL** (debug builds fall back to the C# implementation).
+- **The first time you enter the game, you need to die once to calibrate timing** (same note as in the panel).
+- The core algorithm runs in the native `TechniqueSimulator.dll`; make sure it is in `Mods/ADOFAIMacro/`. **Release builds produce no technique simulation output without the DLL** (debug builds can fall back to the C# implementation).
 
 ---
 

@@ -130,6 +130,8 @@ namespace ADOFAIMacro
                     Mod?.Info.Version += $"\nBeta{Settings.BetaVersion}";
 
                 IsEnabled = true;
+                // 预生成设置界面贴图，避免首次打开面板卡顿
+                try { ADOFAIMacro.UI.IridiumLayout.EnsureTexturesAlive(); } catch { /* 失败则首次打开时重建 */ }
                 Harmony?.PatchAll(Assembly.GetExecutingAssembly());
                 if (_uiObject == null)
                 {

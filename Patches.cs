@@ -154,15 +154,15 @@ namespace ADOFAIMacro
         public static class __scrConductor
         {
             // 精确本地时间（与 skyhook 事件时间戳同域，实现见 PreciseNow 的域说明）
-            public static unsafe long Update_1()
+            public static long GetPreciseLocalTicks()
             {
                 return PreciseNow.LocalTicks();
             }
 
-            public static double Update_2() => DSPTimeSimulater.GetDSPTime();
+            public static double GetSimulatedDspTime() => DSPTimeSimulater.GetDSPTime();
 
             [HarmonyTranspiler]
-            public static IEnumerable<CodeInstruction> Transpiler_Update(IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+            public static IEnumerable<CodeInstruction> TranspileConductorUpdate(IEnumerable<CodeInstruction> instructions, ILGenerator generator)
             {
                 if (!Main.Settings.HighPrecisionAsync)
                 {
@@ -178,7 +178,7 @@ namespace ADOFAIMacro
                     if (patch)
                     {
                         patch = false;
-                        result.Add(new CodeInstruction(OpCodes.Call, typeof(__scrConductor).GetMethod(nameof(Update_1), AccessTools.all)));
+                        result.Add(new CodeInstruction(OpCodes.Call, typeof(__scrConductor).GetMethod(nameof(GetPreciseLocalTicks), AccessTools.all)));
                     }
                     if (skip > 0)
                     {
@@ -193,7 +193,7 @@ namespace ADOFAIMacro
                     }
                     if (ci.opcode == OpCodes.Call && ((MethodInfo)ci.operand).Name == "get_dspTime")
                     {
-                        ci.operand = typeof(__scrConductor).GetMethod(nameof(Update_2), AccessTools.all);
+                        ci.operand = typeof(__scrConductor).GetMethod(nameof(GetSimulatedDspTime), AccessTools.all);
                     }
 
                     result.Add(ci);
@@ -206,12 +206,23 @@ namespace ADOFAIMacro
         // ─────────────────────────────────────────────
         //  判定误差探针：用游戏自己的换算复现 AddHit 的毫秒误差，
         //  连同 speed 一起记录——用于定位变速段偏移（数据说话）
+        //  r150：AddHit 会把 angleDiff 参数原地转换为毫秒误差（starg），
+        //  Postfix 读到的是转换后的值；因此在 Prefix 捕获原始弧度角。
         // ─────────────────────────────────────────────
         [HarmonyPatch(typeof(scrHitErrorMeter), nameof(scrHitErrorMeter.AddHit))]
         public static class Patch_HitErrorMeter_AddHit
         {
+            [ThreadStatic] private static float _rawAngleDiff;
+            private static bool _probeErrorLogged;
+
+            [HarmonyPrefix]
+            public static void Prefix(float angleDiff)
+            {
+                _rawAngleDiff = angleDiff;
+            }
+
             [HarmonyPostfix]
-            public static void Postfix(float angleDiff, float marginScale, scrPlanet planet, scrFloor hitFloor)
+            public static void Postfix(float marginScale, scrPlanet planet, scrFloor hitFloor)
             {
                 try
                 {
@@ -219,11 +230,13 @@ namespace ADOFAIMacro
                     if (conductor == null) return;
 
                     // 与游戏 AddHit 内部完全相同的换算
-                    float deg = angleDiff * -57.29578f;
+                    float deg = _rawAngleDiff * -57.29578f;
                     float? spd = (hitFloor ?? planet?.player?.currFloor?.prevfloor)?.speed;
                     double bpmTimesSpeed = conductor.bpm * (spd ?? 1f);
-                    double boundary = scrMisc.GetAdjustedAngleBoundaryInDeg(
-                        HitMarginGeneral.Counted, bpmTimesSpeed, conductor.song.pitch, marginScale);
+                    // r150：GetAdjustedAngleBoundaryInDeg 首参改为 Difficulty，返回结构体（Counted/Perfect/Pure/XPerfect）
+                    var boundaries = scrMisc.GetAdjustedAngleBoundaryInDeg(
+                        GCS.difficulty, bpmTimesSpeed, conductor.song.pitch, marginScale);
+                    double boundary = boundaries.Counted;
                     if (boundary <= 0) return;
                     float errMs = deg * (float)(60.0 / boundary);
 
@@ -238,7 +251,15 @@ namespace ADOFAIMacro
                         $"[Macro-Judge] floor={floorId} err={errMs:+0.0;-0.0}ms " +
                         $"spdUsed={spd ?? 1f:F2} spdNow={nowSpeed:F2} marginScale={marginScale:F2}");
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // 判定探针在每次击中时执行，只记录首次异常避免刷屏
+                    if (!_probeErrorLogged)
+                    {
+                        _probeErrorLogged = true;
+                        Main.Mod?.Logger.Log($"[Macro-Judge] 判定误差探针异常（仅记录首次）: {ex.Message}");
+                    }
+                }
             }
         }
 
@@ -409,131 +430,69 @@ namespace ADOFAIMacro
         }
 
         // 修改 CountValidKeysPressed 补丁添加黑白名单逻辑
+        // r150：游戏该方法在非 Switch / 非合作模式下直接读 RDInput.mainPressCount，
+        // 其余分支（触屏 / 合作 / 键位限制器）是新增逻辑。因此改为 Transpiler：
+        // 只把计数调用替换为过滤版，保留游戏自身的全部新逻辑。
         [HarmonyPatch(typeof(scrPlayer), "CountValidKeysPressed")]
         public static class scrPlayer_CountValidKeysPressed_Patch
         {
-            [HarmonyPrefix]
-            public static bool Prefix(ref int __result)
+            [HarmonyTranspiler]
+            public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             {
-                __result = CountValidKeysPressed();
-                return false;
+                MethodInfo original = AccessTools.Method(typeof(RDInput), "get_mainPressCount");
+                MethodInfo replacement = AccessTools.Method(
+                    typeof(scrPlayer_CountValidKeysPressed_Patch), nameof(FilteredMainPressCount));
+                bool patched = false;
+
+                foreach (CodeInstruction ci in instructions)
+                {
+                    if (ci.opcode == OpCodes.Call && Equals(ci.operand, original))
+                    {
+                        patched = true;
+                        yield return new CodeInstruction(OpCodes.Call, replacement);
+                    }
+                    else
+                    {
+                        yield return ci;
+                    }
+                }
+
+                if (!patched)
+                    Main.Mod?.Logger.Warning("[KeyFilter] 未找到 RDInput.mainPressCount 调用点，按键过滤未生效");
             }
 
-            private static int CountValidKeysPressed()
+            private static int FilteredMainPressCount()
             {
-                int num = 0;
-                scrPlayer instance = ADOBase.controller?.chosenPlanet?.player;
-                instance.keyLimiterOverCounter = 0;
+                if (!Main.IsEnabled || !Main.Settings.Macro || !Main.Settings.EnableKeyFilter)
+                    return RDInput.mainPressCount;
 
+                int total = RDInput.mainPressCount;
+                int blocked = 0;
                 foreach (AnyKeyCode anyKeyCode in RDInput.GetMainPressKeys())
                 {
                     object value = anyKeyCode.value;
                     if (value is KeyCode keyCode)
                     {
-                        instance.keyFrequency[keyCode] = instance.keyFrequency.TryGetValue(keyCode, out int freq) ? freq + 1 : 0;
-                        instance.keyTotal++;
-
-                        // 黑白名单过滤
-                        if (IsKeyAllowed(keyCode))
+                        if (!IsKeyAllowed(keyCode))
                         {
-                            num++;
-                        }
-                        else
-                        {
+                            blocked++;
                             Macro.Macro.Log($"Filtered Key: {keyCode} ({(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")})");
                         }
                     }
                     else if (value is AsyncKeyCode asyncKeyCode)
                     {
-                        instance.keyFrequency[asyncKeyCode] = instance.keyFrequency.TryGetValue(asyncKeyCode, out int asyncFreq) ? asyncFreq + 1 : 0;
-                        instance.keyTotal++;
-
-                        if (IsAsyncKeyAllowed(asyncKeyCode.key))  // 小写 key
+                        if (!IsAsyncKeyAllowed(asyncKeyCode.key))  // 小写 key
                         {
-                            num++;
-                        }
-                        else
-                        {
-                            Macro.Macro.Log($"Filtered Async Key in CountValidKeysPressed: {asyncKeyCode.key} (0x{asyncKeyCode.key:X2})");
+                            blocked++;
+                            Macro.Macro.Log($"Filtered Async Key in CountValidKeysPressed: {asyncKeyCode.key} (0x{asyncKeyCode.key:X2}) ({(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")})");
                         }
                     }
                 }
-                return num;
+
+                int num = total - blocked;
+                return num < 0 ? 0 : num;
             }
         }
-
-        private static readonly Dictionary<string, ushort> AsyncKeyVKMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            // 字母键
-            {"A",0x41},{"B",0x42},{"C",0x43},{"D",0x44},{"E",0x45},{"F",0x46},
-            {"G",0x47},{"H",0x48},{"I",0x49},{"J",0x4A},{"K",0x4B},{"L",0x4C},
-            {"M",0x4D},{"N",0x4E},{"O",0x4F},{"P",0x50},{"Q",0x51},{"R",0x52},
-            {"S",0x53},{"T",0x54},{"U",0x55},{"V",0x56},{"W",0x57},{"X",0x58},
-            {"Y",0x59},{"Z",0x5A},
-            // 数字键
-            {"0",0x30},{"1",0x31},{"2",0x32},{"3",0x33},{"4",0x34},
-            {"5",0x35},{"6",0x36},{"7",0x37},{"8",0x38},{"9",0x39},
-            // 功能键
-            {"F1",0x70},{"F2",0x71},{"F3",0x72},{"F4",0x73},{"F5",0x74},
-            {"F6",0x75},{"F7",0x76},{"F8",0x77},{"F9",0x78},{"F10",0x79},
-            {"F11",0x7A},{"F12",0x7B},{"F13",0x7C},{"F14",0x7D},{"F15",0x7E},
-            {"F16",0x7F},{"F17",0x80},{"F18",0x81},{"F19",0x82},{"F20",0x83},
-            {"F21",0x84},{"F22",0x85},{"F23",0x86},{"F24",0x87},
-            // 方向键
-            {"UP",0x26},{"DOWN",0x28},{"LEFT",0x25},{"RIGHT",0x27},
-            // 常用键
-            {"SPACE",     0x20},
-            {"ENTER",     0x0D},{"RETURN",    0x0D},
-            {"ESC",       0x1B},{"ESCAPE",    0x1B},
-            {"TAB",       0x09},
-            {"BACKSPACE", 0x08},
-            {"DELETE",    0x2E},{"DEL",       0x2E},
-            {"INSERT",    0x2D},{"INS",       0x2D},
-            {"HOME",      0x24},
-            {"END",       0x23},
-            {"PAGEUP",    0x21},{"PGUP",      0x21},
-            {"PAGEDOWN",  0x22},{"PGDN",      0x22},
-            {"CAPSLOCK",  0x14},{"CAPS",      0x14},
-            {"NUMLOCK",   0x90},
-            {"SCROLLLOCK",0x91},
-            {"PRINTSCREEN",0x2C},
-            {"PAUSE",     0x13},
-            // 修饰键
-            {"SHIFT",     0x10},
-            {"LSHIFT",    0xA0},{"RSHIFT",    0xA1},
-            {"CTRL",      0x11},
-            {"LCTRL",     0xA2},{"RCTRL",     0xA3},
-            {"ALT",       0x12},
-            {"LALT",      0xA4},{"RALT",      0xA5},
-            {"WIN",       0x5B},{"LWIN",      0x5B},{"RWIN",      0x5C},
-            // 标点符号
-            {";",         0xBA},{"SEMICOLON", 0xBA},
-            {"=",         0xBB},{"EQUALS",    0xBB},
-            {",",         0xBC},{"COMMA",     0xBC},
-            {"-",         0xBD},{"MINUS",     0xBD},
-            {".",         0xBE},{"PERIOD",    0xBE},
-            {"/",         0xBF},{"SLASH",     0xBF},
-            {"`",         0xC0},{"BACKQUOTE", 0xC0},
-            {"[",         0xDB},{"LBRACKET",  0xDB},
-            {"\\",        0xDC},{"BACKSLASH", 0xDC},
-            {"]",         0xDD},{"RBRACKET",  0xDD},
-            {"'",         0xDE},{"QUOTE",     0xDE},
-            // 小键盘
-            {"NUM0",      0x60},{"NUM1",      0x61},{"NUM2",      0x62},
-            {"NUM3",      0x63},{"NUM4",      0x64},{"NUM5",      0x65},
-            {"NUM6",      0x66},{"NUM7",      0x67},{"NUM8",      0x68},
-            {"NUM9",      0x69},
-            {"NUM*",      0x6A},{"NUM+",      0x6B},{"NUM-",      0x6D},
-            {"NUM.",      0x6E},{"NUM/",      0x6F},{"NUMENTER",  0x0D},
-            // 媒体键
-            {"MUTE",      0xAD},
-            {"VOLUMEDOWN",0xAE},{"VOLDOWN",   0xAE},
-            {"VOLUMEUP",  0xAF},{"VOLUP",     0xAF},
-            {"MEDIANEXT", 0xB0},
-            {"MEDIAPREV", 0xB1},
-            {"MEDIASTOP", 0xB2},
-            {"MEDIAPLAY", 0xB3},
-        };
 
         private static HashSet<ushort> ParseAsyncKeyCodes(string keyString)
         {
@@ -544,9 +503,10 @@ namespace ADOFAIMacro
             foreach (string key in keys)
             {
                 string trimmedKey = key.Trim().ToUpper();
+                if (string.IsNullOrEmpty(trimmedKey)) continue;
 
-                // 优先查 VK 映射表
-                if (AsyncKeyVKMap.TryGetValue(trimmedKey, out ushort vkCode))
+                // 按键名统一走 Macro.KeyMap 单一数据源（原 AsyncKeyVKMap 的别名已并入）
+                if (Macro.KeyMap.TryGetKeyCode(trimmedKey, out byte vkCode))
                 {
                     result.Add(vkCode);
                     Macro.Macro.Log($"Parsed async key: {trimmedKey} -> VK 0x{vkCode:X2}");

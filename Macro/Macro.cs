@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -49,7 +48,6 @@ namespace ADOFAIMacro.Macro
         private static string lastKeysSetting = "";
         // Immutable snapshot - updated atomically, read without lock
         private static volatile byte[] _keyCodesSnapshot = [];
-        private static volatile int _keyCodesVersion = 0;
 
         // ─────────────────────────────────────────────
         //  只读共享数据（初始化后不变）
@@ -65,10 +63,11 @@ namespace ADOFAIMacro.Macro
         private static int _hitEventPoolUsed;
 
         // 复用缓冲区
-        private static readonly List<double> _evTimeRecycle = [with(4096)];
-        private static readonly List<int> _evPressRecycle = [with(4096)];
-        private static readonly List<int> _evFloorRecycle = [with(4096)];
-        private static readonly List<PieceInfo> _piecesRecycle = [with(1024)];
+        private static readonly List<double> _evTimeRecycle = new(4096);
+        private static readonly List<int> _evPressRecycle = new(4096);
+        private static readonly List<int> _evFloorRecycle = new(4096);
+        private static readonly List<double> _evSpeedRecycle = new(4096);
+        private static readonly List<PieceInfo> _piecesRecycle = new(1024);
 
         // ─────────────────────────────────────────────
         //  时间锚点（双缓冲）
@@ -108,8 +107,14 @@ namespace ADOFAIMacro.Macro
         private static double _smPitch;
         private static bool _slewSeeded;
         private static bool _formulaEngaged;
+        private static bool _formulaErrorLogged;
 
         private static readonly double perfFreqInv;
+
+        // 公式基线与采样位置的最大允许偏差（判定公式接管门限，秒）
+        private const double kFormulaAlignToleranceSec = 0.03;
+        // 分片死循环保护：片数上限 = 事件数 × 该倍数
+        private const int kMaxPiecesPerEvent = 64;
 
         private static volatile int _workerLastTriggeredFloor = -1;
         private static volatile int _workerNeedsHit = 0;
@@ -192,6 +197,8 @@ namespace ADOFAIMacro.Macro
         private static extern bool SetWaitableTimer(IntPtr hTimer, ref long lpDueTime, int lPeriod, IntPtr pfnCompletionRoutine, IntPtr lpArgToCompletionRoutine, bool fResume);
         [DllImport("Kernel32.dll")]
         private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
 
         // 睡眠至多 seconds 秒（可能略短）；到点必然返回
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -212,7 +219,23 @@ namespace ADOFAIMacro.Macro
 
             long due = -(long)Math.Ceiling(seconds * 1e7); // 负值 = 相对时间（100ns 单位）
             if (SetWaitableTimer(_hWaitTimer, ref due, 0, IntPtr.Zero, IntPtr.Zero, false))
+            {
                 WaitForSingleObject(_hWaitTimer, unchecked((uint)-1)); // INFINITE
+                return;
+            }
+            // 定时器设置失败：退回粗粒度 Sleep（宁可早醒进自旋，不可空转烧核）
+            int msFallback = (int)Math.Ceiling(seconds * 1000.0) - 1;
+            Thread.Sleep(msFallback < 1 ? 1 : msFallback);
+        }
+
+        // 工作线程确认退出后释放可等待定时器句柄。
+        // 句柄仅工作线程使用，因此必须在 IsAlive == false 时关闭，避免释放后使用；
+        // 若线程仍在运行（Join 超时）则保留句柄，下次线程退出时复用，不重复创建。
+        private static void CloseWaitTimerIfWorkerStopped()
+        {
+            if (_workerThread?.IsAlive == true) return;
+            IntPtr h = Interlocked.Exchange(ref _hWaitTimer, IntPtr.Zero);
+            if (h != IntPtr.Zero) CloseHandle(h);
         }
 
         private static readonly long perfFrequency;
@@ -235,7 +258,7 @@ namespace ADOFAIMacro.Macro
                 if (string.IsNullOrEmpty(name)) continue;
                 if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z') { result.Add((byte)name[0]); continue; }
                 if (name.Length == 1 && name[0] >= '0' && name[0] <= '9') { result.Add((byte)name[0]); continue; }
-                if (KeyMap.KeyNameToCode.TryGetValue(name, out byte code)) result.Add(code);
+                if (KeyMap.TryGetKeyCode(name, out byte code)) result.Add(code);
             }
             return result.Count == 0 ? [0x4A] : [.. result];
         }
@@ -266,6 +289,21 @@ namespace ADOFAIMacro.Macro
         private static int _judgeErrCount;
         private static int _judgeLastAdaptMs;
         private static float _autoOffsetMs;
+
+        // 闭环校准参数（原散落的魔法数字，取值不变）
+        private const int kDenseSampleCount = 6;        // 密集窗口样本数
+        private const int kDenseWindowMs = 100;         // 密集窗口时长
+        private const int kSparseSampleCount = 4;       // 稀疏窗口样本数
+        private const int kSparseWindowMs = 700;        // 稀疏窗口时长
+        private const float kStdDevGateMs = 12f;        // 标准差可信度门控
+        private const float kNearZeroDeadbandMs = 3f;   // 近零死区
+        private const float kFastStepThresholdMs = 15f; // 快速档阈值
+        private const float kFastStepGain = 0.4f;       // 快速档增益
+        private const float kFastStepCapMs = 4f;        // 快速档单次步长上限
+        private const float kFineStepGain = 0.06f;      // 近零档增益
+        private const float kFineStepCapMs = 0.8f;      // 近零档单次步长上限
+        private const float kAutoOffsetClampMs = 60f;   // 偏移钳制位
+        private const float kErrSampleClampMs = 40f;    // 单样本离群钳制
         // ⚠️ 持久化已回滚（2026-08-16 事故）：学到的偏移依赖本局运行状态
         // （offsetTick 收敛相位决定公式路径是否接管，两种基线所需偏移差 ~45ms），
         // 跨运行灌入会造成系统性错位 → 判定 ±700ms 摆动 → 死亡退局。
@@ -274,8 +312,8 @@ namespace ADOFAIMacro.Macro
         /// <summary>判定探针回灌（AddHit 后缀调用，主线程）。</summary>
         internal static void RecordJudgedError(float errMs, float spdUsed)
         {
-            if (errMs < -40f) errMs = -40f;
-            else if (errMs > 40f) errMs = 40f;   // 钳制离群值（死亡/重生/变速瞬态）
+            if (errMs < -kErrSampleClampMs) errMs = -kErrSampleClampMs;
+            else if (errMs > kErrSampleClampMs) errMs = kErrSampleClampMs;   // 钳制离群值（死亡/重生/变速瞬态）
             _judgeErrSum += errMs;
             _judgeErrSqSum += errMs * errMs;
             _judgeErrCount++;
@@ -300,8 +338,8 @@ namespace ADOFAIMacro.Macro
             // 密集窗口（≥6 样本/100ms）；稀疏窗口（≥4 样本/700ms）只用于慢速段。
             // 稀疏段样本少且帧粒度噪声大（±1 帧量化），增益降到 0.2、死区 3ms，
             // 只追真实偏移不追噪声——否则环路随机游走反而制造"跳动"。
-            bool dense = _judgeErrCount >= 6 && sinceLast >= 100;
-            bool sparse = _judgeErrCount >= 4 && sinceLast >= 700;
+            bool dense = _judgeErrCount >= kDenseSampleCount && sinceLast >= kDenseWindowMs;
+            bool sparse = _judgeErrCount >= kSparseSampleCount && sinceLast >= kSparseWindowMs;
             if (!dense && !sparse) return;
 
             _judgeLastAdaptMs = now;
@@ -314,28 +352,33 @@ namespace ADOFAIMacro.Macro
             _judgeErrSum = 0;
             _judgeErrSqSum = 0;
             _judgeErrCount = 0;
-            if (std > 12f) return;
+            if (std > kStdDevGateMs) return;
 
             // 双档：公式基线已与判定恒等，残差主体是引擎量化噪声。
             // 近零档（|err|<15ms）：死区 3ms 内静默；动作时步长 ≤0.8ms，
             //   抖动上限低于可感知度——环路自己不再制造"晃动"。
             // 快速档（|err|≥15ms）：真实偏移（如分段相位 −40ms 类），1 秒内吃掉。
-            if (Math.Abs(mean) < 3f) return;
+            if (Math.Abs(mean) < kNearZeroDeadbandMs) return;
 
             float step;
-            if (Math.Abs(mean) >= 15f)
+            if (Math.Abs(mean) >= kFastStepThresholdMs)
             {
-                step = mean * 0.4f;
-                if (step > 4f) step = 4f; else if (step < -4f) step = -4f;
+                step = mean * kFastStepGain;
+                if (step > kFastStepCapMs) step = kFastStepCapMs; else if (step < -kFastStepCapMs) step = -kFastStepCapMs;
             }
             else
             {
-                step = mean * 0.06f;
-                if (step > 0.8f) step = 0.8f; else if (step < -0.8f) step = -0.8f;
+                step = mean * kFineStepGain;
+                if (step > kFineStepCapMs) step = kFineStepCapMs; else if (step < -kFineStepCapMs) step = -kFineStepCapMs;
             }
-            _autoOffsetMs -= step;
-            if (_autoOffsetMs > 60f) _autoOffsetMs = 60f;
-            else if (_autoOffsetMs < -60f) _autoOffsetMs = -60f;
+            // ⚠️ r150 判定误差符号：errMs>0 = 早、errMs<0 = 迟。
+            // 判定探针复刻 scrHitErrorMeter.AddHit 的 `angleDiff * -57.29578`，
+            // 而游戏 scrMisc.SelectHitMarginByTimeBoundary 里正号才是 Late
+            // （>+Counted→TooLate），两者相差一个负号——因此探针 err<0 表示迟发。
+            // 迟发必须【减小】触发偏移把按键提前，故这里为 `+= step`。
+            _autoOffsetMs += step;
+            if (_autoOffsetMs > kAutoOffsetClampMs) _autoOffsetMs = kAutoOffsetClampMs;
+            else if (_autoOffsetMs < -kAutoOffsetClampMs) _autoOffsetMs = -kAutoOffsetClampMs;
 
             Main.Mod?.Logger.Log($"[Macro-Cali] err={mean:F2}ms autoOffset={_autoOffsetMs:F2}ms");
         }
@@ -421,11 +464,7 @@ namespace ADOFAIMacro.Macro
                 if (!initialized) return;
             }
 
-            if (!Main.Settings.BlockInputWhenUnfocused || IsGameWindowFocused())
-            {
-                int hitCount = Interlocked.Exchange(ref _workerNeedsHit, 0);
-                for (int h = 0; h < hitCount; h++) controller.chosenPlanet.player!.Hit(false);
-            }
+            DispatchPendingHits(controller);
 
             // 方案8：游玩期 GC 抑制（每次进关尝试，失败自动回退）
             TryBeginNoGC();
@@ -433,18 +472,68 @@ namespace ADOFAIMacro.Macro
 #if DEBUG
             int lastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
 #endif
-            float pitch = conductor!.song.pitch;
+            var (anchorPos, rate, qpcSnap, songPosRaw) = ComputeAnchorPosition();
+
+            // 方案7：闭环校准步进（判定误差 → 自动偏移）
+            StepAutoCalibration();
+
+            var anchor = ReferenceEquals(_currentAnchor, _anchorA) ? _anchorB : _anchorA;
+
+            anchor.songPosRef = anchorPos;
+            anchor.qpcSnapshot = qpcSnap;
+            anchor.rate = rate;
+            anchor.timeOffset = (settings.TimeOffset + _autoOffsetMs) * 0.001;
+            anchor.simulateKeyPress = settings.SimulateKeyPress;
+
+            if (anchor.staticVersion != _staticAnchorVersion)
+            {
+                anchor.hitEvents = _hitEvents;
+                anchor.hitEventCount = _hitEventCount;
+                anchor.staticVersion = _staticAnchorVersion;
+            }
+
+            Volatile.Write(ref anchor.validFlag, 1);
+            Volatile.Write(ref _currentAnchor, anchor);
+
+            if (!_workerStarted) { _workerStarted = true; _startSignal.Release(); }
+
+#if DEBUG
+            Log($"[Macro-Main] ANCHOR posRef={anchorPos:F6} rate={rate:F4} qpcSnap={qpcSnap} lastFloor={lastFloor} judgedAligned={anchorPos != songPosRaw}");
+            _debugWorkerInitLogged = false;
+#endif
+
+            HandleHotkeys();
+        }
+
+        /// <summary>派发工作线程累积的直接判定请求（失焦时按设置丢弃）。</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void DispatchPendingHits(scrController controller)
+        {
+            if (!Main.Settings.BlockInputWhenUnfocused || IsGameWindowFocused())
+            {
+                int hitCount = Interlocked.Exchange(ref _workerNeedsHit, 0);
+                for (int h = 0; h < hitCount; h++) controller.chosenPlanet.player!.Hit(null, false);
+            }
+            else
+            {
+                // 失焦且启用失焦拦截：丢弃工作线程累积的直接判定请求，
+                // 避免回焦后一次性补发（与 SendKey 的失焦丢弃语义一致）
+                Interlocked.Exchange(ref _workerNeedsHit, 0);
+            }
+        }
+
+        /// <summary>
+        /// 计算本帧锚点位置（判定公式基线；失败回退 minusi 有界低通）。
+        /// 方案9 注释：判定位置 = ((T − offsetTick)/1e7 − dspTimeSong − cal_i)·pitch − addoffset，
+        /// T 与 offsetTick 必须同域（DateTime 域 ticks，见 PreciseNow）；
+        /// 公式不可用时退回 minusi 低通（平滑音频缓冲阶梯波）。
+        /// </summary>
+        private static (double anchorPos, double rate, long qpcSnap, double songPosRaw) ComputeAnchorPosition()
+        {
+            double pitch = conductor!.song.pitch;
             long qpcSnap = GetRawTicks();
             double currentSongPos = conductor!.songposition_minusi;
 
-            // 方案9：判定公式基线（修复时钟域 bug）。
-            // 判定位置 = ((T − offsetTick)/1e7 − dspTimeSong − cal_i)·pitch − addoffset，
-            // 其中 T 必须与 offsetTick 同域：DateTime 域 ticks。方案6 起误用了
-            // 工作线程的 dsp/QPC 时钟（纪元不同）→ 公式从未生效，所有 session
-            // 实际都是 minusi 裸采样基线（阶梯锯齿直接透传，开局 ±0~60ms 彩票）。
-            // 现在 T = PreciseNow.LocalTicks()——与 Update_1 补丁后的 currFrameTick
-            // 同源同钟，公式真正可用且无需任何击中即可对齐判定（消灭开局彩票）。
-            // minusi 兜底恢复有界低通（平滑音频缓冲阶梯波）。
             double rate = pitch;
             double anchorPos;
             bool formulaOk = false;
@@ -456,10 +545,18 @@ namespace ADOFAIMacro.Macro
                     double dspNow = (PreciseNow.LocalTicks() - (long)global::AsyncInputManager.offsetTick) / 1e7;
                     judgedPos = (dspNow - conductor.dspTimeSong - (double)scrConductor.calibration_i)
                                 * pitch - conductor.addoffset;
-                    formulaOk = Math.Abs(judgedPos - currentSongPos) <= 0.03;
+                    formulaOk = Math.Abs(judgedPos - currentSongPos) <= kFormulaAlignToleranceSec;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // 公式基线失败时回退 minusi 低通；异常只在每局第一次记录，避免刷屏
+                if (!_formulaErrorLogged)
+                {
+                    _formulaErrorLogged = true;
+                    Main.Mod?.Logger.Log($"[Macro] 判定公式基线计算异常（已回退 minusi 兜底，仅记录首次）: {ex.Message}");
+                }
+            }
 
             if (formulaOk)
             {
@@ -497,48 +594,49 @@ namespace ADOFAIMacro.Macro
                 anchorPos = _songPosSm;
             }
 
-            // 方案7：闭环校准步进（判定误差 → 自动偏移）
-            StepAutoCalibration();
+            return (anchorPos, rate, qpcSnap, currentSongPos);
+        }
 
-            var anchor = ReferenceEquals(_currentAnchor, _anchorA) ? _anchorB : _anchorA;
+        /// <summary>热键：Ctrl+左右调步长、左右调时间偏移（可在设置关闭）。</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void HandleHotkeys()
+        {
+            if (!Main.Settings.EnableKeyAdjust && !Main.Settings.EnableArrowTimeAdjust) return;
 
-            anchor.songPosRef = anchorPos;
-            anchor.qpcSnapshot = qpcSnap;
-            anchor.rate = rate;
-            anchor.timeOffset = (settings.TimeOffset + _autoOffsetMs) * 0.001;
-            anchor.simulateKeyPress = settings.SimulateKeyPress;
-
-            if (anchor.staticVersion != _staticAnchorVersion)
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (ctrl && Main.Settings.EnableKeyAdjust)
             {
-                anchor.hitEvents = _hitEvents;
-                anchor.hitEventCount = _hitEventCount;
-                anchor.staticVersion = _staticAnchorVersion;
+                if (Input.GetKeyDown(KeyCode.LeftArrow)) Main.Settings.AdjustStep = Mathf.Clamp(Main.Settings.AdjustStep - 0.1f, 0.1f, 10f);
+                else if (Input.GetKeyDown(KeyCode.RightArrow)) Main.Settings.AdjustStep = Mathf.Clamp(Main.Settings.AdjustStep + 0.1f, 0.1f, 10f);
             }
-
-            Volatile.Write(ref anchor.validFlag, 1);
-            Volatile.Write(ref _currentAnchor, anchor);
-
-            if (!_workerStarted) { _workerStarted = true; _startSignal.Release(); }
-
-#if DEBUG
-            Log($"[Macro-Main] ANCHOR posRef={anchorPos:F6} rate={rate:F4} qpcSnap={qpcSnap} lastFloor={lastFloor} judgedAligned={anchorPos != currentSongPos}");
-            _debugWorkerInitLogged = false;
-#endif
-
-            // Hotkey handling (merged from HandleInput to reduce call overhead)
-            if (Main.Settings.EnableKeyAdjust || Main.Settings.EnableArrowTimeAdjust)
+            else if (!ctrl && Main.Settings.EnableArrowTimeAdjust)
             {
-                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-                if (ctrl && Main.Settings.EnableKeyAdjust)
-                {
-                    if (Input.GetKeyDown(KeyCode.LeftArrow)) Main.Settings.AdjustStep = Mathf.Clamp(Main.Settings.AdjustStep - 0.1f, 0.1f, 10f);
-                    else if (Input.GetKeyDown(KeyCode.RightArrow)) Main.Settings.AdjustStep = Mathf.Clamp(Main.Settings.AdjustStep + 0.1f, 0.1f, 10f);
-                }
-                else if (!ctrl && Main.Settings.EnableArrowTimeAdjust)
-                {
-                    if (Input.GetKeyDown(KeyCode.LeftArrow)) Main.Settings.TimeOffset -= Main.Settings.AdjustStep;
-                    else if (Input.GetKeyDown(KeyCode.RightArrow)) Main.Settings.TimeOffset += Main.Settings.AdjustStep;
-                }
+                if (Input.GetKeyDown(KeyCode.LeftArrow)) Main.Settings.TimeOffset -= Main.Settings.AdjustStep;
+                else if (Input.GetKeyDown(KeyCode.RightArrow)) Main.Settings.TimeOffset += Main.Settings.AdjustStep;
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        //  UI 延迟动作队列
+        //  OnGUI 回调中不直接改游戏状态：只置标志，由 ShowText.Update
+        //  （主线程每帧）在下一帧统一执行。
+        // ─────────────────────────────────────────────
+        private static int _pendingRestart;
+
+        /// <summary>请求重开当前关卡（下一帧主线程执行，见 ProcessPendingActions）。</summary>
+        internal static void RequestRestart() => Interlocked.Exchange(ref _pendingRestart, 1);
+
+        /// <summary>消费 UI 延迟动作（ShowText.Update 每帧调用，主线程）。</summary>
+        internal static void ProcessPendingActions()
+        {
+            if (Interlocked.Exchange(ref _pendingRestart, 0) == 0) return;
+            try
+            {
+                ADOBase.controller?.Restart();
+            }
+            catch (Exception ex)
+            {
+                Main.Mod?.Logger.Log($"[Macro] 延迟重开关卡失败: {ex.Message}");
             }
         }
 
@@ -550,6 +648,9 @@ namespace ADOFAIMacro.Macro
         private static double _fireErrMax;
         private static int _fireCount;
         private static int _fireStatLastMs;
+        // 诊断：实际使用的 rate（= song.pitch）与批锚定次数，定位高密度段漂移
+        private static double _diagLastRate = -1.0;
+        private static int _diagBatchCount;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void RecordFireError(double lateSec)
@@ -565,8 +666,8 @@ namespace ADOFAIMacro.Macro
             int now = Environment.TickCount;
             if (unchecked(now - _fireStatLastMs) < 3000) return;
             _fireStatLastMs = now;
-            Main.Mod?.Logger.Log($"[Macro-Diag] 击发 {_fireCount} 次 | 平均迟发 {_fireErrSum / _fireCount * 1000.0:F3}ms | 最大 {_fireErrMax * 1000.0:F3}ms");
-            _fireErrSum = 0; _fireErrMax = 0; _fireCount = 0;
+            Main.Mod?.Logger.Log($"[Macro-Diag] 击发 {_fireCount} 次 | 平均迟发 {_fireErrSum / _fireCount * 1000.0:F3}ms | 最大 {_fireErrMax * 1000.0:F3}ms | rate={_diagLastRate:F4} | 批锚定 {_diagBatchCount}");
+            _fireErrSum = 0; _fireErrMax = 0; _fireCount = 0; _diagBatchCount = 0;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -585,6 +686,13 @@ namespace ADOFAIMacro.Macro
                 int localLastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
                 int localResetVer = Volatile.Read(ref _resetVersion);
 
+                // 事件时间戳“批锚定”状态（跨 while 迭代保持）：
+                // 批首事件发出时的本地 tick + 其理想歌曲时刻。批内其余事件按
+                // 各自理想歌曲时间差折算真实秒排到基准上（见事件处理段）。
+                long batchBaseTicks = 0;
+                double batchBaseTriggerAt = double.NaN;
+                const double kBatchWindowSec = 0.05;   // 批窗口 50ms
+
                 while (_workerRunning)
                 {
                     var anchor = Volatile.Read(ref _currentAnchor);
@@ -599,6 +707,7 @@ namespace ADOFAIMacro.Macro
                     {
                         localResetVer = curResetVer;
                         localLastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
+                        batchBaseTicks = 0; batchBaseTriggerAt = double.NaN;
                         continue;
                     }
 
@@ -645,79 +754,39 @@ namespace ADOFAIMacro.Macro
                             Log($"[Macro-Worker] TICK i={i} audioNow={audioNow:F6} triggerAt={triggerAt:F6} diff={triggerAt - audioNow:F6} elapsed={elapsed:F6}");
 #endif
 
-                        if (triggerAt > audioNow)
-                        {
-                            if (rate <= 0.0) { Thread.Sleep(1); break; }
-                            double waitSec = (triggerAt - audioNow) / rate;
-                            if (waitSec > 0.01) { Thread.Sleep(1); break; } // 远future，睡眠
-                            else if (waitSec > 0.0015)
-                            {
-                                // 近future（1.5~10ms）：高分辨率定时器睡到目标前 1.5ms，
-                                // 最后 1.5ms 走下面的自旋。原实现在 3~10ms 窗口内
-                                // Thread.Yield() 满核空转（高密度段落每事件最多烧 ~10ms CPU，
-                                // 是高速段 CPU 占用高的主因）。
-                                // 注意：audioNow/triggerAt 的计算未变，只改等待方式。
-                                HighResSleep(waitSec - 0.0015);
-                            }
-                            else Thread.SpinWait(1000); // 极近（≤1.5ms），自旋等待保证微秒级触发
-                            continue;
-                        }
+                        // 等待到事件时刻（Ready=可派发 / RetrySame=重试同一事件 / DeferNextAnchor=让出本帧）
+                        EventWait wait = WaitForEvent(triggerAt, audioNow, rate);
+                        if (wait == EventWait.DeferNextAnchor) break;
+                        if (wait == EventWait.RetrySame) continue;
 
                         ref readonly var ev = ref events[i];
                         RecordFireError(audioNow - triggerAt);
                         bool enableTechnique = Main.Settings.EnableTechniqueSimulation;
 
-                        if (!simulateKey)
+                        // ── 事件时间戳“批锚定” ────────────────────────
+                        // 游戏判定只认事件时间戳（亚帧）。同一时刻/极近的多个事件
+                        // （双押、八押）是在本线程逐个 Send 的，每次 Send 要花 0.1~2ms，排在后面的键实际发送时刻已晚于理想，时间戳若取发送瞬间就会被判迟发（八押可累积 5~10ms）。
+                        // 这里以“批首事件的真实发送本地时刻”为基准，批内其余事件按各自理想歌曲时间差折算真实秒排上去；基准来自批首的实际发送时刻，不使用 audioNow 的绝对外推，高密度连打段不会因外推累积误差越走越偏。
+                        // 批窗口 50ms，超出即重新锚定。
+                        long targetTicks;
+                        _diagLastRate = rate;
+                        if (!double.IsNaN(batchBaseTriggerAt)
+                            && triggerAt >= batchBaseTriggerAt
+                            && triggerAt - batchBaseTriggerAt <= kBatchWindowSec)
                         {
-                            hitCount++;
-                            Log($"[Macro-Worker] 请求 Hit() EventIndex={i}");
-                        }
-                        else if (ev.ReleaseOnly)
-                        {
-                            if (enableTechnique)
-                            {
-                                byte keyToRelease = ev.IsHoldRelated
-                                    ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
-                                    : ev.ReleaseKeyCode;
-                                SendKey(keyToRelease, false);
-                                if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
-                                Log($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={i} audioNow={audioNow:F6}");
-                            }
-                            else
-                            {
-                                if (ev.IsHoldRelated) WorkerReleaseHoldKey();
-                                else WorkerReleaseKey(ev.ReleaseKeyCode);
-                                Log($"[Macro-Worker] 松键(hold={ev.IsHoldRelated} key=0x{ev.ReleaseKeyCode:X2}) EventIndex={i}");
-                            }
-                        }
-                        else if (ev.IsHoldRelated)
-                        {
-                            if (enableTechnique)
-                            {
-                                if (_isHoldDown) { SendKey(_holdKey, false); _holdKey = 0; _isHoldDown = false; }
-                                SendKey(ev.KeyCode, true);
-                                _holdKey = ev.KeyCode; _isHoldDown = true;
-                                Log($"[Macro-Worker] 直接长按 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
-                            }
-                            else
-                            {
-                                WorkerHoldKey(ev.KeyCode);
-                                Log($"[Macro-Worker] Hold 按下 0x{ev.KeyCode:X2} EventIndex={i}");
-                            }
+                            double relSec = (triggerAt - batchBaseTriggerAt)
+                                            / ((rate > 1e-9) ? rate : 1.0);
+                            targetTicks = batchBaseTicks + (long)(relSec * 10_000_000.0);
                         }
                         else
                         {
-                            if (enableTechnique)
-                            {
-                                SendKey(ev.KeyCode, true);
-                                Log($"[Macro-Worker] 直接按下 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
-                            }
-                            else
-                            {
-                                WorkerPressKey(ev.KeyCode);
-                                Log($"[Macro-Worker] 按下 0x{ev.KeyCode:X2} EventIndex={i}");
-                            }
+                            targetTicks = PreciseNow.LocalTicks();
+                            batchBaseTicks = targetTicks;
+                            batchBaseTriggerAt = triggerAt;
+                            _diagBatchCount++;
                         }
+
+                        hitCount += DispatchEvent(in ev, simulateKey, enableTechnique, targetTicks, i, audioNow);
 
                         localLastFloor = i++;
                         triggered = true;
@@ -763,6 +832,98 @@ namespace ADOFAIMacro.Macro
                 { WorkerReleaseKey(); WorkerReleaseHoldKey(); }
                 Log("[Macro-Worker] 工作线程退出");
             }
+        }
+
+        // 等待结果：Ready=到时刻可派发；RetrySame=重试同一事件；DeferNextAnchor=让出本帧
+        private enum EventWait { Ready, RetrySame, DeferNextAnchor }
+
+        /// <summary>
+        /// 等待到事件触发时刻。近 future 用高分辨率定时器睡到目标前 1.5ms，
+        /// 最后 1.5ms 自旋；远 future 睡眠让出本帧（由外层重取锚点）。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static EventWait WaitForEvent(double triggerAt, double audioNow, double rate)
+        {
+            if (triggerAt <= audioNow) return EventWait.Ready;
+            if (rate <= 0.0) { Thread.Sleep(1); return EventWait.DeferNextAnchor; }
+            double waitSec = (triggerAt - audioNow) / rate;
+            if (waitSec > 0.01) { Thread.Sleep(1); return EventWait.DeferNextAnchor; } // 远future，睡眠
+            if (waitSec > 0.0015)
+            {
+                // 近future（1.5~10ms）：高分辨率定时器睡到目标前 1.5ms，
+                // 最后 1.5ms 走下面的自旋。原实现在 3~10ms 窗口内
+                // Thread.Yield() 满核空转（高密度段落每事件最多烧 ~10ms CPU，
+                // 是高速段 CPU 占用高的主因）。
+                // 注意：audioNow/triggerAt 的计算未变，只改等待方式。
+                HighResSleep(waitSec - 0.0015);
+                return EventWait.RetrySame;
+            }
+            Thread.SpinWait(1000); // 极近（≤1.5ms），自旋等待保证微秒级触发
+            return EventWait.RetrySame;
+        }
+
+        /// <summary>
+        /// 派发单个已到时刻事件：直接判定计数 / 释放 / hold / 普通按下。
+        /// 返回需主线程补发的直接判定次数。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int DispatchEvent(in HitEvent ev, bool simulateKey, bool enableTechnique,
+                                         long targetTicks, int eventIndex, double audioNow)
+        {
+            if (!simulateKey)
+            {
+                Log($"[Macro-Worker] 请求 Hit() EventIndex={eventIndex}");
+                return 1;
+            }
+
+            if (ev.ReleaseOnly)
+            {
+                if (enableTechnique)
+                {
+                    byte keyToRelease = ev.IsHoldRelated
+                        ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
+                        : ev.ReleaseKeyCode;
+                    SendKey(keyToRelease, false, targetTicks);
+                    if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
+                    Log($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={eventIndex} audioNow={audioNow:F6}");
+                }
+                else
+                {
+                    if (ev.IsHoldRelated) WorkerReleaseHoldKey();
+                    else WorkerReleaseKey(ev.ReleaseKeyCode);
+                    Log($"[Macro-Worker] 松键(hold={ev.IsHoldRelated} key=0x{ev.ReleaseKeyCode:X2}) EventIndex={eventIndex}");
+                }
+                return 0;
+            }
+
+            if (ev.IsHoldRelated)
+            {
+                if (enableTechnique)
+                {
+                    if (_isHoldDown) { SendKey(_holdKey, false, targetTicks); _holdKey = 0; _isHoldDown = false; }
+                    SendKey(ev.KeyCode, true, targetTicks);
+                    _holdKey = ev.KeyCode; _isHoldDown = true;
+                    Log($"[Macro-Worker] 直接长按 0x{ev.KeyCode:X2} EventIndex={eventIndex} audioNow={audioNow:F6}");
+                }
+                else
+                {
+                    WorkerHoldKey(ev.KeyCode);
+                    Log($"[Macro-Worker] Hold 按下 0x{ev.KeyCode:X2} EventIndex={eventIndex}");
+                }
+                return 0;
+            }
+
+            if (enableTechnique)
+            {
+                SendKey(ev.KeyCode, true, targetTicks);
+                Log($"[Macro-Worker] 直接按下 0x{ev.KeyCode:X2} EventIndex={eventIndex} audioNow={audioNow:F6}");
+            }
+            else
+            {
+                WorkerPressKey(ev.KeyCode);
+                Log($"[Macro-Worker] 按下 0x{ev.KeyCode:X2} EventIndex={eventIndex}");
+            }
+            return 0;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -817,7 +978,7 @@ namespace ADOFAIMacro.Macro
         private static bool _keyPathProbeDone;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void SendKey(byte keyCode, bool isDown)
+        private static unsafe void SendKey(byte keyCode, bool isDown, long targetLocalTicks = 0)
         {
             // 一次性路径探针：定位镜像链路断点（每次会话首键输出）
             // 注意用 UMM Logger 直调——Macro.Log 是 [Conditional("DEBUG")]，Release 会整体剥除
@@ -831,8 +992,9 @@ namespace ADOFAIMacro.Macro
 
             if (Main.Settings.BlockInputWhenUnfocused && !IsGameWindowFocused()) return;
 
-            // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）
-            if (VirtualAsyncInput.Active && VirtualAsyncInput.Send(keyCode, isDown)) return;
+            // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）。
+            // targetLocalTicks：事件时间戳（批锚定后的理想本地时刻；0=用当前时刻）。
+            if (VirtualAsyncInput.Active && VirtualAsyncInput.Send(keyCode, isDown, targetLocalTicks)) return;
 
             if (_cachedSkyHookMode)
             {
@@ -879,6 +1041,48 @@ namespace ADOFAIMacro.Macro
             Log("[Macro-Main] 初始化完成");
         }
 
+        /// <summary>可参与宏的砖：非空、下一块非 auto、非 midspin。</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsPlayableFloor(scrFloor? floor)
+            => floor != null && !(floor.nextfloor?.auto ?? false) && !floor.midSpin;
+
+        /// <summary>
+        /// 抽取手法模拟用逐砖事件（时间/类型/楼层/逐层速度）。
+        /// 事件 i 时刻 = floors[i+1].entryTime；hold 尾记 -1、hold 头记 2、普通记 1。
+        /// evSpeed 传 null 时不收集速度（C# 回退路径不需要）。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void CollectFloorEvents(
+            scrFloor[] floors, bool sim,
+            List<double> evTime, List<int> evPress, List<int> evFloor, List<double>? evSpeed)
+        {
+            evTime.Clear();
+            evPress.Clear();
+            evFloor.Clear();
+            evSpeed?.Clear();
+
+            for (int i = 0; i < floors.Length - 1; i++)
+            {
+                var fl = floors[i];
+                if (!IsPlayableFloor(fl)) continue;
+
+                var nf = floors[i + 1];
+                double t = nf?.entryTime ?? double.MaxValue;
+
+                if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
+                {
+                    evTime.Add(t); evPress.Add(-1); evFloor.Add(i); evSpeed?.Add(fl.speed);
+                    continue;
+                }
+
+                bool isHoldHead = sim && nf != null && nf.holdLength > -1;
+                evTime.Add(t);
+                evPress.Add(isHoldHead ? 2 : 1);
+                evFloor.Add(i);
+                evSpeed?.Add(fl.speed);
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BuildHitEvents()
         {
@@ -903,8 +1107,7 @@ namespace ADOFAIMacro.Macro
             for (int i = 0; i < n - 1; i++)
             {
                 var floor = floors[i];
-                if (floor == null) continue;
-                if ((floor.nextfloor != null && floor.nextfloor.auto) || floor.midSpin) continue;
+                if (!IsPlayableFloor(floor)) continue;
 
                 double t = floors[i + 1]?.entryTime ?? double.MaxValue;
 
@@ -976,12 +1179,11 @@ namespace ADOFAIMacro.Macro
                     if (c is >= 'A' and <= 'Z') { newList.Add((byte)c); continue; }
                     if (c is >= '0' and <= '9') { newList.Add((byte)c); continue; }
                 }
-                if (KeyMap.KeyNameToCode.TryGetValue(keyName, out byte code)) newList.Add(code);
+                if (KeyMap.TryGetKeyCode(keyName, out byte code)) newList.Add(code);
             }
             if (newList.Count == 0) newList.Add(0x4A);
             var newArray = newList.ToArray();
             System.Threading.Interlocked.Exchange(ref _keyCodesSnapshot, newArray);
-            System.Threading.Volatile.Write(ref _keyCodesVersion, _keyCodesVersion + 1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1068,6 +1270,10 @@ namespace ADOFAIMacro.Macro
         private static double GetAdviceBpm(double limit)
         {
             double bpm = (double)(conductor!.bpm * ADOBase.controller.playerOne.planetarySystem.speed);
+            // 防御：bpm/limit 非法（损坏的分段配置或未初始化）时不做八度折叠，
+            // 否则 `while (bpm <= limit/2) bpm *= 2` 对 0/负数会永不终止。
+            if (bpm < 1e-9) bpm = 1e-9;
+            if (limit <= 1e-9) return bpm;
             while (bpm > limit) bpm /= 2.0;
             while (bpm <= limit / 2.0) bpm *= 2.0;
             return bpm;
@@ -1155,34 +1361,11 @@ namespace ADOFAIMacro.Macro
             var floors = cachedFloors!;
             bool sim = Main.Settings.SimulateKeyPress;
 
-            _evTimeRecycle.Clear();
-            _evPressRecycle.Clear();
-            _evFloorRecycle.Clear();
-
             var evTime = _evTimeRecycle;
             var evPress = _evPressRecycle;
             var evFloor = _evFloorRecycle;
-
-            for (int i = 0; i < floors.Length - 1; i++)
-            {
-                var fl = floors[i];
-                if (fl == null) continue;
-                if ((fl.nextfloor?.auto ?? false) || fl.midSpin) continue;
-
-                var nf = floors[i + 1];
-                double t = nf?.entryTime ?? double.MaxValue;
-
-                if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
-                {
-                    evTime.Add(t); evPress.Add(-1); evFloor.Add(i);
-                    continue;
-                }
-
-                bool isHoldHead = sim && nf != null && nf.holdLength > -1;
-                evTime.Add(t);
-                evPress.Add(isHoldHead ? 2 : 1);
-                evFloor.Add(i);
-            }
+            var evSpeed = _evSpeedRecycle;
+            CollectFloorEvents(floors, sim, evTime, evPress, evFloor, evSpeed);
 
             int total = evTime.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
@@ -1213,17 +1396,24 @@ namespace ADOFAIMacro.Macro
 
                     double speedChangeTolerance = levelConfig?.speedChangeTolerance
                         ?? Main.Settings.SpeedChangeTolerance;
-                    TechniqueSimulator.UpdateConfig(
-                        _techLeftKeys, _techRightKeys,
-                        _techKeyOrders[0], _techKeyOrders[1],
-                        _techPressDur[0], _techPressDur[1],
-                        Main.Settings.TechniqueBpmLimit,
-                        handPref,
-                        speedChangeTolerance,
-                        segments);
+                    TechniqueSimulator.UpdateConfig(new TechniqueSimulator.TechniqueConfigSnapshot
+                    {
+                        LeftKeys = _techLeftKeys,
+                        RightKeys = _techRightKeys,
+                        LeftKeyOrders = _techKeyOrders[0],
+                        RightKeyOrders = _techKeyOrders[1],
+                        LeftPressTimes = _techPressDur[0],
+                        RightPressTimes = _techPressDur[1],
+                        BpmLimit = Main.Settings.TechniqueBpmLimit,
+                        HandPreference = handPref,
+                        SpeedChangeTolerance = speedChangeTolerance,
+                        Segments = segments,
+                        PressDurationMode = Main.Settings.TechniqueLegacyPressDuration ? 1 : 0,
+                        MultiChordBalance = Main.Settings.TechniqueMultiChordBalance ? 1 : 0,
+                    });
 
                     if (TechniqueSimulator.BuildHitEvents(
-                            [.. evTime], [.. evPress], [.. evFloor],
+                            [.. evTime], [.. evPress], [.. evFloor], [.. evSpeed],
                             total,
                             conductor!.bpm, ADOBase.controller.playerOne.planetarySystem.speed,
                             out var nativeEvents))
@@ -1234,17 +1424,26 @@ namespace ADOFAIMacro.Macro
                         return;
                     }
                 }
-                catch (Exception ex) { Log($"[Macro-Main] C++ 手法模拟异常: {ex.Message}，回退 C# 版本"); }
+                catch (Exception ex)
+                {
+                    Main.Mod?.Logger.Log($"[Macro-Main] C++ 手法模拟异常: {ex.Message}");
+                }
             }
 
 #if DEBUG
             BuildCSHarpTechniqueHitEvents();
+#else
+            // Release 无 C# 回退（该实现被 #if DEBUG 整体排除）：DLL 缺失或构建
+            // 失败时明确清空事件，避免沿用上一次构建结果；同时输出可见错误日志。
+            _hitEvents = [];
+            _hitEventCount = 0;
+            Main.Mod?.Logger.Log("[Macro-Main] C++ 手法模拟未产出事件（Release 无 C# 回退），本局手法事件为空");
 #endif
         }
 
 #if DEBUG
         // ═══════════════════════════════════════════════════════════════
-        //  C# 回退路径（Release 模式下也作为 DLL 加载失败的备份）
+        //  C# 回退路径（仅 Debug：Release 不含本实现，DLL 失败时无回退）
         // ═══════════════════════════════════════════════════════════════
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BuildCSHarpTechniqueHitEvents()
@@ -1255,30 +1454,7 @@ namespace ADOFAIMacro.Macro
             bool sim     = Main.Settings.SimulateKeyPress;
 
             // 使用对象池，避免分配
-            _evTimeRecycle.Clear();
-            _evPressRecycle.Clear();
-            _evFloorRecycle.Clear();
-
-            for (int i = 0; i < floors.Length - 1; i++)
-            {
-                var fl = floors[i];
-                if (fl == null) continue;
-                if ((fl.nextfloor?.auto ?? false) || fl.midSpin) continue;
-
-                var    nf = floors[i + 1];
-                double t  = nf?.entryTime ?? double.MaxValue;
-
-                if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
-                {
-                    _evTimeRecycle.Add(t); _evPressRecycle.Add(-1); _evFloorRecycle.Add(i);
-                    continue;
-                }
-
-                bool isHoldHead = sim && nf != null && nf.holdLength > -1;
-                _evTimeRecycle.Add(t);
-                _evPressRecycle.Add(isHoldHead ? 2 : 1);
-                _evFloorRecycle.Add(i);
-            }
+            CollectFloorEvents(floors, sim, _evTimeRecycle, _evPressRecycle, _evFloorRecycle, null);
 
             int total = _evTimeRecycle.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
@@ -1325,6 +1501,15 @@ namespace ADOFAIMacro.Macro
             return -1;
         }
 
+        // 键位数组内容比较（分段键位覆盖变化判定用）
+        private static bool SameKeys(byte[]? a, byte[]? b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a == null || b == null || a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+            return true;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BuildPieces(
             List<double> evTime, List<int> evPress, List<int> evFloor,
@@ -1334,71 +1519,52 @@ namespace ADOFAIMacro.Macro
             int    nowD    = 0;
             var    _levelTechHandPref = LevelTechniqueManager.GetCurrentLevelConfig()?.handPreference ?? Main.Settings.TechniqueHandPreference;
             int    cHand   = (_levelTechHandPref == 0) ? -1 : 1;
-            int    mult    = 0;
-
-            var mCnt    = new long[16];
-            var mCntPre = new long[16];
-            int  canMulti  = 0;
-            bool needBack  = false;
 
             float  lastSegLimit = GetSegmentBpmLimit(evFloor[0]);
             double nowBpm       = GetAdviceBpm(lastSegLimit);
             int    lastSegIdx   = FindSegmentIndex(evFloor[0]);
+            EffectiveTechConfig prevEc = GetEffectiveConfig(evFloor[0]);
 
             while (nowD < total)
             {
                 int   curFloorIdx = evFloor[nowD];
                 int   curSegIdx   = FindSegmentIndex(curFloorIdx);
                 float curSegLimit = GetSegmentBpmLimit(curFloorIdx);
+                var   ec          = GetEffectiveConfig(curFloorIdx);
 
+                // 段边界：仅当有效键位配置变化时才重置连续状态（手交替）。
+                // 只改 BPM 阈值的分段不应打断手序（历史 bug：残留的 [0,0] 空分段
+                // 会在第 2 个事件处触发重置，导致起始手连按两次）。
                 if (curSegIdx != lastSegIdx)
                 {
-                    cHand   = (_levelTechHandPref == 0) ? -1 : 1;
-                    mult    = 0;
-                    Array.Clear(mCnt,    0, mCnt.Length);
-                    Array.Clear(mCntPre, 0, mCntPre.Length);
-                    canMulti  = 0;
-                    needBack  = false;
+                    bool keysChanged = !SameKeys(ec.LeftKeys, prevEc.LeftKeys)
+                                    || !SameKeys(ec.RightKeys, prevEc.RightKeys);
+                    if (keysChanged)
+                    {
+                        cHand = (_levelTechHandPref == 0) ? -1 : 1;
+                    }
+                    prevEc       = ec;
                     lastSegLimit = curSegLimit;
                     nowBpm       = GetAdviceBpm(curSegLimit);
                     lastSegIdx   = curSegIdx;
                 }
 
-                if (pieces.Count > total * 64) break;
+                if (pieces.Count > total * kMaxPiecesPerEvent) break;
 
-                double pLen = 60.0 / (nowBpm * Math.Pow(2, mult)) / 2.0;
+                double pLen = 60.0 / nowBpm / 2.0;
                 if (pLen < 1e-9) pLen = 1e-9;
 
                 int cnt   = CountEventsInRange(evTime, nowD, nowT + pLen * 0.995);
                 int csH   = (cHand == 1) ? 1 : 0;
 
-                // 使用分段有效配置来确定当前手的最大按键数
-                var   ec   = GetEffectiveConfig(curFloorIdx);
                 int   maxK = (csH == 0) ? ec.LeftKeys.Length : ec.RightKeys.Length;
 
-                int  mainHand  = (_levelTechHandPref == 0) ? -1 : 1;
-                bool isOffHand = (cHand != mainHand);
-
+                // 密度超过单手指数：本片取满全部按键（maxK 个事件），
+                // 替代旧的 2 的幂细分（在极高 BPM 下会停在只用少数按键的尺寸）。
                 if (cnt > maxK)
                 {
-                    if (canMulti == 1 && isOffHand) needBack = true;
-                    if (mult < 7) { mult++; mCnt[mult] = 0; continue; }
-                    else           cnt = maxK;
-                }
-
-                if (needBack && pieces.Count > 0)
-                {
-                    needBack = false;
-                    cHand    = mainHand;
-                    var prev = pieces[pieces.Count - 1];
-                    nowT = prev.StartTime;
-                    nowD = prev.EvStart;
-                    Array.Copy(mCntPre, mCnt, 16);
-                    mult = prev.Multiplier + 1;
-                    if (mult > 7) mult = 7;
-                    pieces.RemoveAt(pieces.Count - 1);
-                    canMulti = 0;
-                    continue;
+                    cnt = maxK;
+                    if (nowD + maxK < total) pLen = evTime[nowD + maxK] - nowT;
                 }
 
                 // ── 自适应时间片延伸（仅在下一片更稀疏时合并）────
@@ -1418,24 +1584,106 @@ namespace ADOFAIMacro.Macro
                     }
                 }
 
-                Array.Copy(mCnt, mCntPre, 16);
-                pieces.Add(new PieceInfo(cnt, csH, pLen, nowT, nowT + pLen, nowD, mult));
-
-                for (int c = mult; c > 0; c--)
-                {
-                    mCnt[c] += (long)Math.Pow(2, 16 - (mult - c));
-                    mCnt[c] %= (1L << 18);
-                }
-                while (mult > 0 && mCnt[mult] == 0) mult--;
+                pieces.Add(new PieceInfo(cnt, csH, pLen, nowT, nowT + pLen, nowD));
 
                 nowD += cnt;
                 nowT += pLen;
                 cHand = -cHand;
-                canMulti = 1;
 
                 if (nowD < total && Math.Abs(evTime[nowD] - nowT) < pLen * 0.01)
                     nowT = evTime[nowD];
             }
+        }
+
+        // 按分片结构计算松键偏移（与原生 DLL 的 CalculateReleaseTime 一致）
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double CalculateReleaseTime(double pStart, PieceInfo cur, PieceInfo next, double t, double ratio)
+        {
+            if (next.PieceLen > cur.PieceLen + 5e-6)
+            {
+                return (pStart + cur.PieceLen > cur.EndTime + 5e-6)
+                    ? (next.EndTime - t) * ratio / 2.0
+                    : (pStart + cur.PieceLen * 2.0 - t) * ratio / 2.0;
+            }
+            return (pStart + cur.PieceLen + 5e-6 < cur.EndTime)
+                ? (pStart + cur.PieceLen + next.PieceLen - t) * ratio / 2.0
+                : (next.EndTime - t) * ratio / 2.0;
+        }
+
+        /// <summary>hold 松键事件（Debug 路径统一构造）。</summary>
+        private static HitEvent MakeHoldRelease(double t, byte key)
+            => new(t, 0, releaseOnly: true, isHoldRelated: true, releaseKeyCode: key);
+
+        /// <summary>按当前片与片内序号解析该事件的手/键与时长比例。</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ResolveHandKey(EffectiveTechConfig ec, PieceInfo cur, int i, out byte kc, out double ratio)
+        {
+            byte[]   hK = (cur.Hand == 0) ? ec.LeftKeys       : ec.RightKeys;
+            int[][]  hO = (cur.Hand == 0) ? ec.LeftOrders     : ec.RightOrders;
+            double[] hT = (cur.Hand == 0) ? ec.LeftPressTimes : ec.RightPressTimes;
+
+            int oi = Math.Min(cur.EvCount - 1, hK.Length - 1);
+            int ki = (i < hO[oi].Length) ? hO[oi][i] : (i % hK.Length);
+            ki = Mathf.Clamp(ki, 0, hK.Length - 1);
+
+            kc = hK[ki];
+            ratio = (ki < hT.Length) ? hT[ki] : 0.8;
+        }
+
+        /// <summary>计算松键时长：分片结构基准 → 本片跨度上限截断 → 阈值折叠下限。</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double ComputeReleaseDuration(
+            List<double> evTime, int idx, int floorIdx, PieceInfo cur, PieceInfo next,
+            double pStart, double t, double ratio)
+        {
+            double dur = CalculateReleaseTime(pStart, cur, next, t, ratio);
+            double span = 0.0, mi = 0.0;
+            if (cur.EvCount > 1)
+            {
+                int first = cur.EvStart, last = cur.EvStart + cur.EvCount - 1;
+                span = evTime[last] - evTime[first];
+                mi = evTime[first + 1] - evTime[first];
+                for (int q = first + 1; q < last; q++)
+                {
+                    double g = evTime[q + 1] - evTime[q];
+                    if (g < mi) mi = g;
+                }
+            }
+            else
+            {
+                mi = GetLocalPressInterval(evTime, idx, cur.PieceLen);
+            }
+            double cap = ratio * (span + mi);
+            if (dur > cap) dur = cap;
+
+            // 仿人下限：不低于“阈值折叠基准 × 比例”（约 40~80ms）
+            double segLimit = GetSegmentBpmLimit(floorIdx);
+            double floorDur = ratio * (30.0 / GetAdviceBpm(segLimit));
+            if (dur < floorDur) dur = floorDur;
+
+            return dur;
+        }
+
+        // 新版（默认）按压时长基准：该音与前后相邻“不同时刻”音符的较小间隔。
+        // 用于在片尾跨暂停/长空拍时限制按住时长。同刻和弦跳过后取另一侧，
+        // 孤立音回退片长。
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double GetLocalPressInterval(List<double> evTime, int idx, double fallback)
+        {
+            int n = evTime.Count;
+            double gp = 0.0, gn = 0.0;
+            int k = idx - 1;
+            while (k >= 0 && evTime[idx] <= evTime[k] + 1e-9) k--;
+            if (k >= 0) gp = evTime[idx] - evTime[k];
+            int j = idx + 1;
+            while (j < n && evTime[j] <= evTime[idx] + 1e-9) j++;
+            if (j < n) gn = evTime[j] - evTime[idx];
+
+            double unit;
+            if (gp > 1e-9 && gn > 1e-9) unit = Math.Min(gp, gn);
+            else                        unit = Math.Max(gp, gn);
+            if (unit <= 1e-9) unit = fallback;
+            return unit;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1466,8 +1714,7 @@ namespace ADOFAIMacro.Macro
                     {
                         if (activeHold)
                         {
-                            output.Add(new HitEvent(t, 0, releaseOnly: true,
-                                isHoldRelated: true, releaseKeyCode: activeHoldKey));
+                            output.Add(MakeHoldRelease(t, activeHoldKey));
                             activeHold = false; activeHoldKey = 0;
                         }
                         continue;
@@ -1482,8 +1729,7 @@ namespace ADOFAIMacro.Macro
                     {
                         if (activeHold && lastSegIdxEvent != -2)
                         {
-                            output.Add(new HitEvent(t - 0.000001, 0, releaseOnly: true,
-                                isHoldRelated: true, releaseKeyCode: activeHoldKey));
+                            output.Add(MakeHoldRelease(t - 0.000001, activeHoldKey));
                             activeHold = false;
                             activeHoldKey = 0;
                         }
@@ -1491,23 +1737,12 @@ namespace ADOFAIMacro.Macro
                     }
 
                     var ec = GetEffectiveConfig(curFloor);
-
-                    byte[]   hK = (cur.Hand == 0) ? ec.LeftKeys        : ec.RightKeys;
-                    int[][]  hO = (cur.Hand == 0) ? ec.LeftOrders       : ec.RightOrders;
-                    double[] hT = (cur.Hand == 0) ? ec.LeftPressTimes   : ec.RightPressTimes;
-
-                    int oi = Math.Min(cur.EvCount - 1, hK.Length - 1);
-                    int ki = (i < hO[oi].Length) ? hO[oi][i] : (i % hK.Length);
-                    ki = Mathf.Clamp(ki, 0, hK.Length - 1);
-
-                    byte   kc          = hK[ki];
-                    double ratio       = (ki < hT.Length) ? hT[ki] : 0.8;
-                    bool   isHoldHead  = (press == 2);
+                    ResolveHandKey(ec, cur, i, out byte kc, out double ratio);
+                    bool isHoldHead = (press == 2);
 
                     if (isHoldHead && activeHold)
                     {
-                        output.Add(new HitEvent(t - 0.000001, 0, releaseOnly: true,
-                            isHoldRelated: true, releaseKeyCode: activeHoldKey));
+                        output.Add(MakeHoldRelease(t - 0.000001, activeHoldKey));
                         activeHold = false; activeHoldKey = 0;
                     }
 
@@ -1516,21 +1751,8 @@ namespace ADOFAIMacro.Macro
                     if (isHoldHead) { activeHold = true; activeHoldKey = kc; }
                     if (!sim || isHoldHead) continue;
 
-                    // 计算松键时间
-                    double dur;
-                    if (next.PieceLen > cur.PieceLen + 5e-6)
-                    {
-                        dur = (pStart + cur.PieceLen > cur.EndTime + 5e-6)
-                            ? (next.EndTime - t) * ratio / 2.0
-                            : (pStart + cur.PieceLen * 2.0 - t) * ratio / 2.0;
-                    }
-                    else
-                    {
-                        dur = (pStart + cur.PieceLen + 5e-6 < cur.EndTime)
-                            ? (pStart + cur.PieceLen + next.PieceLen - t) * ratio / 2.0
-                            : (next.EndTime - t) * ratio / 2.0;
-                    }
-
+                    // 计算松键时间：分片结构基准 → 本片跨度上限截断 → 阈值折叠下限
+                    double dur = ComputeReleaseDuration(evTime, idx, curFloor, cur, next, pStart, t, ratio);
                     double rel = t + dur;
 
                     if (next.Hand != cur.Hand || next.EvCount == 0)
@@ -1547,8 +1769,7 @@ namespace ADOFAIMacro.Macro
             if (activeHold && pieces.Count > 0)
             {
                 double lastTime = pieces[pieces.Count - 1].EndTime;
-                output.Add(new HitEvent(lastTime, 0, releaseOnly: true,
-                    isHoldRelated: true, releaseKeyCode: activeHoldKey));
+                output.Add(MakeHoldRelease(lastTime, activeHoldKey));
             }
 
             return output;
@@ -1652,6 +1873,7 @@ namespace ADOFAIMacro.Macro
             // 公式基线/低通状态随关卡重置
             _slewSeeded = false;
             _formulaEngaged = false;
+            _formulaErrorLogged = false;
 
             if (skyHookInitialized) AsyncInputManager.ClearQueue();
             if (controller != null) ApplyHoldBehavior(controller);
@@ -1665,6 +1887,7 @@ namespace ADOFAIMacro.Macro
             if (_workerThread != null)
             {
                 _workerThread.Join();
+                CloseWaitTimerIfWorkerStopped();
                 _workerThread = null;
             }
 
@@ -1695,6 +1918,7 @@ namespace ADOFAIMacro.Macro
             }
 
             _workerThread?.Join(500);
+            CloseWaitTimerIfWorkerStopped();
 
             if (skyHookInitialized)
             {
@@ -1737,7 +1961,7 @@ namespace ADOFAIMacro.Macro
         //  计时器（委托优化：消除分支）
         // ─────────────────────────────────────────────
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static long GetRawTicks() => _getTicksImpl();
+        private static long GetRawTicks() => Volatile.Read(ref _getTicksImpl)();
 
         // 两个时间戳之间的真实流逝秒（按当前时间源的刻度换算）
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1747,7 +1971,9 @@ namespace ADOFAIMacro.Macro
         // 切换时间源委托（根据 HighPrecision 设置）
         private static void UpdateTicksDelegate()
         {
-            _getTicksImpl = _cachedHighPrecision ? _getTicksHigh : _getTicksNormal;
+            // 主线程写、工作线程读（GetRawTicks）：走 Volatile 保证可见性
+            Volatile.Write(ref _getTicksImpl,
+                _cachedHighPrecision ? _getTicksHigh : _getTicksNormal);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1767,8 +1993,8 @@ namespace ADOFAIMacro.Macro
         [System.Diagnostics.Conditional("DEBUG")]
         public static void Log(string message)
         {
-            bool logToMod = false;
-            if (logToMod) Main.Mod?.Logger.Log(message);
+            // Debug 通道：Release 下所有调用点被 [Conditional] 整体剥除；
+            // 线上诊断请使用 Main.Mod?.Logger.Log（见开发者说明书 §10）。
         }
     }
 

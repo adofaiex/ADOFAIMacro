@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace ADOFAIMacro.Macro
 {
@@ -8,7 +10,8 @@ namespace ADOFAIMacro.Macro
     /// </summary>
     internal static class KeyMap
     {
-        public static readonly Dictionary<string, byte> KeyNameToCode = new()
+        // 私有：外部只能通过 TryGetKeyCode 查询，避免任何代码改写全局映射表
+        private static readonly Dictionary<string, byte> KeyNameToCode = new()
         {
             // 字母
             ["A"] = 0x41, ["B"] = 0x42, ["C"] = 0x43, ["D"] = 0x44, ["E"] = 0x45,
@@ -26,11 +29,18 @@ namespace ADOFAIMacro.Macro
             ["`"] = 0xC0, ["-"] = 0xBD, ["="] = 0xBB, ["["] = 0xDB, ["]"] = 0xDD,
             ["\\"] = 0xDC, [";"] = 0xBA, ["'"] = 0xDE, [","] = 0xBC, ["."] = 0xBE,
             ["/"] = 0xBF, [" "] = 0x20,
+            // 符号键英文别名（与原 Settings/异步表兼容）
+            ["BACKQUOTE"] = 0xC0, ["MINUS"] = 0xBD, ["EQUALS"] = 0xBB,
+            ["LBRACKET"] = 0xDB, ["RBRACKET"] = 0xDD, ["BACKSLASH"] = 0xDC,
+            ["SEMICOLON"] = 0xBA, ["QUOTE"] = 0xDE, ["COMMA"] = 0xBC,
+            ["PERIOD"] = 0xBE, ["SLASH"] = 0xBF,
 
             // 功能键
             ["F1"] = 0x70, ["F2"] = 0x71, ["F3"] = 0x72, ["F4"] = 0x73, ["F5"] = 0x74,
             ["F6"] = 0x75, ["F7"] = 0x76, ["F8"] = 0x77, ["F9"] = 0x78, ["F10"] = 0x79,
-            ["F11"] = 0x7A, ["F12"] = 0x7B,
+            ["F11"] = 0x7A, ["F12"] = 0x7B, ["F13"] = 0x7C, ["F14"] = 0x7D, ["F15"] = 0x7E,
+            ["F16"] = 0x7F, ["F17"] = 0x80, ["F18"] = 0x81, ["F19"] = 0x82, ["F20"] = 0x83,
+            ["F21"] = 0x84, ["F22"] = 0x85, ["F23"] = 0x86, ["F24"] = 0x87,
 
             // 控制键
             ["CTRL"] = 0x11, ["LCTRL"] = 0xA2, ["RCTRL"] = 0xA3,
@@ -41,11 +51,12 @@ namespace ADOFAIMacro.Macro
             // 导航键
             ["LEFT"] = 0x25, ["UP"] = 0x26, ["RIGHT"] = 0x27, ["DOWN"] = 0x28,
             ["HOME"] = 0x24, ["END"] = 0x23, ["PAGEUP"] = 0x21, ["PAGEDOWN"] = 0x22,
-            ["INSERT"] = 0x2D, ["DELETE"] = 0x2E,
+            ["INSERT"] = 0x2D, ["DELETE"] = 0x2E, ["INS"] = 0x2D, ["DEL"] = 0x2E,
 
             // 编辑键
             ["BACKSPACE"] = 0x08, ["TAB"] = 0x09, ["ENTER"] = 0x0D, ["RETURN"] = 0x0D,
             ["ESC"] = 0x1B, ["ESCAPE"] = 0x1B, ["SPACE"] = 0x20, ["SPACEBAR"] = 0x20,
+            ["PGUP"] = 0x21, ["PGDN"] = 0x22, ["CAPS"] = 0x14,
 
             // 小键盘
             ["NUMPAD0"] = 0x60, ["NUMPAD1"] = 0x61, ["NUMPAD2"] = 0x62, ["NUMPAD3"] = 0x63,
@@ -54,6 +65,12 @@ namespace ADOFAIMacro.Macro
             ["NUMPADADD"] = 0x6B, ["NUMPADSEPARATOR"] = 0x6C, ["NUMPADSUBTRACT"] = 0x6D,
             ["NUMPADDECIMAL"] = 0x6E, ["NUMPADDIVIDE"] = 0x6F, ["NUMPADENTER"] = 0x0D,
             ["NUMLOCK"] = 0x90,
+            // 小键盘简写别名（与原异步表兼容）
+            ["NUM0"] = 0x60, ["NUM1"] = 0x61, ["NUM2"] = 0x62, ["NUM3"] = 0x63,
+            ["NUM4"] = 0x64, ["NUM5"] = 0x65, ["NUM6"] = 0x66, ["NUM7"] = 0x67,
+            ["NUM8"] = 0x68, ["NUM9"] = 0x69,
+            ["NUM*"] = 0x6A, ["NUM+"] = 0x6B, ["NUM-"] = 0x6D,
+            ["NUM."] = 0x6E, ["NUM/"] = 0x6F, ["NUMENTER"] = 0x0D,
 
             // 其他
             ["PRINTSCREEN"] = 0x2C, ["SCROLLLOCK"] = 0x91, ["PAUSE"] = 0x13, ["BREAK"] = 0x13,
@@ -67,6 +84,170 @@ namespace ADOFAIMacro.Macro
             ["BROWSER_FORWARD"] = 0xA7, ["BROWSER_BACK"] = 0xA6,
             ["LAUNCH_MAIL"] = 0xB4, ["LAUNCH_MEDIA_SELECT"] = 0xB5, ["LAUNCH_APP1"] = 0xB6,
             ["LAUNCH_APP2"] = 0xB7,
+            // 多媒体简写别名（与原异步表兼容）
+            ["MUTE"] = 0xAD, ["VOLUMEDOWN"] = 0xAE, ["VOLDOWN"] = 0xAE,
+            ["VOLUMEUP"] = 0xAF, ["VOLUP"] = 0xAF, ["MEDIANEXT"] = 0xB0,
+            ["MEDIAPREV"] = 0xB1, ["MEDIASTOP"] = 0xB2, ["MEDIAPLAY"] = 0xB3,
         };
+
+        /// <summary>按键名（不区分大小写）→ 虚拟键码；支持 "0xNN" 十六进制；未知返回 false。</summary>
+        public static bool TryGetKeyCode(string name, out byte code)
+        {
+            if (name.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+                byte.TryParse(name.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out code))
+                return true;
+            return KeyNameToCode.TryGetValue(name, out code);
+        }
+
+        /// <summary>虚拟键码 → 可回写按键名（TryGetKeyCode 能解析）；未知返回 "0xNN"。</summary>
+        public static string GetName(byte vk)
+        {
+            if (vk >= 0x41 && vk <= 0x5A) return ((char)vk).ToString();
+            if (vk >= 0x30 && vk <= 0x39) return ((char)vk).ToString();
+            if (vk >= 0x60 && vk <= 0x69) return "NUMPAD" + (char)('0' + vk - 0x60);
+            if (vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);
+            switch (vk)
+            {
+                case 0x6A: return "NUMPADMULTIPLY";
+                case 0x6B: return "NUMPADADD";
+                case 0x6C: return "NUMPADSEPARATOR";
+                case 0x6D: return "NUMPADSUBTRACT";
+                case 0x6E: return "NUMPADDECIMAL";
+                case 0x6F: return "NUMPADDIVIDE";
+                case 0xC0: return "`";
+                case 0xBD: return "-";
+                case 0xBB: return "=";
+                case 0xDB: return "[";
+                case 0xDD: return "]";
+                case 0xDC: return "\\";
+                case 0xBA: return ";";
+                case 0xDE: return "'";
+                case 0xBC: return ",";
+                case 0xBE: return ".";
+                case 0xBF: return "/";
+                case 0x08: return "BACKSPACE";
+                case 0x09: return "TAB";
+                case 0x0D: return "ENTER";
+                case 0x1B: return "ESC";
+                case 0x20: return "SPACE";
+                case 0x14: return "CAPSLOCK";
+                case 0x90: return "NUMLOCK";
+                case 0x91: return "SCROLLLOCK";
+                case 0x13: return "PAUSE";
+                case 0x2C: return "PRINTSCREEN";
+                case 0x2D: return "INSERT";
+                case 0x2E: return "DELETE";
+                case 0x2F: return "HELP";
+                case 0x25: return "LEFT";
+                case 0x26: return "UP";
+                case 0x27: return "RIGHT";
+                case 0x28: return "DOWN";
+                case 0x24: return "HOME";
+                case 0x23: return "END";
+                case 0x21: return "PAGEUP";
+                case 0x22: return "PAGEDOWN";
+                case 0xA2: return "LCTRL";
+                case 0xA3: return "RCTRL";
+                case 0x11: return "CTRL";
+                case 0xA0: return "LSHIFT";
+                case 0xA1: return "RSHIFT";
+                case 0x10: return "SHIFT";
+                case 0xA4: return "LALT";
+                case 0xA5: return "RALT";
+                case 0x12: return "ALT";
+                case 0x5B: return "LWIN";
+                case 0x5C: return "RWIN";
+                case 0x5D: return "MENU";
+                case 0xAD: return "VOLUME_MUTE";
+                case 0xAE: return "VOLUME_DOWN";
+                case 0xAF: return "VOLUME_UP";
+                case 0xB0: return "MEDIA_NEXT_TRACK";
+                case 0xB1: return "MEDIA_PREV_TRACK";
+                case 0xB2: return "MEDIA_STOP";
+                case 0xB3: return "MEDIA_PLAY_PAUSE";
+                case 0xB4: return "LAUNCH_MAIL";
+                case 0xB5: return "LAUNCH_MEDIA_SELECT";
+                case 0xB6: return "LAUNCH_APP1";
+                case 0xB7: return "LAUNCH_APP2";
+                case 0xA6: return "BROWSER_BACK";
+                case 0xA7: return "BROWSER_FORWARD";
+                case 0xA8: return "BROWSER_REFRESH";
+                case 0xA9: return "BROWSER_STOP";
+                case 0xAA: return "BROWSER_SEARCH";
+                case 0xAB: return "BROWSER_FAVORITES";
+                case 0xAC: return "BROWSER_HOME";
+            }
+            return "0x" + vk.ToString("X2");
+        }
+
+        /// <summary>
+        /// 虚拟键码 → 覆盖层按键显示的短标签（1~4 字符）。
+        /// 覆盖主键盘、小键盘、功能键与常用控制键；未知键返回 null（调用方自行兜底）。
+        /// </summary>
+        public static string GetDisplayText(byte vk)
+        {
+            // 主键盘数字 / 字母
+            if (vk >= 0x30 && vk <= 0x39) return ((char)vk).ToString();
+            if (vk >= 0x41 && vk <= 0x5A) return ((char)vk).ToString();
+
+            // 小键盘数字（VK_NUMPAD0..9）——加 N 前缀与主键盘数字区分
+            if (vk >= 0x60 && vk <= 0x69) return "N" + (char)('0' + vk - 0x60);
+
+            // 功能键 F1..F24
+            if (vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);
+
+            switch (vk)
+            {
+                // 小键盘运算符（同样加 N 前缀）
+                case 0x6A: return "N*";
+                case 0x6B: return "N+";
+                case 0x6C: return "N,";
+                case 0x6D: return "N-";
+                case 0x6E: return "N.";
+                case 0x6F: return "N/";
+                // 编辑 / 控制
+                case 0x08: return "BS";
+                case 0x09: return "TAB";
+                case 0x0D: return "ENT";
+                case 0x13: return "PAU";
+                case 0x14: return "CAP";
+                case 0x1B: return "ESC";
+                case 0x20: return "SP";
+                case 0x21: return "PGU";
+                case 0x22: return "PGD";
+                case 0x23: return "END";
+                case 0x24: return "HOM";
+                case 0x25: return "←";
+                case 0x26: return "↑";
+                case 0x27: return "→";
+                case 0x28: return "↓";
+                case 0x2C: return "PRT";
+                case 0x2D: return "INS";
+                case 0x2E: return "DEL";
+                case 0x2F: return "HELP";
+                case 0x5B: return "WIN";
+                case 0x5C: return "WIN";
+                case 0x5D: return "MENU";
+                case 0x90: return "NUM";
+                case 0x91: return "SCR";
+                // 修饰键（通用 + 左右）
+                case 0x10: case 0xA0: case 0xA1: return "SHF";
+                case 0x11: case 0xA2: case 0xA3: return "CTL";
+                case 0x12: case 0xA4: case 0xA5: return "ALT";
+                // 标点（OEM 键）
+                case 0xBA: return ";";
+                case 0xBB: return "=";
+                case 0xBC: return ",";
+                case 0xBD: return "-";
+                case 0xBE: return ".";
+                case 0xBF: return "/";
+                case 0xC0: return "`";
+                case 0xDB: return "[";
+                case 0xDC: return "\\";
+                case 0xDD: return "]";
+                case 0xDE: return "'";
+            }
+            return null;
+        }
     }
 }

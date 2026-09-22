@@ -51,6 +51,8 @@ namespace ADOFAIMacro
         {
             // 每帧更新 AudioDSPManager
             DSPTimeSimulater.Update();
+            // 消费 UI 延迟动作（OnGUI 只置标志，避免渲染期直接改游戏状态）
+            Macro.Macro.ProcessPendingActions();
         }
         public void OnGUI()
         {
@@ -116,28 +118,37 @@ namespace ADOFAIMacro
             foreach (var kv in _downSnapshot)
             {
                 byte vk = kv.Key;
-                char c = vk is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A ? (char)vk : '?';
+                string label = KeyMap.GetDisplayText(vk) ?? $"0x{vk:X2}";
+                float w = KeyBoxWidth(label, size);
                 // 按住：实心亮框
                 GUI.color = new Color(0.2f, 0.9f, 0.4f, 0.9f);
-                GUI.DrawTexture(new Rect(x, y, size, size), whiteTex);
+                GUI.DrawTexture(new Rect(x, y, w, size), whiteTex);
                 GUI.color = Color.white;
-                GUI.Label(new Rect(x, y, size, size), c.ToString(), _keyDisplayStyle);
-                x += size + 4;
+                GUI.Label(new Rect(x, y, w, size), label, _keyDisplayStyle);
+                x += w + 4;
             }
 
             // 淡出的松开键
             foreach (var up in _upSnapshot)
             {
                 byte vk = up.vk;
-                char c = vk is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A ? (char)vk : '?';
+                string label = KeyMap.GetDisplayText(vk) ?? $"0x{vk:X2}";
+                float w = KeyBoxWidth(label, size);
                 float fade = 1f - (nowMs - up.time) / 300f;
                 GUI.color = new Color(0.2f, 0.9f, 0.4f, 0.45f * fade);
-                GUI.DrawTexture(new Rect(x, y, size, size), whiteTex);
+                GUI.DrawTexture(new Rect(x, y, w, size), whiteTex);
                 GUI.color = new Color(0f, 0f, 0f, fade);
-                GUI.Label(new Rect(x, y, size, size), c.ToString(), _keyDisplayStyle);
+                GUI.Label(new Rect(x, y, w, size), label, _keyDisplayStyle);
                 GUI.color = Color.white;
-                x += size + 4;
+                x += w + 4;
             }
+        }
+
+        // 单字符用方形框；多字符（小键盘/功能键缩写等）按文本长度加宽
+        private static float KeyBoxWidth(string label, float size)
+        {
+            float w = 6f + label.Length * 10f;
+            return w < size ? size : w;
         }
 
         public void OnDestroy()

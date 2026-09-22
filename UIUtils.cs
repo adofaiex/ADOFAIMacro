@@ -6,9 +6,6 @@
  */
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 #nullable enable
@@ -24,9 +21,7 @@ namespace ADOFAIMacro
         private static GUIStyle? _textFieldStyle;
         private static GUIStyle? _infoBoxStyle;
         private static GUIStyle? _warningBoxStyle;
-        private static GUIStyle? _colorPickerLabelStyle;
         private static GUIStyle? _selectionGridStyle;
-        private static GUIStyle? _selectionGridElementStyle;
         // 键用值元组，避免每次查找都做字符串插值（此缓存每帧命中几十次）
         private static readonly Dictionary<(int w, int h, float rad, float cr, float cg, float cb, float ca, bool tl, bool tr, bool bl, bool br), Texture2D> _textureCache = [];
 
@@ -115,12 +110,6 @@ namespace ADOFAIMacro
                 normal = { background = GetCachedRoundedTex(64, 64, 8, errorContainer), textColor = onErrorContainer }
             };
 
-            _colorPickerLabelStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 11,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = onSurface }
-            };
             _selectionGridStyle = new GUIStyle
             {
                 fontSize = 12,
@@ -133,14 +122,6 @@ namespace ADOFAIMacro
                 onNormal = { background = GetCachedRoundedTex(64, 64, 4, primary), textColor = Color.black },
                 onHover = { background = GetCachedRoundedTex(64, 64, 4, primary), textColor = Color.black },
                 onActive = { background = GetCachedRoundedTex(64, 64, 4, primary), textColor = Color.black }
-            };
-
-            _selectionGridElementStyle = new GUIStyle
-            {
-                fontSize = 12,
-                alignment = TextAnchor.MiddleCenter,
-                margin = new RectOffset(1, 1, 1, 1),
-                padding = new RectOffset(4, 4, 4, 4)
             };
 
             // 预构建 SelectionGrid 按钮样式矩阵 [选中, 首个, 末个]
@@ -212,44 +193,18 @@ namespace ADOFAIMacro
             return style;
         }
 
-        public static Color ColorPicker(Color color)
-        {
-            GUILayout.BeginVertical();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("R", _colorPickerLabelStyle, GUILayout.Width(15));
-            color.r = GUILayout.HorizontalSlider(color.r, 0f, 1f, GUILayout.ExpandWidth(true));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("G", _colorPickerLabelStyle, GUILayout.Width(15));
-            color.g = GUILayout.HorizontalSlider(color.g, 0f, 1f, GUILayout.ExpandWidth(true));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("B", _colorPickerLabelStyle, GUILayout.Width(15));
-            color.b = GUILayout.HorizontalSlider(color.b, 0f, 1f, GUILayout.ExpandWidth(true));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("A", _colorPickerLabelStyle, GUILayout.Width(15));
-            color.a = GUILayout.HorizontalSlider(color.a, 0f, 1f, GUILayout.ExpandWidth(true));
-            GUILayout.EndHorizontal();
-
-            // Preview color
-            Rect previewRect = GUILayoutUtility.GetRect(120, 12, GUILayout.ExpandWidth(true));
-            GUI.color = color;
-            GUI.DrawTexture(previewRect, GetCachedRoundedTex(64, 64, 4, Color.white));
-            GUI.color = Color.white;
-
-            GUILayout.EndVertical();
-
-            return color;
-        }
-
         public static void DrawInfoBox(string text, bool isError = false)
         {
             GUILayout.Box(text, isError ? _warningBoxStyle : _infoBoxStyle, GUILayout.ExpandWidth(true));
+        }
+
+        /// <summary>卡片内分隔线（原先在 Settings 中重复 6 次）。</summary>
+        public static void DrawSeparator(float alpha = 0.3f, float height = 1f)
+        {
+            Color oc = GUI.color;
+            GUI.color = new Color(0.5f, 0.5f, 0.5f, alpha);
+            GUILayout.Box("", GUILayout.Height(height), GUILayout.ExpandWidth(true));
+            GUI.color = oc;
         }
 
         public static bool M3Switch(bool value, string label)
@@ -276,54 +231,6 @@ namespace ADOFAIMacro
 
             GUILayout.EndHorizontal();
             return value;
-        }
-
-        public static int M3SegmentedButton(int selectedIndex, string[] options)
-        {
-            GUILayout.BeginHorizontal();
-            for (int i = 0; i < options.Length; i++)
-            {
-                bool isSelected = selectedIndex == i;
-                Color primary = new(0.66f, 0.76f, 1.0f);
-                Color onSurfaceVariant = new(0.75f, 0.75f, 0.78f);
-                Color surfaceVariant = new(0.24f, 0.24f, 0.26f);
-
-                GUIStyle segmentStyle = new(ButtonStyle)
-                {
-                    fixedHeight = 30,
-                    margin = new RectOffset(0, 0, 0, 0),
-                    fontSize = 11,
-                    alignment = TextAnchor.MiddleCenter,
-                    normal = {
-                        background = GetCachedRoundedTex(64, 64, 0, isSelected ? primary : surfaceVariant),
-                        textColor = isSelected ? Color.black : onSurfaceVariant
-                    },
-                    hover = {
-                        background = GetCachedRoundedTex(64, 64, 0, isSelected ? primary : new Color(0.3f, 0.3f, 0.33f)),
-                        textColor = isSelected ? Color.black : Color.white
-                    }
-                };
-
-                // Round corners for ends
-                float r = 15;
-                if (i == 0)
-                {
-                    segmentStyle.normal.background = GetCachedRoundedTex(64, 64, r, isSelected ? primary : surfaceVariant, true, false, true, false);
-                    segmentStyle.hover.background = GetCachedRoundedTex(64, 64, r, isSelected ? primary : new Color(0.3f, 0.3f, 0.33f), true, false, true, false);
-                }
-                else if (i == options.Length - 1)
-                {
-                    segmentStyle.normal.background = GetCachedRoundedTex(64, 64, r, isSelected ? primary : surfaceVariant, false, true, false, true);
-                    segmentStyle.hover.background = GetCachedRoundedTex(64, 64, r, isSelected ? primary : new Color(0.3f, 0.3f, 0.33f), false, true, false, true);
-                }
-
-                if (GUILayout.Button(options[i], segmentStyle, GUILayout.ExpandWidth(true)))
-                {
-                    selectedIndex = i;
-                }
-            }
-            GUILayout.EndHorizontal();
-            return selectedIndex;
         }
 
         public static Texture2D GetCachedRoundedTex(int width, int height, float radius, Color col, bool tl = true, bool tr = true, bool bl = true, bool br = true)
@@ -383,15 +290,6 @@ namespace ADOFAIMacro
             return tex;
         }
 
-        public static Texture2D MakeSolidTex(int width, int height, Color col)
-        {
-            Texture2D tex = new(width, height);
-            Color[] pix = new Color[width * height];
-            for (int i = 0; i < pix.Length; i++) pix[i] = col;
-            tex.SetPixels(pix);
-            tex.Apply();
-            return tex;
-        }
         public static float M3HorizontalSlider(float value, float leftValue, float rightValue, params GUILayoutOption[] options)
         {
             // 保存原始颜色
@@ -521,67 +419,6 @@ namespace ADOFAIMacro
             return value;
         }
 
-        // 添加一个带数值显示的滑动条
-        public static float M3HorizontalSliderWithValue(float value, float leftValue, float rightValue, string format = "F2", params GUILayoutOption[] options)
-        {
-            GUILayout.BeginHorizontal();
-
-            // 滑动条占据大部分空间
-            float newValue = M3HorizontalSlider(value, leftValue, rightValue, GUILayout.ExpandWidth(true));
-
-            // 显示数值
-            GUILayout.Space(8);
-            string valueText = value.ToString(format);
-            GUILayout.Label(valueText, _labelStyle, GUILayout.Width(50));
-
-            GUILayout.EndHorizontal();
-
-            return newValue;
-        }
-
-        // 添加一个带标签和数值的滑动条
-        public static float M3HorizontalSliderWithLabel(string label, float value, float leftValue, float rightValue, string format = "F2")
-        {
-            GUILayout.BeginHorizontal();
-
-            // 标签
-            GUILayout.Label(label, _labelStyle, GUILayout.Width(100));
-
-            // 滑动条
-            float newValue = M3HorizontalSlider(value, leftValue, rightValue, GUILayout.ExpandWidth(true));
-
-            // 数值
-            string valueText = value.ToString(format);
-            GUILayout.Label(valueText, _labelStyle, GUILayout.Width(50));
-
-            GUILayout.EndHorizontal();
-
-            return newValue;
-        }
-
-        // 添加一个整数滑动条
-        public static int M3HorizontalSliderInt(int value, int leftValue, int rightValue)
-        {
-            float floatValue = value;
-            float newFloatValue = M3HorizontalSlider(floatValue, leftValue, rightValue);
-            return Mathf.RoundToInt(newFloatValue);
-        }
-
-        // 添加一个带步进的滑动条
-        public static float M3HorizontalSliderStep(float value, float leftValue, float rightValue, float step)
-        {
-            float newValue = M3HorizontalSlider(value, leftValue, rightValue);
-
-            // 对齐到最近的步进值
-            if (step > 0)
-            {
-                newValue = Mathf.Round(newValue / step) * step;
-                newValue = Mathf.Clamp(newValue, leftValue, rightValue);
-            }
-
-            return newValue;
-        }
-
         // 带输入框滑动条方法
         public static float M3HorizontalSliderWithLabelAndInput(string label, float value, float leftValue, float rightValue,
             ref string inputText, ref bool isFocused, string format = "F2", float labelWidth = 60, float sliderWidth = 120, float fieldWidth = 60)
@@ -662,13 +499,6 @@ namespace ADOFAIMacro
             GUILayout.EndHorizontal();
 
             return newSelected;
-        }
-        /// <summary>
-        /// 简单的 SelectionGrid 包装器
-        /// </summary>
-        public static int M3SelectionGridSimple(int selected, string[] texts, int xCount, params GUILayoutOption[] options)
-        {
-            return GUILayout.SelectionGrid(selected, texts, xCount, _selectionGridStyle, options);
         }
         private static int _textFieldCounter = 0;
 
