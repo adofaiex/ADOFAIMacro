@@ -134,18 +134,19 @@ namespace ADOFAIMacro
             {
                 if (_useChinese == value) return;
                 _useChinese = value;
-                UnityEngine.Debug.Log($"[Settings] UseChinese changed to: {value}, loading language...");
-                if (value)
-                {
-                    bool success = ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("zh-CN");
-                    UnityEngine.Debug.Log($"[Settings] LoadLanguage('zh-CN') returned: {success}");
-                }
-                else
-                {
-                    bool success = ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("en-US");
-                    UnityEngine.Debug.Log($"[Settings] LoadLanguage('en-US') returned: {success}");
-                }
-                UnityEngine.Debug.Log($"[Settings] Current language after switch: {ADOFAIMacro.Localization.LocalizationManager.CurrentLanguage}, IsChinese: {ADOFAIMacro.Localization.LocalizationManager.IsChinese}");
+
+                // XmlSerializer 反序列化时会经过这里，而那时 LocalizationManager 尚未
+                // Initialize（_modPath 仍为空）→ LoadLanguage 会白读一次文件并打出
+                // "语言文件不存在" 告警。真正的语言加载统一由 Main.Load 在
+                // Initialize 之后完成，这里只在已初始化时响应运行时切换。
+                if (!ADOFAIMacro.Localization.LocalizationManager.IsInitialized) return;
+
+                Main.Mod?.Logger.Log($"[Settings] 切换语言 → UseChinese={value}");
+                bool success = value
+                    ? ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("zh-CN")
+                    : ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("en-US");
+                Main.Mod?.Logger.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
+                         $"{ADOFAIMacro.Localization.LocalizationManager.CurrentLanguage}");
             }
         }
 

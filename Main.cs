@@ -80,12 +80,22 @@ namespace ADOFAIMacro
 
         public static bool Unload(UnityModManager.ModEntry modEntry)
         {
-            var harmony = new Harmony(modEntry.Info.Id);
-            harmony.UnpatchAll(modEntry.Info.Id);
+            Harmony?.UnpatchAll(modEntry.Info.Id);
+            Harmony = null;
 
-            // If you have created any dependent objects, they also need to be deleted.
+            // 释放依赖对象：_uiObject 挂着 ShowText 且是 DontDestroyOnLoad，
+            // 不随场景卸载，必须显式销毁（原注释就写了要做这件事，但一直没做）。
+            DestroyOverlay();
 
             return true;
+        }
+
+        /// <summary>销毁游戏内覆盖层（幂等）。</summary>
+        private static void DestroyOverlay()
+        {
+            if (_uiObject == null) return;
+            UnityEngine.Object.Destroy(_uiObject);
+            _uiObject = null;
         }
 
         public static bool IsDebugAssembly()
@@ -159,6 +169,11 @@ namespace ADOFAIMacro
                 ADOFAIMacro.Macro.Macro.RestoreHoldBehavior();
                 InputSystem.EmergencyStop();
                 TechniqueSimulator.Unload();
+                // 覆盖层必须销毁：ShowText 的 _showMacroText 跟的是"启用宏"开关而不是
+                // 模组启用状态，禁用模组后它会继续在屏幕上画"宏已开启！"，并且
+                // 每帧继续推 DSPTimeSimulater.Update()。销毁后再次启用会走
+                // _uiObject == null 分支重建。
+                DestroyOverlay();
             }
             return true;
         }

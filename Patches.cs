@@ -138,9 +138,13 @@ namespace ADOFAIMacro
 
                 if (Main.Settings.SimulateKeyPress && Main.Settings.SkyHookMode && InputSystem.IsInitialized)
                 {
-                    InputSystem.SendKeyDirect((byte)Main.Settings.DeathKeyCode, true);
+                    byte key = (byte)Main.Settings.DeathKeyCode;
+                    // 走 AsyncInputManager.DirectPushKey：它内含"旧版原生 DLL 没有
+                    // SendKeyDirect 导出时回退 PushKeyEvent"的逻辑。直接调
+                    // InputSystem.SendKeyDirect 在旧 DLL 上会返回 -1 而静默不发键。
+                    ADOFAIMacro.Macro.AsyncInputManager.DirectPushKey(key, true);
                     yield return new WaitForSeconds(0.05f);
-                    InputSystem.KeyUpDirect((byte)Main.Settings.DeathKeyCode);
+                    ADOFAIMacro.Macro.AsyncInputManager.DirectPushKey(key, false);
                 }
             }
         }
