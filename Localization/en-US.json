@@ -21,7 +21,7 @@
     "offset.offset_ms": "Offset (ms)",
     "offset.allow_arrow_adjust": "Allow adjustment of delay using left and right keys (in-game)",
     "offset.enable_high_precision": "Enable High Precision Time (improves sync accuracy)",
-    "offset.enable_high_precision_async": "[Experimental] Enable High Precision Async",
+    "offset.enable_high_precision_async": "[Experimental] Enable High Precision Async (takes effect after re-enabling the mod)",
     "offset.auto_calibrate": "Auto judge-error calibration (cancels speed-section offset)",
     "other.suppress_gc": "Suppress GC pauses during play (removes error spikes)",
     "key_settings.keys_comma_separated": "Keys (comma separated)",

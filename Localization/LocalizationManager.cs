@@ -55,7 +55,7 @@ namespace ADOFAIMacro.Localization
             ["offset.offset_ms"] = "延迟 (ms)",
             ["offset.allow_arrow_adjust"] = "允许左右键调整延迟(游戏中)",
             ["offset.enable_high_precision"] = "启用高精度时间（提高同步精度）",
-            ["offset.enable_high_precision_async"] = "[实验性]启用高精度异步",
+            ["offset.enable_high_precision_async"] = "[实验性]启用高精度异步（需重新启用模组生效）",
             ["offset.auto_calibrate"] = "判定误差自动校准(闭环消除变速段偏移)",
             ["other.suppress_gc"] = "游玩期抑制GC停顿(消除高密度图误差尖峰)",
             ["key_settings.keys_comma_separated"] = "按键序列 (逗号分隔)",

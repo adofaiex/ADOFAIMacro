@@ -489,6 +489,15 @@ namespace ADOFAIMacro.Macro
             count = orders.Length;
             ordersPtr = Marshal.AllocCoTaskMem(count * IntPtr.Size);
             lengthsPtr = Marshal.AllocCoTaskMem(count * sizeof(int));
+
+            // 必须先清零：count 在填充前就已设为 orders.Length，若下面逐个分配或
+            // Marshal.Copy 抛异常（OOM），FreeOrderPtrs 会遍历完整的 count 并对
+            // 未写入的槽位 FreeCoTaskMem(未初始化指针) —— 释放野指针会堆损坏/崩溃。
+            int ptrBytes = count * IntPtr.Size;
+            int lenBytes = count * sizeof(int);
+            Marshal.Copy(new byte[ptrBytes], 0, ordersPtr, ptrBytes);
+            Marshal.Copy(new byte[lenBytes], 0, lengthsPtr, lenBytes);
+
             int[] lens = new int[count];
 
             for (int i = 0; i < count; i++)

@@ -238,7 +238,19 @@ namespace ADOFAIMacro
         public bool HighPrecisionAsync
         {
             get => _highPrecisionAsync;
-            set { if (_highPrecisionAsync == value) return; _highPrecisionAsync = value; }
+            set
+            {
+                if (_highPrecisionAsync == value) return;
+                _highPrecisionAsync = value;
+
+                // ⚠️ 本开关通过 transpiler 改写 scrConductor.Update，而 transpiler 只在
+                // Harmony 的 PatchAll（模组启用）时执行一次 —— 因此改动必须重新启用
+                // 模组或重启游戏才生效。其余同类开关（高精度时间/高级输入/虚拟键盘）
+                // 都是实时的，这里明确告知，避免用户把"切换了没反应"当成功能损坏。
+                if (Main.IsEnabled)
+                    Main.Mod?.Logger.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
+                        "该特性在模组启用时改写游戏方法，需重新启用模组（或重启游戏）后生效");
+            }
         }
 
         // ── 版本信息 ──────────────────────────────────
