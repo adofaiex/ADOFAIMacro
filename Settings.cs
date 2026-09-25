@@ -343,15 +343,18 @@ namespace ADOFAIMacro
         }
 
         // ── 手法分片算法（新版原生接口）的两个开关 ──
-        // 按压时长风格：false=跟随音符片长（新，随速度平滑），true=旧版 1.3.0.30 的八度折叠片长
-        private bool _techniqueLegacyPressDuration = false;
+        // 按压时长风格：false=跟随音符片长（新，随速度平滑），true=旧版 1.3.0.30 的八度折叠片长。
+        // 默认 true：新版模式按住时长按“音符间隔 × 占比”算，实测是旧版的 2~4 倍
+        // （150BPM 四分音 80ms→320ms，占间隔 80%），上机手感明显不对；旧版折叠片长
+        // 才能保持原来的点按手感，需要更长按住的用户可自行打开“跟随音符片长”。
+        private bool _techniqueLegacyPressDuration = true;
         public bool TechniqueLegacyPressDuration
         {
             get => _techniqueLegacyPressDuration;
             set { if (_techniqueLegacyPressDuration == value) return; _techniqueLegacyPressDuration = value; }
         }
 
-        // 多押按键均分：false=主手取满后余数给另一手，true=对半均分到两只手（奇数多的一键给主手）
+        // 多押按键均分：false=主手取满后余数给另一手（旧行为），true=对半均分到两只手（奇数多的一键给主手）
         private bool _techniqueMultiChordBalance = false;
         public bool TechniqueMultiChordBalance
         {

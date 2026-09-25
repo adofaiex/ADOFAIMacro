@@ -390,8 +390,16 @@ static double ChoosePieceCut(const vector<double>& evTime, int eventCount, int n
             gap = evTime[nowD + k] - evTime[nowD + k - 1];
             b   = evTime[nowD + k];      // 切在下一事件之前
         } else {
-            gap = (eventCount >= 2)
-                ? (evTime[eventCount - 1] - evTime[eventCount - 2]) : pLen;
+            // 末尾：取“最后一个非零间隔”作片长基准。
+            // 旧实现直接用 evTime[n-1]-evTime[n-2]：若谱面以同刻和弦收尾，该间隔为 0，
+            // 本片时长算成 0 → 哨兵片 endTime 也等于末音时刻 → 末簇被切成两片
+            // （两片都从键序 0 起 → 同一键重复按下）且松键被压成 0ms（等于丢音）。
+            double gap = 0.0;
+            for (int q = eventCount - 1; q > 0; q--) {
+                double g = evTime[q] - evTime[q - 1];
+                if (g > 1e-9) { gap = g; break; }
+            }
+            if (gap <= 1e-9) gap = pLen;
             b   = evTime[eventCount - 1] + gap;
         }
         double dev = (b - nowT) - pLen;
@@ -512,7 +520,11 @@ static int BuildPieces(const vector<double>& evTime, const vector<int>& evFloor,
         // 关闭则沿用“主手取满 maxK，余数交给另一手”的旧行为。
         {
             int chordN = ChordClusterSize(evTime, nowD);
-            if (g_config.multiChordBalance && chordN > maxK) {
+            // 同刻簇超过单手按键数时必须走分簇路径（与开关无关）：
+            // 否则 cnt 会被下面的 maxK 钳制从簇中间截断，第 maxK+1 个事件落到下一片、
+            // 键序重新从 0 开始 → 同一键重复按下（并把前一次松键挤到 0ms）、且该簇
+            // 真正需要的另一个键从未被按下 = 丢音。开关只决定分配的均分方式。
+            if (chordN > maxK) {
                 int capMax = (ec.leftKeyCount > ec.rightKeyCount) ? ec.leftKeyCount : ec.rightKeyCount;
                 if (capMax < 1) capMax = 1;
                 int p = (chordN + capMax - 1) / capMax;   // 需要的片数
@@ -614,7 +626,21 @@ static void EmitPieceEvents(const vector<PieceInfo>& pieces,
             int capMax = (lk > rk) ? lk : rk; if (capMax < 1) capMax = 1;
             int p = (cur.evCount + capMax - 1) / capMax; if (p < 2) p = 2;
             int mainH = (g_config.handPreference == 0) ? 0 : 1;
-            ComputeChordSplitSizes(cur.evCount, p, cur.hand, mainH, splitSizes);
+            if (g_config.multiChordBalance) {
+                // 开：尽量对半均分到两只手
+                ComputeChordSplitSizes(cur.evCount, p, cur.hand, mainH, splitSizes);
+            } else {
+                // 关：主手先取满全部按键，剩余交给另一手（旧行为）。
+                // 注意不能像旧实现那样“整段跳过分配”——那样第 maxK+1 个事件会落在下一片
+                // 且键序从 0 重新开始，造成同一键重复按下、真正需要的键从未按下（丢音）。
+                int remaining = cur.evCount;
+                splitSizes.assign((size_t)p, 0);
+                for (int g = 0; g < p && remaining > 0; g++) {
+                    int take = (remaining < capMax) ? remaining : capMax;
+                    splitSizes[(size_t)g] = take;
+                    remaining -= take;
+                }
+            }
         }
 
         for (int i = 0; i < cur.evCount; i++) {
@@ -753,7 +779,14 @@ static void EmitPieceEvents(const vector<PieceInfo>& pieces,
             else {
                 if (rel >= cur.endTime) rel = cur.endTime - 1e-6;
             }
-            if (rel <= t) rel = t + (next.endTime - t) * 0.4;
+            // 兜底：末片/同刻簇被钳到临界时，next.endTime 可能 ≤ t，此处若直接按
+            // (next.endTime - t)*0.4 计算会得到 0 → 按下与松开同刻，等于没按。
+            // 保证至少一次可见按压（同键重叠由 FixSameKeyOverlaps 在最后兜回）。
+            if (rel <= t) {
+                double span = (next.endTime > t) ? (next.endTime - t) * 0.4 : 0.0;
+                if (span < kMinPressDuration) span = kMinPressDuration;
+                rel = t + span;
+            }
 
             output.push_back(MakeRelease(rel, kc, FALSE));
         }
