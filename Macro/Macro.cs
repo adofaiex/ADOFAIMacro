@@ -116,6 +116,10 @@ namespace ADOFAIMacro.Macro
         private static volatile int _workerLastTriggeredFloor = -1;
         private static volatile int _workerNeedsHit = 0;
         private static volatile int _resetVersion = 0;
+        // 入场索引"已就绪"标志：ResetState 置 false，Initialize 写完 SyncFloor 后置 true。
+        // 用途见 WorkerLoop 的重同步分支：ResetState 与 Initialize 之间存在毫秒级窗口
+        // （BuildHitEvents 可能耗时毫秒级），期间 _workerLastTriggeredFloor 处于中间态。
+        private static volatile bool _syncFloorReady;
 #if DEBUG
         private static volatile bool _debugWorkerInitLogged = false;
 #endif
@@ -598,6 +602,9 @@ namespace ADOFAIMacro.Macro
 
                 int localLastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
                 int localResetVer = Volatile.Read(ref _resetVersion);
+                // 若启动时主线程刚做完 ResetState（索引仍是 -1 中间态）、或该次 Initialize
+                // 失败，则挂起等待就绪信号，避免用中间态索引从错误位置开始。
+                bool needsResync = !Volatile.Read(ref _syncFloorReady);
 
                 while (_workerRunning)
                 {
@@ -611,9 +618,19 @@ namespace ADOFAIMacro.Macro
                     int curResetVer = Volatile.Read(ref _resetVersion);
                     if (curResetVer != localResetVer)
                     {
+                        // ⚠️ 不能在这里直接读共享索引：ResetState 与 Initialize 之间
+                        // 存在窗口（BuildHitEvents 是毫秒级），此刻读到的是中间态 -1。
+                        // 若在此锁存 -1，等新锚点发布时 version 已被消费、不会再次重同步，
+                        // 结果是从事件表第 0 个事件重放整首（大规模误触发）。
+                        // 改为挂起，等主线程发布"入场索引已就绪"后再取。
                         localResetVer = curResetVer;
+                        needsResync = true;
+                    }
+                    if (needsResync)
+                    {
+                        if (!Volatile.Read(ref _syncFloorReady)) { Thread.Sleep(1); continue; }
                         localLastFloor = Volatile.Read(ref _workerLastTriggeredFloor);
-                        continue;
+                        needsResync = false;
                     }
 
                     var events = anchor.hitEvents;
@@ -890,6 +907,8 @@ namespace ADOFAIMacro.Macro
             double startPos = conductor!.songposition_minusi;
             int syncFloor = SyncFloor(startPos);
             Volatile.Write(ref _workerLastTriggeredFloor, syncFloor);
+            // 事件表与入场索引都已就绪，允许工作线程取用（与上面两句构成握手）
+            Volatile.Write(ref _syncFloorReady, true);
 
             Log("[Macro-Main] 初始化完成");
         }
@@ -1697,6 +1716,9 @@ namespace ADOFAIMacro.Macro
 
             Volatile.Write(ref _workerLastTriggeredFloor, -1);
             Interlocked.Exchange(ref _workerNeedsHit, 0);
+            // 该 -1 是"重建中"的中间态，必须先宣告未就绪，工作线程才不会把它当作
+            // 入场索引锁存（否则会从事件表第 0 个事件重放整首）。
+            Volatile.Write(ref _syncFloorReady, false);
             Volatile.Write(ref _anchorA.validFlag, 0);
             Volatile.Write(ref _anchorB.validFlag, 0);
             Interlocked.Increment(ref _resetVersion);
