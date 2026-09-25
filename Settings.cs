@@ -435,19 +435,30 @@ namespace ADOFAIMacro
                 // 处于编辑中的输入框（focused=true + 未提交的 input）会在同一帧稍后的
                 // DrawTechniqueSegments 中把旧文本提交进新配置的同一索引分段，
                 // 静默覆盖对方的设置。
-                ResetSegmentEditStates();
+                ResetTechniqueEditStates();
             }
         }
 
         /// <summary>
-        /// 清空分段的编辑态缓存（输入缓冲 / 焦点标志 / 展开状态）。
-        /// 凡是"分段列表内容被整体替换"的操作都必须调用，否则索引位置上的
-        /// 旧编辑态会串到新数据上。
+        /// 清空"与当前手法配置绑定"的编辑态缓存：分段的输入缓冲/焦点/展开状态，
+        /// 以及 6 个左右手字段与变速容差的输入缓冲。
+        /// 凡是切换 / 新建 / 删除配置或从关卡目录载入配置都必须调用：编辑态是按
+        /// 【字段或索引】复用的，若不清空，上一个配置里处于编辑中的输入框
+        /// （focused=true 且 input 未提交）会在同一帧稍后的绘制中把旧文本提交进
+        /// 新配置，静默覆盖对方的设置 —— 分段与全局字段都适用。
         /// </summary>
-        private void ResetSegmentEditStates()
+        private void ResetTechniqueEditStates()
         {
             _segmentEditStates.Clear();
             _segmentExpanded.Clear();
+
+            _techLeftKeysState = (string.Empty, false);
+            _techRightKeysState = (string.Empty, false);
+            _techLeftOrdersState = (string.Empty, false);
+            _techRightOrdersState = (string.Empty, false);
+            _techLeftPressTimesState = (string.Empty, false);
+            _techRightPressTimesState = (string.Empty, false);
+            _speedChangeToleranceState = (string.Empty, false);
         }
 
         /// <summary>
@@ -1173,7 +1184,7 @@ namespace ADOFAIMacro
                 LevelTechniqueManager.ReloadCurrentLevelConfig();
                 // 关卡配置会把当前配置的分段整体替换（索引不变，setter 不会触发），
                 // 必须显式清空编辑态，避免旧输入被提交进新载入的分段。
-                ResetSegmentEditStates();
+                ResetTechniqueEditStates();
             }
             if (GUILayout.Button(LocalizationManager.Get("tech.level_config_save"), UIUtils.ButtonStyle, GUILayout.Width(80)))
             {
@@ -1275,7 +1286,7 @@ namespace ADOFAIMacro
                     // 删除索引 0 时 Clamp 结果与旧索引相同，setter 会提前返回而不清编辑态，
                     // 所以这里必须显式重置。
                     SelectedTechniqueProfileIndex = newSel;
-                    ResetSegmentEditStates();
+                    ResetTechniqueEditStates();
                 }
             }
             GUILayout.EndHorizontal();

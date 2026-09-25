@@ -102,6 +102,11 @@ namespace ADOFAIMacro.Macro
         private static readonly TimeAnchor _anchorB = new();
         private static volatile TimeAnchor _currentAnchor = _anchorA;
 
+        // 锚点被视为"过期"的阈值（秒）。主线程每帧刷新锚点，正常 elapsed 远小于一帧；
+        // 该阈值仅用于防止外推失控（见 WorkerLoop 中的过期保护），取值远大于正常帧间隔
+        // 与常见卡顿，不会影响正常判定。
+        private const double AnchorStaleSec = 0.5;
+
         private static int _staticAnchorVersion = 0;
 
         // 方案9：minusi 兜底低通状态（主线程；公式基线接管时清除）
@@ -667,6 +672,14 @@ namespace ADOFAIMacro.Macro
                         bool hp = _cachedHighPrecision;
                         long qpcNow = GetRawTicks();
                         double elapsed = (double)(qpcNow - qpcSnapshot) * (hp ? 1e-7 : perfFreqInv);
+
+                        // 锚点过期保护：Update 每帧刷新锚点（正常 elapsed 远小于一帧）。若主线程
+                        // 长时间不再更新锚点（例如游戏暂停 / 切出 PlayerControl 状态，导致
+                        // Patches 里的 Macro.Update 根本不被调用、StopWorkerIfNeeded 也不会执行），
+                        // 继续外推会把 audioNow 推到很远 → 一次性触发掉大量剩余事件，且解除暂停后
+                        // 宏会认为这些地板"已处理"（后续全部漏判）。超过阈值即停止外推、等新锚点。
+                        if (elapsed > AnchorStaleSec) { Thread.Sleep(1); break; }
+
                         // 方案4：audioNow = 锚点位置 + QPC 真实流逝 × pitch（DSP 估计已退出外推链路）
                         double audioNow = songPosRef + elapsed * rate;
                         double triggerAt = events[i].TriggerTime + timeOffset;
