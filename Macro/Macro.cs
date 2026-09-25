@@ -70,6 +70,9 @@ namespace ADOFAIMacro.Macro
         private static readonly List<double> _evTimeRecycle = [with(4096)];
         private static readonly List<int> _evPressRecycle = [with(4096)];
         private static readonly List<int> _evFloorRecycle = [with(4096)];
+        // 逐地板速度倍率（scrFloor.speed）：变速谱面必须按每个音符所在楼层的
+        // 实际速度折算局部速率，否则快段仍按进关时的全局速度切片，换手全错。
+        private static readonly List<double> _evSpeedRecycle = [with(4096)];
         private static readonly List<PieceInfo> _piecesRecycle = [with(1024)];
 
         // ─────────────────────────────────────────────
@@ -1270,9 +1273,62 @@ namespace ADOFAIMacro.Macro
                 _techPressDur[0], _techPressDur[1]);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void BuildTechniqueHitEvents()
+        /// <summary>
+        /// 手法表摘要（每次建表一条，用于从日志判断换手结构是否合理）：
+        /// 换手次数/单音碎块/最长连击/左右键用量 + 本图速度倍率范围。
+        /// 变速谱面上若"最长连击"异常大（整段一只手）或"单音碎块"异常多
+        /// （每个音都换手），能直接从这行看出来。
+        /// </summary>
+        private static void LogTechniqueTableSummary(HitEvent[] events, List<double> speeds)
         {
+            try
+            {
+                double smin = 0, smax = 0;
+                for (int i = 0; i < speeds.Count; i++)
+                {
+                    double v = speeds[i];
+                    if (v <= 0) continue;
+                    if (smin == 0 || v < smin) smin = v;
+                    if (v > smax) smax = v;
+                }
+
+                int presses = 0, turns = 0, frag = 0, longest = 0, cur = 0;
+                int leftUsed = 0, rightUsed = 0;
+                bool lastLeft = false, has = false;
+                foreach (var e in events)
+                {
+                    if (e.ReleaseOnly || e.KeyCode == 0) continue;
+                    presses++;
+                    bool left = false;
+                    for (int i = 0; i < _techLeftKeys.Length; i++)
+                        if (_techLeftKeys[i] == e.KeyCode) { left = true; break; }
+                    if (left) leftUsed++; else rightUsed++;
+
+                    if (!has) { cur = 1; has = true; }
+                    else if (left == lastLeft) cur++;
+                    else
+                    {
+                        if (cur == 1) frag++;
+                        if (cur > longest) longest = cur;
+                        turns++;
+                        cur = 1;
+                    }
+                    lastLeft = left;
+                }
+                if (cur > 0)
+                {
+                    if (cur == 1) frag++;
+                    if (cur > longest) longest = cur;
+                }
+
+                Log($"[Macro-Tech] 手法表: 按下={presses} 换手={turns} 单音碎块={frag} 最长连击={longest} " +
+                    $"左键={leftUsed} 右键={rightUsed} | 速度倍率 {smin:F2}~{smax:F2} | 拍号BPM={conductor?.bpm:F1}");
+            }
+            catch (Exception ex) { Log($"[Macro-Tech] 摘要失败: {ex.Message}"); }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void BuildTechniqueHitEvents()        {
             ParseTechniqueConfig();
 
             var floors = cachedFloors!;
@@ -1281,10 +1337,12 @@ namespace ADOFAIMacro.Macro
             _evTimeRecycle.Clear();
             _evPressRecycle.Clear();
             _evFloorRecycle.Clear();
+            _evSpeedRecycle.Clear();
 
             var evTime = _evTimeRecycle;
             var evPress = _evPressRecycle;
             var evFloor = _evFloorRecycle;
+            var evSpeed = _evSpeedRecycle;
 
             for (int i = 0; i < floors.Length - 1; i++)
             {
@@ -1297,7 +1355,7 @@ namespace ADOFAIMacro.Macro
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
-                    evTime.Add(t); evPress.Add(-1); evFloor.Add(i);
+                    evTime.Add(t); evPress.Add(-1); evFloor.Add(i); evSpeed.Add(fl.speed);
                     continue;
                 }
 
@@ -1305,6 +1363,7 @@ namespace ADOFAIMacro.Macro
                 evTime.Add(t);
                 evPress.Add(isHoldHead ? 2 : 1);
                 evFloor.Add(i);
+                evSpeed.Add(fl.speed);
             }
 
             int total = evTime.Count;
@@ -1346,7 +1405,7 @@ namespace ADOFAIMacro.Macro
                         segments);
 
                     if (TechniqueSimulator.BuildHitEvents(
-                            [.. evTime], [.. evPress], [.. evFloor],
+                            [.. evTime], [.. evPress], [.. evFloor], [.. evSpeed],
                             total,
                             conductor!.bpm, ADOBase.controller.playerOne.planetarySystem.speed,
                             out var nativeEvents))
@@ -1354,6 +1413,7 @@ namespace ADOFAIMacro.Macro
                         _hitEvents = nativeEvents;
                         _hitEventCount = nativeEvents!.Length;
                         Log($"[Macro-Main] C++ 手法模拟（原生分段）完成：{_hitEventCount} 事件");
+                        LogTechniqueTableSummary(nativeEvents!, evSpeed);
                         return;
                     }
                 }

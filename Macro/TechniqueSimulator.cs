@@ -17,6 +17,7 @@ namespace ADOFAIMacro.Macro
         private static IntPtr _techDllHandle = IntPtr.Zero;
         private static DelegateSetTechConfig? _setTechConfig;
         private static DelegateBuildTechEvents? _buildTechEvents;
+        private static DelegateBuildTechEventsEx? _buildTechEventsEx;
         private static DelegateFreeTechEvents? _freeTechEvents;
         private static bool _dllLoadAttempted = false;
 
@@ -131,6 +132,17 @@ namespace ADOFAIMacro.Macro
             double bpm, double speed,
             out int outEventCount);
 
+        /// <summary>逐地板速度倍率版：speedMuls[i] = 第 i 个事件所属地板的 scrFloor.speed</summary>
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr DelegateBuildTechEventsEx(
+            [In] double[] entryTimes,
+            [In] int[] pressTypes,
+            [In] int[] floorIndices,
+            [In] double[] speedMuls,
+            int eventCount,
+            double bpm, double speed,
+            out int outEventCount);
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void DelegateFreeTechEvents(IntPtr events);
 
@@ -202,6 +214,8 @@ namespace ADOFAIMacro.Macro
 
                 IntPtr setPtr = GetProcAddress(_techDllHandle, "SetTechniqueConfig");
                 IntPtr buildPtr = GetProcAddress(_techDllHandle, "BuildTechniqueHitEvents");
+                // 逐地板速度接口：变速谱面必需；老 DLL 没有这个导出时退回全局速度
+                IntPtr buildExPtr = GetProcAddress(_techDllHandle, "BuildTechniqueHitEventsEx");
                 IntPtr freePtr = GetProcAddress(_techDllHandle, "FreeHitEvents");
 
                 if (setPtr == IntPtr.Zero || buildPtr == IntPtr.Zero || freePtr == IntPtr.Zero)
@@ -214,9 +228,14 @@ namespace ADOFAIMacro.Macro
 
                 _setTechConfig = Marshal.GetDelegateForFunctionPointer<DelegateSetTechConfig>(setPtr);
                 _buildTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEvents>(buildPtr);
+                _buildTechEventsEx = buildExPtr != IntPtr.Zero
+                    ? Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEventsEx>(buildExPtr)
+                    : null;
                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
 
-                Macro.Log("[Macro] 手法模拟DLL加载成功");
+                Macro.Log(buildExPtr != IntPtr.Zero
+                    ? "[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度）"
+                    : "[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度）");
                 return true;
             }
             catch (Exception ex)
@@ -226,12 +245,24 @@ namespace ADOFAIMacro.Macro
             }
         }
 
-        /// <summary>构建手法模拟事件，结果以 Macro.HitEvent[] 返回</summary>
+        /// <summary>构建手法模拟事件（旧接口：全图单一速度）</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool BuildHitEvents(
             double[] entryTimes,
             int[] pressTypes,
             int[] floorIndices,
+            int eventCount,
+            double bpm, double speed,
+            out Macro.HitEvent[]? hitEvents)
+            => BuildHitEvents(entryTimes, pressTypes, floorIndices, null, eventCount, bpm, speed, out hitEvents);
+
+        /// <summary>构建手法模拟事件（逐地板速度倍率；变速谱面按局部速率切片）</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool BuildHitEvents(
+            double[] entryTimes,
+            int[] pressTypes,
+            int[] floorIndices,
+            double[]? speedMuls,
             int eventCount,
             double bpm, double speed,
             out Macro.HitEvent[]? hitEvents)
@@ -252,10 +283,22 @@ namespace ADOFAIMacro.Macro
                 config = PrepareNativeConfig();
                 _setTechConfig!(ref config);
 
-                nativeEvents = _buildTechEvents!(
-                    entryTimes, pressTypes, floorIndices,
-                    eventCount, bpm, speed,
-                    out int outCount);
+                int outCount;
+                if (_buildTechEventsEx != null && speedMuls != null && speedMuls.Length >= eventCount)
+                {
+                    // 逐地板速度（变速谱面）：片长/换手按每个片起始地板的实际速度折算
+                    nativeEvents = _buildTechEventsEx(
+                        entryTimes, pressTypes, floorIndices, speedMuls,
+                        eventCount, bpm, speed,
+                        out outCount);
+                }
+                else
+                {
+                    nativeEvents = _buildTechEvents!(
+                        entryTimes, pressTypes, floorIndices,
+                        eventCount, bpm, speed,
+                        out outCount);
+                }
 
                 if (nativeEvents != IntPtr.Zero && outCount > 0)
                 {
@@ -312,7 +355,7 @@ namespace ADOFAIMacro.Macro
         public static void Unload()
         {
             if (_techDllHandle != IntPtr.Zero) { FreeLibrary(_techDllHandle); _techDllHandle = IntPtr.Zero; }
-            _setTechConfig = null; _buildTechEvents = null; _freeTechEvents = null;
+            _setTechConfig = null; _buildTechEvents = null; _buildTechEventsEx = null; _freeTechEvents = null;
             _dllLoadAttempted = false;
         }
 

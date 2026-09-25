@@ -98,5 +98,17 @@ extern "C" {
         double  speed,
         int* outEventCount);
 
+    // 逐地板速度倍率版（变速谱面）：speedMuls[i] = 第 i 个事件所属地板的
+    // scrFloor.speed；传 nullptr 等价于旧接口，行为逐事件一致。
+    TECH_API HitEvent* BuildTechniqueHitEventsEx(
+        double* entryTimes,
+        int* pressTypes,
+        int* floorIndices,
+        double* speedMuls,
+        int     eventCount,
+        double  bpm,
+        double  speed,
+        int* outEventCount);
+
     TECH_API void FreeHitEvents(HitEvent* events);
 }

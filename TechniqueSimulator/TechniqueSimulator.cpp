@@ -196,12 +196,18 @@ void SetTechniqueConfig(TechniqueConfig* config)
 }
 
 // ─────────────────────────────────────────────
-//  导出函数：BuildTechniqueHitEvents
+//  内部实现：可选「逐地板速度倍率」
+//  speedMuls[i] = 第 i 个事件所属地板的 scrFloor.speed（相对基准 BPM 的倍率）。
+//  为 nullptr 时全图使用全局 speed —— 与历史版本逐事件完全一致。
+//  用途：SetSpeed/BPM 事件会改变局部音符速率，而建表时只能拿到"进关那一刻"
+//  的全局速度。若不逐地板取速率，变速谱面的快段仍按旧速率切片，换手相位与
+//  片长全错（表现为速度一变手法就乱）。
 // ─────────────────────────────────────────────
-HitEvent* BuildTechniqueHitEvents(
+static HitEvent* BuildTechniqueHitEventsImpl(
     double* entryTimes,
     int* pressTypes,
     int* floorIndices,
+    const double* speedMuls,
     int     eventCount,
     double  bpm,
     double  speed,
@@ -257,6 +263,17 @@ HitEvent* BuildTechniqueHitEvents(
                 lastSegLimit = ec.bpmLimit;
                 nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
                 lastSegIdx = curSegIdx;
+            }
+
+            // ── 逐地板速度：按本片起始地板的速度折算局部速率 ──
+            // 段边界只处理"配置分段"，而 SetSpeed/BPM 变化不产生分段，必须逐片
+            // 用该地板的实际速度重算 nowBpm。speedMuls 为空时保持历史行为。
+            if (speedMuls) {
+                int si = (nowD < eventCount) ? nowD : eventCount - 1;
+                if (si >= 0) {
+                    double ls = speedMuls[si];
+                    if (ls > 1e-9) nowBpm = GetAdviceBpm(bpm, ls, lastSegLimit);
+                }
             }
 
             // 防止死循环
@@ -504,6 +521,39 @@ HitEvent* BuildTechniqueHitEvents(
         *outEventCount = 0;
         return nullptr;
     }
+}
+
+// ─────────────────────────────────────────────
+//  导出函数：BuildTechniqueHitEvents（旧接口，全图单一速度）
+// ─────────────────────────────────────────────
+HitEvent* BuildTechniqueHitEvents(
+    double* entryTimes,
+    int* pressTypes,
+    int* floorIndices,
+    int     eventCount,
+    double  bpm,
+    double  speed,
+    int* outEventCount)
+{
+    return BuildTechniqueHitEventsImpl(entryTimes, pressTypes, floorIndices,
+                                       nullptr, eventCount, bpm, speed, outEventCount);
+}
+
+// ─────────────────────────────────────────────
+//  导出函数：BuildTechniqueHitEventsEx（逐地板速度倍率，变速谱面用）
+// ─────────────────────────────────────────────
+HitEvent* BuildTechniqueHitEventsEx(
+    double* entryTimes,
+    int* pressTypes,
+    int* floorIndices,
+    double* speedMuls,
+    int     eventCount,
+    double  bpm,
+    double  speed,
+    int* outEventCount)
+{
+    return BuildTechniqueHitEventsImpl(entryTimes, pressTypes, floorIndices,
+                                       speedMuls, eventCount, bpm, speed, outEventCount);
 }
 
 // ─────────────────────────────────────────────
