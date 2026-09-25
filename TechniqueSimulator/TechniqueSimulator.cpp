@@ -28,9 +28,14 @@ static const double kSameMomentEps = 3e-3;
 static const double kChordGap = 1.2e-2;   // 簇内相邻事件最大间隔（12ms）
 static const double kChordSpan = 3.5e-2;  // 整簇最大时间跨度（35ms）
 
-// 拟人最短按压：真人一次点按约 40~60ms，也保证跨过至少一帧（60fps 约 16.7ms）。
+// 拟人最短按压：真人一次点按约 40~60ms。
+// 注意语义：它是【基准时长】的下限，用户设置的“左手/右手时长”比例在此之后相乘，
+// 因此比例调小仍能得到更短的按压。绝不能再把它当成最终时长的下限——那样会在
+// 高速谱面上（基准 ≤50ms）把用户设置整个架空，20 音/秒时无论怎么调都是恒定 50ms。
+static const double kMinPressDuration = 5.0e-2;  // 50ms（基准下限）
 
-static const double kMinPressDuration = 5.0e-2;  // 50ms
+// 最终时长的硬下限：只保证跨过至少一帧（60fps 约 16.7ms），不覆盖用户比例。
+static const double kMinPressDurationHard = 1.6e-2;  // 16ms
 
 // 分片死循环保护：片数上限 = 事件数 × 该倍数
 static const size_t kMaxPiecesPerEvent = 64;
@@ -742,13 +747,23 @@ static void EmitPieceEvents(const vector<PieceInfo>& pieces,
             // 明显不同。改用实际间隔后时长随速率平滑单调（240→150ms、
             // 270→133ms、360→100ms…），且片内各音等长（含双押/和弦）。
             // pressDurationMode=1：旧版（1.3.0.30）风格，基于折叠半拍。
-            double dur;
+            // 按住时长 = 基准时长 × 用户设置的“左手/右手时长”比例。
+            // 关键点：拟人下限(kMinPressDuration)必须作用在【基准】上，不能盖在
+            // 最终结果上 —— 旧实现把 50ms 直接盖在 dur 上，只要基准×比例 < 50ms
+            // 用户的设置就完全失效：20 音/秒（基准 25ms）时把时长从 0.8 改成 0.1，
+            // 输出仍是恒定的 50ms，同键无法按需重按，高速谱面手法直接不可用。
+            double baseDur;
             if (g_config.pressDurationMode == 1) {
-                dur = GetNoteFoldedPressLength(evTime, idx, ec.bpmLimit) * ratio;
+                baseDur = GetNoteFoldedPressLength(evTime, idx, ec.bpmLimit);
             } else {
-                double unit = GetLocalPressInterval(evTime, idx, cur.pieceLen);
-                dur = unit * ratio;
+                baseDur = GetLocalPressInterval(evTime, idx, cur.pieceLen);
+            }
+            // 拟人基准下限：真人一次点按约 50ms（比例仍可把最终时长缩到更小）
+            if (baseDur < kMinPressDuration) baseDur = kMinPressDuration;
 
+            double dur = baseDur * ratio;
+
+            if (g_config.pressDurationMode != 1) {
                 // 上限：本片自身音符跨度 + 最小内部间隔——片尾跨暂停/
                 // 长空拍时不会把整段时间一直按住。
                 double span = 0.0, mi = 0.0;
@@ -769,8 +784,8 @@ static void EmitPieceEvents(const vector<PieceInfo>& pieces,
                 if (dur > cap) dur = cap;
             }
 
-            // 拟人最短按压：真人一次点按约 50ms，也保证超过一帧
-            if (dur < kMinPressDuration) dur = kMinPressDuration;
+            // 最终硬下限：仅保证超过一帧（60fps），不覆盖用户的时长设置
+            if (dur < kMinPressDurationHard) dur = kMinPressDurationHard;
             double rel = t + dur;
 
             if (next.hand != cur.hand || next.evCount == 0) {
@@ -784,7 +799,7 @@ static void EmitPieceEvents(const vector<PieceInfo>& pieces,
             // 保证至少一次可见按压（同键重叠由 FixSameKeyOverlaps 在最后兜回）。
             if (rel <= t) {
                 double span = (next.endTime > t) ? (next.endTime - t) * 0.4 : 0.0;
-                if (span < kMinPressDuration) span = kMinPressDuration;
+                if (span < kMinPressDurationHard) span = kMinPressDurationHard;
                 rel = t + span;
             }
 
