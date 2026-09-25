@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+#nullable enable
+
 namespace ADOFAIMacro.Macro
 {
     /// <summary>
@@ -8,6 +10,47 @@ namespace ADOFAIMacro.Macro
     /// </summary>
     internal static class KeyMap
     {
+        /// <summary>
+        /// 解析单个按键书写项。支持：单字符字母/数字、键名表、十六进制虚拟键码（0x41）。
+        ///
+        /// ⚠️ README 的「按键书写格式（通用）」声称支持十六进制，但旧实现里只有
+        /// 按键过滤列表与死亡按键走了十六进制解析，按键序列(MacroKeys)与手法模拟的
+        /// 左右手按键（含分段覆盖）会把 "0x44" 静默丢弃 —— 列表若因此变空还会回退成 J。
+        /// 现在三处共用这一个解析入口。
+        /// </summary>
+        public static bool TryParse(string? token, out byte code)
+        {
+            code = 0;
+            if (string.IsNullOrWhiteSpace(token)) return false;
+
+            string name = token!.Trim().ToUpperInvariant();
+            if (name.Length == 0) return false;
+
+            // 单字符：字母/数字本身就是虚拟键码（"A"→0x41，"1"→0x31）
+            if (name.Length == 1)
+            {
+                char c = name[0];
+                if (c is >= 'A' and <= 'Z') { code = (byte)c; return true; }
+                if (c is >= '0' and <= '9') { code = (byte)c; return true; }
+            }
+
+            // 十六进制虚拟键码（与 Patches / Settings 中的写法保持一致）
+            if (name.StartsWith("0X") && name.Length > 2 &&
+                byte.TryParse(name.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out byte hex))
+            {
+                code = hex;
+                return true;
+            }
+
+            if (KeyNameToCode.TryGetValue(name, out byte vk))
+            {
+                code = vk;
+                return true;
+            }
+
+            return false;
+        }
+
         public static readonly Dictionary<string, byte> KeyNameToCode = new()
         {
             // 字母

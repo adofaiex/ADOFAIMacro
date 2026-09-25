@@ -551,20 +551,8 @@ namespace ADOFAIMacro.Macro
             var result = new List<byte>();
             foreach (var part in input!.Split([','], StringSplitOptions.RemoveEmptyEntries))
             {
-                var name = part.Trim().ToUpperInvariant();
-                if (string.IsNullOrEmpty(name)) continue;
-
-                if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z')
-                {
-                    result.Add((byte)name[0]); continue;
-                }
-                if (name.Length == 1 && name[0] >= '0' && name[0] <= '9')
-                {
-                    result.Add((byte)name[0]); continue;
-                }
-                // 复用 Macro 类中的 internal 字典
-                if (KeyMap.KeyNameToCode.TryGetValue(name, out byte code))
-                    result.Add(code);
+                // 统一解析（含十六进制 0xNN）：与 Macro / 按键过滤 / 死亡按键保持一致
+                if (KeyMap.TryParse(part, out byte code)) result.Add(code);
             }
 
             return result.Count > 0 ? [.. result] : fallback;

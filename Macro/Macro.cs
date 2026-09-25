@@ -242,11 +242,8 @@ namespace ADOFAIMacro.Macro
             var result = new List<byte>();
             foreach (var part in input!.Split([','], StringSplitOptions.RemoveEmptyEntries))
             {
-                var name = part.Trim().ToUpperInvariant();
-                if (string.IsNullOrEmpty(name)) continue;
-                if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z') { result.Add((byte)name[0]); continue; }
-                if (name.Length == 1 && name[0] >= '0' && name[0] <= '9') { result.Add((byte)name[0]); continue; }
-                if (KeyMap.KeyNameToCode.TryGetValue(name, out byte code)) result.Add(code);
+                // 统一解析：单字符 / 键名 / 十六进制 0xNN（旧实现丢弃 0xNN）
+                if (KeyMap.TryParse(part, out byte code)) result.Add(code);
             }
             return result.Count == 0 ? [0x4A] : [.. result];
         }
@@ -1028,15 +1025,8 @@ namespace ADOFAIMacro.Macro
             var newList = new List<byte>(4);
             foreach (string part in keysSetting.Split([','], StringSplitOptions.RemoveEmptyEntries))
             {
-                string keyName = part.Trim().ToUpperInvariant();
-                if (string.IsNullOrEmpty(keyName)) continue;
-                if (keyName.Length == 1)
-                {
-                    char c = keyName[0];
-                    if (c is >= 'A' and <= 'Z') { newList.Add((byte)c); continue; }
-                    if (c is >= '0' and <= '9') { newList.Add((byte)c); continue; }
-                }
-                if (KeyMap.KeyNameToCode.TryGetValue(keyName, out byte code)) newList.Add(code);
+                // KeyMap.TryParse 统一处理 单字符 / 键名 / 十六进制 0xNN
+                if (KeyMap.TryParse(part, out byte code)) newList.Add(code);
             }
             if (newList.Count == 0) newList.Add(0x4A);
             var newArray = newList.ToArray();
