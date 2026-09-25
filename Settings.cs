@@ -431,7 +431,23 @@ namespace ADOFAIMacro
                 if (_selectedTechniqueProfileIndex == value) return;
                 _selectedTechniqueProfileIndex = value;
                 LoadTechniqueProfileToFields(value);
+                // 分段编辑态是按【索引】复用的，切换配置时必须清空：否则上一个配置里
+                // 处于编辑中的输入框（focused=true + 未提交的 input）会在同一帧稍后的
+                // DrawTechniqueSegments 中把旧文本提交进新配置的同一索引分段，
+                // 静默覆盖对方的设置。
+                ResetSegmentEditStates();
             }
+        }
+
+        /// <summary>
+        /// 清空分段的编辑态缓存（输入缓冲 / 焦点标志 / 展开状态）。
+        /// 凡是"分段列表内容被整体替换"的操作都必须调用，否则索引位置上的
+        /// 旧编辑态会串到新数据上。
+        /// </summary>
+        private void ResetSegmentEditStates()
+        {
+            _segmentEditStates.Clear();
+            _segmentExpanded.Clear();
         }
 
         /// <summary>
@@ -1155,6 +1171,9 @@ namespace ADOFAIMacro
             if (GUILayout.Button(LocalizationManager.Get("tech.level_config_load"), UIUtils.ButtonStyle, GUILayout.Width(80)))
             {
                 LevelTechniqueManager.ReloadCurrentLevelConfig();
+                // 关卡配置会把当前配置的分段整体替换（索引不变，setter 不会触发），
+                // 必须显式清空编辑态，避免旧输入被提交进新载入的分段。
+                ResetSegmentEditStates();
             }
             if (GUILayout.Button(LocalizationManager.Get("tech.level_config_save"), UIUtils.ButtonStyle, GUILayout.Width(80)))
             {
@@ -1252,7 +1271,11 @@ namespace ADOFAIMacro
                 if (_techniqueProfiles.Count > 1)
                 {
                     _techniqueProfiles.RemoveAt(SelectedTechniqueProfileIndex);
-                    SelectedTechniqueProfileIndex = Mathf.Clamp(SelectedTechniqueProfileIndex - 1, 0, _techniqueProfiles.Count - 1);
+                    int newSel = Mathf.Clamp(SelectedTechniqueProfileIndex - 1, 0, _techniqueProfiles.Count - 1);
+                    // 删除索引 0 时 Clamp 结果与旧索引相同，setter 会提前返回而不清编辑态，
+                    // 所以这里必须显式重置。
+                    SelectedTechniqueProfileIndex = newSel;
+                    ResetSegmentEditStates();
                 }
             }
             GUILayout.EndHorizontal();

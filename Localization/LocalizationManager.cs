@@ -145,7 +145,30 @@ namespace ADOFAIMacro.Localization
             ["beta.warning_format"] = "⚠️ 测试版本 {0} - 功能可能不稳定，请谨慎使用 ⚠️",
             ["beta.feedback_message"] = "如遇问题请通过邮箱反馈，感谢您的测试！",
             // Technique simulation segment label
-            ["tech.segment_label"] = "{0} 段 {1}  [{2}~{3}]  BPM≤{4:F0}{5}"
+            ["tech.segment_label"] = "{0} 段 {1}  [{2}~{3}]  BPM≤{4:F0}{5}",
+
+            // ── 以下 19 个 key 原先只在 zh-CN/en-US.json 里有，硬编码 fallback 缺失 ──
+            // 安装时漏拷 Localization/ 目录（README 有提醒）或 JSON 损坏时，
+            // 「关卡特定配置」整块 UI 会退化成显示 key 原文（如 tech.level_config_load）。
+            ["other.block_input_unfocused"] = "窗口未激活时阻止按键输入",
+            ["tech.speed_change_tolerance"] = "变速容差",
+            ["tech.speed_change_tolerance_desc"] = "自动调整BPM使时间片对齐事件时序（0=关闭, 0.2=适中, 0.5=激进）。应对连续微变速谱面。",
+            ["tech.level_config"] = "关卡配置",
+            ["tech.level_config_auto_load"] = "自动从关卡目录加载",
+            ["tech.config_name_optional"] = "配置名称（可选）",
+            ["tech.level_config_load"] = "加载",
+            ["tech.level_config_save"] = "保存到关卡目录",
+            ["tech.level_config_delete"] = "删除",
+            ["tech.level_config_no_level"] = "未加载关卡",
+            ["tech.level_config_missing"] = "'{0}' 没有保存的配置",
+            ["tech.level_config_has"] = "'{0}' 已有保存的配置",
+            ["tech.level_config_has_with_name"] = "'{0}' 已有保存的配置 (配置名: {1})",
+            ["tech.level_config_error"] = "检查关卡配置时出错",
+            ["tech.level_config_no_level_warn"] = "未加载关卡！",
+            ["tech.level_config_saved"] = "配置已保存！",
+            ["tech.level_config_save_failed"] = "保存失败！",
+            ["tech.level_config_deleted"] = "配置已删除。",
+            ["tech.level_config_delete_failed"] = "删除失败！"
         };
 
         /// <summary>
@@ -224,8 +247,9 @@ namespace ADOFAIMacro.Localization
 
             if (_currentTranslations == null)
             {
-                UnityEngine.Debug.LogWarning($"[Localization] _currentTranslations is null, returning key: {key}");
-                return key;
+                // Get 在 OnGUI 里每帧被调用数十次，未初始化期间会刷屏 —— 每个 key 只报一次
+                WarnOnce(key, $"[Localization] _currentTranslations is null, returning key: {key}");
+                return args.Length > 0 ? FormatSafe(key, args) : key;
             }
 
             if (_currentTranslations.TryGetValue(key, out string value))
@@ -238,15 +262,32 @@ namespace ADOFAIMacro.Localization
             // Fallback 到默认翻译
             if (_fallbackTranslations.TryGetValue(key, out string fallback))
             {
-                UnityEngine.Debug.LogWarning($"[Localization] Key '{key}' not found in current language, using fallback");
+                WarnOnce(key, $"[Localization] Key '{key}' not found in current language, using fallback");
                 if (args.Length > 0)
                     return string.Format(fallback, args);
                 return fallback;
             }
 
             // 返回 key 本身作为最后的 fallback
-            UnityEngine.Debug.LogWarning($"[Localization] Key '{key}' not found in any dictionary, returning key itself");
-            return args.Length > 0 ? string.Format(key, args) : key;
+            WarnOnce(key, $"[Localization] Key '{key}' not found in any dictionary, returning key itself");
+            return args.Length > 0 ? FormatSafe(key, args) : key;
+        }
+
+        // 已告警过的 key：语言文件缺失时若某个 key 两个字典都没有，旧实现会在
+        // 每一次 Get 调用上打一条 LogWarning（OnGUI 每帧数十次）→ 日志刷屏。
+        private static readonly HashSet<string> _warnedKeys = [];
+
+        private static void WarnOnce(string key, string message)
+        {
+            if (_warnedKeys.Add(key))
+                UnityEngine.Debug.LogWarning(message);
+        }
+
+        /// <summary>key 本身不含占位符时 string.Format 会抛 FormatException，这里兜住。</summary>
+        private static string FormatSafe(string key, object[] args)
+        {
+            try { return string.Format(key, args); }
+            catch (FormatException) { return key; }
         }
 
         /// <summary>

@@ -915,6 +915,11 @@ namespace ADOFAIMacro.Macro
             _hitEventPoolUsed = 0;
             var pool = _hitEventPool;
 
+            // 事件数上界 = 地板数 - 1。池容量不足时必须退化为动态分配：
+            // 旧实现在每次写入前判 `_hitEventPoolUsed < pool.Length`，超出部分被
+            // 静默丢弃 —— 事件数超过 65536 的极端长谱后半段会完全不触发。
+            var overflow = (n - 1) > pool.Length ? new List<HitEvent>(n) : null;
+
             for (int i = 0; i < n - 1; i++)
             {
                 var floor = floors[i];
@@ -928,19 +933,25 @@ namespace ADOFAIMacro.Macro
                     var nf = floors[i + 1];
                     if (nf != null && nf.holdLength == -1)
                     {
-                        if (_hitEventPoolUsed < pool.Length)
-                            pool[_hitEventPoolUsed++] = new HitEvent(t, 0, releaseOnly: true);
+                        if (overflow != null) overflow.Add(new HitEvent(t, 0, releaseOnly: true));
+                        else pool[_hitEventPoolUsed++] = new HitEvent(t, 0, releaseOnly: true);
                         continue;
                     }
                 }
 
                 byte key = keys[keyIdx];
                 if (++keyIdx >= keyLen) keyIdx = 0;
-                if (_hitEventPoolUsed < pool.Length)
-                    pool[_hitEventPoolUsed++] = new HitEvent(t, key, releaseOnly: false);
+                if (overflow != null) overflow.Add(new HitEvent(t, key, releaseOnly: false));
+                else pool[_hitEventPoolUsed++] = new HitEvent(t, key, releaseOnly: false);
             }
 
-            if (_hitEventPoolUsed > 0 && _hitEventPoolUsed <= pool.Length)
+            if (overflow != null)
+            {
+                _hitEvents = overflow.ToArray();
+                _hitEventCount = _hitEvents.Length;
+                Main.Mod?.Logger.Log($"[Macro-Main] 事件数 {_hitEventCount} 超出事件池容量 {pool.Length}，已改用动态分配");
+            }
+            else if (_hitEventPoolUsed > 0)
             {
                 _hitEvents = pool.AsSpan(0, _hitEventPoolUsed).ToArray();
                 _hitEventCount = _hitEvents.Length;
