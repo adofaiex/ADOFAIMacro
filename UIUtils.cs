@@ -1,8 +1,14 @@
 /*
  * 本文件基于 [Iridium] 的代码修改
- * 原始项目: [https://github.com/Xbodwf/Iridium]
- * 原始许可证: 无
- * 新增更多键控支持
+ * 原始项目: https://github.com/adofaiex/Iridium
+ *           （旧地址 https://github.com/Xbodwf/Iridium 会重定向至此，同一个仓库）
+ * 原始许可证: GNU LGPL v3 —— Copyright (C) 2025 Xbodwf
+ *           许可全文: https://github.com/adofaiex/Iridium/blob/main/LICENSE
+ * 修改说明: 新增更多键控支持；M3 风格控件的缓存与焦点处理等改动详见 git 历史
+ *
+ * ⚠️ 此处原先写的是「原始许可证: 无」，属错误信息（会把后续维护者误导成
+ *    "上游无许可证、默认保留所有权利"）。上游实际采用 LGPL-3.0，与本项目的
+ *    AGPL-3.0 兼容（LGPLv3 §3 可转 GPLv3；GPLv3 §13 可与 AGPLv3 组合）。
  */
 using System;
 using System.Collections.Generic;
