@@ -341,7 +341,18 @@ namespace ADOFAIMacro.Macro
                 step = mean * 0.06f;
                 if (step > 0.8f) step = 0.8f; else if (step < -0.8f) step = -0.8f;
             }
-            _autoOffsetMs -= step;
+            // 符号约定（2026-09-25 用 dnlib 反编译游戏侧独立核对）：
+            //   scrController.UpdateHitErrorMeter 传给 AddHit 的 angleDiff =
+            //       (planet.cachedAngle - planet.targetExitAngle) * (isCCW ? -1 : +1)
+            //   归一化后「正值 = 迟」（该值即 SelectHitMarginByTimeBoundary 的 timeDiff，
+            //   > +Counted 判为 TooLate）；而 AddHit 内部会再乘 -57.29578（弧度→度，取负），
+            //   所以探针拿到的 errMs 符号与「迟」相反：
+            //       errMs > 0 = 早，errMs < 0 = 迟
+            // 结论：早发必须【增大】触发偏移让按键变晚，即 += step。
+            // ⚠️ 旧实现写的是 -= step —— 那是因为当时 errMs 被多乘了 -57.29578×(60/boundary)
+            //    变成约 -114 倍，负号恰好抵消；修正量纲后必须同时把方向改回来，
+            //    否则闭环成为正反馈，偏移会被推到 ±60ms 轨道。
+            _autoOffsetMs += step;
             if (_autoOffsetMs > 60f) _autoOffsetMs = 60f;
             else if (_autoOffsetMs < -60f) _autoOffsetMs = -60f;
 
@@ -910,7 +921,7 @@ namespace ADOFAIMacro.Macro
 
             cachedFloors = [.. levelMaker.listFloors];
             floorCount = cachedFloors.Length;
-            _initializedLevelPath = ADOBase.levelPath;
+            _initializedLevelPath = SafeLevelPath();
             conductor = scrConductor.instance;
 
             ParseKeyCodes();
@@ -1019,7 +1030,22 @@ namespace ADOFAIMacro.Macro
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool NeedReinitialize() =>
             levelMaker?.listFloors.Count != floorCount ||
-            !string.Equals(ADOBase.levelPath, _initializedLevelPath, StringComparison.Ordinal);
+            !string.Equals(SafeLevelPath(), _initializedLevelPath, StringComparison.Ordinal);
+
+        /// <summary>
+        /// 安全读取当前关卡路径。
+        /// ADOBase.levelPath 的实际实现是 `scnGame.instance.levelPath`（ldsfld + ldfld），
+        /// 当 scnGame 实例不存在时（编辑器试玩、非 scnGame 场景）会对 null 取字段并抛
+        /// NullReferenceException —— 作者在 LevelTechniqueManager 里正是用
+        /// catch (NullReferenceException) 兜住它的。
+        /// 而 Initialize/NeedReinitialize 都在 Harmony prefix 里（NeedReinitialize 每帧调用），
+        /// 异常会直接打断游戏的 scrController.PlayerControl_Update，因此这里必须自己兜住。
+        /// </summary>
+        private static string? SafeLevelPath()
+        {
+            try { return ADOBase.levelPath; }
+            catch { return null; }
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ParseKeyCodes()

@@ -315,9 +315,15 @@ namespace ADOFAIMacro.Macro
         /// </summary>
         public static void ReloadCurrentLevelConfig()
         {
-            string? levelPath = !string.IsNullOrEmpty(_lastCheckedLevelPath)
-                ? _lastCheckedLevelPath
-                : ADOBase.levelPath;
+            string? levelPath = _lastCheckedLevelPath;
+            if (string.IsNullOrEmpty(levelPath))
+            {
+                // ADOBase.levelPath = scnGame.instance.levelPath，scnGame 实例不存在时
+                // （编辑器试玩等）会抛 NullReferenceException；本方法由面板按钮调用，
+                // 不能让它把异常抛进 GUI 绘制。
+                try { levelPath = ADOBase.levelPath; }
+                catch (NullReferenceException) { levelPath = null; }
+            }
 
             if (string.IsNullOrEmpty(levelPath) || !File.Exists(levelPath))
             {
