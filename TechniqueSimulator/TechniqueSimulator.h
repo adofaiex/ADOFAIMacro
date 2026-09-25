@@ -82,6 +82,10 @@ struct TechniqueConfig {
     int               segmentCount;
     // 4 bytes padding
     double speedChangeTolerance;
+    // 按压时长风格：0=跟随音符片长（新），1=旧版 1.3.0.30 折叠片长
+    int    pressDurationMode;
+    // 多押按键均分：0=关（主手取满 maxK 后余数给另一手），1=开（对半均分到两手）
+    int    multiChordBalance;
 };
 
 #pragma pack(pop)
@@ -93,6 +97,17 @@ extern "C" {
         double* entryTimes,
         int* pressTypes,
         int* floorIndices,
+        int     eventCount,
+        double  bpm,
+        double  speed,
+        int* outEventCount);
+
+    // 新版接口：逐事件速度倍率（scrFloor.speed，相对基准 BPM）
+    TECH_API HitEvent* BuildTechniqueHitEventsEx(
+        double* entryTimes,
+        int* pressTypes,
+        int* floorIndices,
+        double* speedMuls,
         int     eventCount,
         double  bpm,
         double  speed,

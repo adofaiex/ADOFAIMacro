@@ -17,6 +17,7 @@ namespace ADOFAIMacro.Macro
         private static IntPtr _techDllHandle = IntPtr.Zero;
         private static DelegateSetTechConfig? _setTechConfig;
         private static DelegateBuildTechEvents? _buildTechEvents;
+        private static DelegateBuildTechEventsEx? _buildTechEventsEx;
         private static DelegateFreeTechEvents? _freeTechEvents;
         private static bool _dllLoadAttempted = false;
 
@@ -32,6 +33,8 @@ namespace ADOFAIMacro.Macro
         private static int _cachedBpmLimit;
         private static int _cachedHandPreference;
         private static double _cachedSpeedChangeTolerance;
+        private static int _cachedPressDurationMode;
+        private static int _cachedMultiChordBalance;
         private static Settings.TechniqueSegment[]? _cachedSegments;
 
         // ─────────────────────────────────────────────
@@ -114,6 +117,10 @@ namespace ADOFAIMacro.Macro
             public int SegmentCount;
             // 4 bytes padding
             public double SpeedChangeTolerance;
+            // 按压时长风格：0=跟随音符片长（新），1=旧版 1.3.0.30 折叠片长
+            public int PressDurationMode;
+            // 多押按键均分：0=关，1=开
+            public int MultiChordBalance;
         }
 
         // ─────────────────────────────────────────────
@@ -127,6 +134,17 @@ namespace ADOFAIMacro.Macro
             [In] double[] entryTimes,
             [In] int[] pressTypes,
             [In] int[] floorIndices,
+            int eventCount,
+            double bpm, double speed,
+            out int outEventCount);
+
+        // 新版接口：逐事件速度倍率（scrFloor.speed，相对基准 BPM）
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr DelegateBuildTechEventsEx(
+            [In] double[] entryTimes,
+            [In] int[] pressTypes,
+            [In] int[] floorIndices,
+            [In] double[] speedMuls,
             int eventCount,
             double bpm, double speed,
             out int outEventCount);
@@ -147,29 +165,77 @@ namespace ADOFAIMacro.Macro
         private static extern bool FreeLibrary(IntPtr hModule);
 
         // ─────────────────────────────────────────────
+        //  配置输入快照（替代 12 参数；构造时深拷贝，运行期不受外部修改影响）
+        // ─────────────────────────────────────────────
+        internal sealed class TechniqueConfigSnapshot
+        {
+            public byte[] LeftKeys = [];
+            public byte[] RightKeys = [];
+            public int[][] LeftKeyOrders = [];
+            public int[][] RightKeyOrders = [];
+            public double[] LeftPressTimes = [];
+            public double[] RightPressTimes = [];
+            public double BpmLimit;
+            public int HandPreference;
+            public double SpeedChangeTolerance;
+            public Settings.TechniqueSegment[] Segments = [];
+            public int PressDurationMode;
+            public int MultiChordBalance;
+        }
+
+        // ─────────────────────────────────────────────
         //  公开 API
         // ─────────────────────────────────────────────
 
-        /// <summary>更新缓存配置（含分段覆盖）</summary>
-        public static void UpdateConfig(
-            byte[] leftKeys, byte[] rightKeys,
-            int[][] leftKeyOrders, int[][] rightKeyOrders,
-            double[] leftPressTimes, double[] rightPressTimes,
-            double bpmLimit,
-            int handPreference,
-            double speedChangeTolerance,
-            Settings.TechniqueSegment[] segments)
+        /// <summary>更新缓存配置（含分段覆盖；输入会被深拷贝为快照）。</summary>
+        public static void UpdateConfig(TechniqueConfigSnapshot snapshot)
         {
-            _cachedLeftKeys = leftKeys;
-            _cachedRightKeys = rightKeys;
-            _cachedLeftKeyOrders = leftKeyOrders;
-            _cachedRightKeyOrders = rightKeyOrders;
-            _cachedLeftPressTimes = leftPressTimes;
-            _cachedRightPressTimes = rightPressTimes;
-            _cachedBpmLimit = (int)bpmLimit;
-            _cachedHandPreference = handPreference;
-            _cachedSpeedChangeTolerance = speedChangeTolerance;
-            _cachedSegments = segments;
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+
+            _cachedLeftKeys = snapshot.LeftKeys == null ? null : (byte[])snapshot.LeftKeys.Clone();
+            _cachedRightKeys = snapshot.RightKeys == null ? null : (byte[])snapshot.RightKeys.Clone();
+            _cachedLeftKeyOrders = CloneOrders(snapshot.LeftKeyOrders);
+            _cachedRightKeyOrders = CloneOrders(snapshot.RightKeyOrders);
+            _cachedLeftPressTimes = snapshot.LeftPressTimes == null ? null : (double[])snapshot.LeftPressTimes.Clone();
+            _cachedRightPressTimes = snapshot.RightPressTimes == null ? null : (double[])snapshot.RightPressTimes.Clone();
+            _cachedBpmLimit = (int)snapshot.BpmLimit;
+            _cachedHandPreference = snapshot.HandPreference;
+            _cachedSpeedChangeTolerance = snapshot.SpeedChangeTolerance;
+            _cachedSegments = CloneSegments(snapshot.Segments);
+            _cachedPressDurationMode = snapshot.PressDurationMode;
+            _cachedMultiChordBalance = snapshot.MultiChordBalance;
+        }
+
+        private static int[][]? CloneOrders(int[][]? orders)
+        {
+            if (orders == null) return null;
+            var result = new int[orders.Length][];
+            for (int i = 0; i < orders.Length; i++)
+                result[i] = (int[])orders[i].Clone();
+            return result;
+        }
+
+        private static Settings.TechniqueSegment[]? CloneSegments(Settings.TechniqueSegment[]? segments)
+        {
+            if (segments == null) return null;
+            var result = new Settings.TechniqueSegment[segments.Length];
+            for (int i = 0; i < segments.Length; i++)
+            {
+                var s = segments[i];
+                result[i] = new Settings.TechniqueSegment
+                {
+                    startFloor = s.startFloor,
+                    endFloor = s.endFloor,
+                    bpmLimit = s.bpmLimit,
+                    leftHandKeys = s.leftHandKeys,
+                    rightHandKeys = s.rightHandKeys,
+                    leftHandOrders = s.leftHandOrders,
+                    rightHandOrders = s.rightHandOrders,
+                    leftHandPressTimes = s.leftHandPressTimes,
+                    rightHandPressTimes = s.rightHandPressTimes,
+                };
+            }
+            return result;
         }
 
         /// <summary>加载 TechniqueSimulator.dll</summary>
@@ -179,6 +245,14 @@ namespace ADOFAIMacro.Macro
             if (_dllLoadAttempted) return _techDllHandle != IntPtr.Zero;
             _dllLoadAttempted = true;
 
+            // ABI 自检：手工声明的 NativeHitEvent 布局必须与 C++ 一致，
+            // 不一致时拒绝加载（而不是静默读错内存）
+            if (!VerifyHitEventAbi(out string abiError))
+            {
+                Main.Mod?.Logger.Log($"[Macro] NativeHitEvent ABI 自检失败，拒绝加载手法DLL: {abiError}");
+                return false;
+            }
+
             try
             {
                 string modPath = Main.Mod?.Path
@@ -187,41 +261,47 @@ namespace ADOFAIMacro.Macro
 
                 if (!File.Exists(dllPath))
                 {
-                    Macro.Log($"[Macro] 找不到手法模拟DLL: {dllPath}");
+                    Main.Mod?.Logger.Log($"[Macro] 找不到手法模拟DLL: {dllPath}");
                     return false;
                 }
 
-                Macro.Log($"[Macro] 加载DLL: {dllPath}");
+                Main.Mod?.Logger.Log($"[Macro] 加载DLL: {dllPath}");
                 _techDllHandle = LoadLibrary(dllPath);
 
                 if (_techDllHandle == IntPtr.Zero)
                 {
-                    Macro.Log($"[Macro] LoadLibrary 失败，错误码: {Marshal.GetLastWin32Error()}");
+                    Main.Mod?.Logger.Log($"[Macro] LoadLibrary 失败，错误码: {Marshal.GetLastWin32Error()}");
                     return false;
                 }
 
                 IntPtr setPtr = GetProcAddress(_techDllHandle, "SetTechniqueConfig");
+                IntPtr buildExPtr = GetProcAddress(_techDllHandle, "BuildTechniqueHitEventsEx");
                 IntPtr buildPtr = GetProcAddress(_techDllHandle, "BuildTechniqueHitEvents");
                 IntPtr freePtr = GetProcAddress(_techDllHandle, "FreeHitEvents");
 
-                if (setPtr == IntPtr.Zero || buildPtr == IntPtr.Zero || freePtr == IntPtr.Zero)
+                if (setPtr == IntPtr.Zero || (buildExPtr == IntPtr.Zero && buildPtr == IntPtr.Zero) || freePtr == IntPtr.Zero)
                 {
-                    Macro.Log("[Macro] 获取函数地址失败");
+                    Main.Mod?.Logger.Log("[Macro] 获取函数地址失败");
                     FreeLibrary(_techDllHandle);
                     _techDllHandle = IntPtr.Zero;
                     return false;
                 }
 
                 _setTechConfig = Marshal.GetDelegateForFunctionPointer<DelegateSetTechConfig>(setPtr);
-                _buildTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEvents>(buildPtr);
+                _buildTechEventsEx = buildExPtr != IntPtr.Zero
+                    ? Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEventsEx>(buildExPtr)
+                    : null;
+                _buildTechEvents = buildPtr != IntPtr.Zero
+                    ? Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEvents>(buildPtr)
+                    : null;
                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
 
-                Macro.Log("[Macro] 手法模拟DLL加载成功");
+                Main.Mod?.Logger.Log($"[Macro] 手法模拟DLL加载成功（接口: {(_buildTechEventsEx != null ? "Ex(per-floor speed)" : "Legacy")}）");
                 return true;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[Macro] 加载DLL异常: {ex.Message}");
+                Main.Mod?.Logger.Log($"[Macro] 加载DLL异常: {ex.Message}");
                 return false;
             }
         }
@@ -232,6 +312,7 @@ namespace ADOFAIMacro.Macro
             double[] entryTimes,
             int[] pressTypes,
             int[] floorIndices,
+            double[] speedMuls,
             int eventCount,
             double bpm, double speed,
             out Macro.HitEvent[]? hitEvents)
@@ -240,7 +321,12 @@ namespace ADOFAIMacro.Macro
 
             if (_cachedLeftKeys == null)
             {
-                Macro.Log("[Macro] 手法模拟配置未初始化");
+                Main.Mod?.Logger.Log("[Macro] 手法模拟配置未初始化");
+                return false;
+            }
+            if (_buildTechEventsEx == null && _buildTechEvents == null)
+            {
+                Main.Mod?.Logger.Log("[Macro] 手法模拟DLL未加载");
                 return false;
             }
 
@@ -252,38 +338,39 @@ namespace ADOFAIMacro.Macro
                 config = PrepareNativeConfig();
                 _setTechConfig!(ref config);
 
-                nativeEvents = _buildTechEvents!(
-                    entryTimes, pressTypes, floorIndices,
-                    eventCount, bpm, speed,
-                    out int outCount);
+                int outCount;
+                if (_buildTechEventsEx != null)
+                {
+                    nativeEvents = _buildTechEventsEx(
+                        entryTimes, pressTypes, floorIndices, speedMuls,
+                        eventCount, bpm, speed,
+                        out outCount);
+                }
+                else
+                {
+                    nativeEvents = _buildTechEvents!(
+                        entryTimes, pressTypes, floorIndices,
+                        eventCount, bpm, speed,
+                        out outCount);
+                }
 
                 if (nativeEvents != IntPtr.Zero && outCount > 0)
                 {
                     var events = new Macro.HitEvent[outCount];
                     int size = Marshal.SizeOf<NativeHitEvent>();
 
-                    // 使用 unsafe 批量复制，避免 Marshal.PtrToStructure 的开销
-                    unsafe
+                    // 安全封送：走结构体声明（布局已由 LoadTechniqueDll 的 ABI 自检保证），
+                    // 不再手写字段偏移——结构体调整后会编译/自检失败，而非静默读错内存
+                    for (int i = 0; i < outCount; i++)
                     {
-                        byte* src = (byte*)nativeEvents;
-                        for (int i = 0; i < outCount; i++)
-                        {
-                            // 直接内存读取，避免函数调用和封送处理
-                            double triggerTime = *(double*)(src + i * size + 0);
-                            byte keyCode = *(src + i * size + 8);
-                            // 偏移 9-11: padding
-                            int releaseOnlyInt = *(int*)(src + i * size + 12);
-                            int isHoldRelatedInt = *(int*)(src + i * size + 16);
-                            byte releaseKeyCode = *(src + i * size + 20);
-                            // 偏移 21-23: padding
-
-                            events[i] = new Macro.HitEvent(
-                                triggerTime,
-                                keyCode,
-                                releaseOnlyInt != 0,
-                                isHoldRelatedInt != 0,
-                                releaseKeyCode);
-                        }
+                        var native = Marshal.PtrToStructure<NativeHitEvent>(
+                            IntPtr.Add(nativeEvents, i * size));
+                        events[i] = new Macro.HitEvent(
+                            native.TriggerTime,
+                            native.KeyCode,
+                            native.ReleaseOnly,
+                            native.IsHoldRelated,
+                            native.ReleaseKeyCode);
                     }
 
                     hitEvents = events;
@@ -294,7 +381,7 @@ namespace ADOFAIMacro.Macro
             }
             catch (Exception ex)
             {
-                Macro.Log($"[Macro] DLL调用异常: {ex.Message}");
+                Main.Mod?.Logger.Log($"[Macro] DLL调用异常: {ex.Message}");
                 return false;
             }
             finally
@@ -307,12 +394,28 @@ namespace ADOFAIMacro.Macro
 
         public static bool IsDllLoaded() => _techDllHandle != IntPtr.Zero;
 
+        /// <summary>NativeHitEvent 布局自检（与 C++ Pack=8 定义比对）。</summary>
+        private static bool VerifyHitEventAbi(out string error)
+        {
+            int size = Marshal.SizeOf<NativeHitEvent>();
+            int offTrigger = (int)Marshal.OffsetOf<NativeHitEvent>(nameof(NativeHitEvent.TriggerTime));
+            int offKey = (int)Marshal.OffsetOf<NativeHitEvent>(nameof(NativeHitEvent.KeyCode));
+            int offRelease = (int)Marshal.OffsetOf<NativeHitEvent>(nameof(NativeHitEvent.ReleaseOnly));
+            int offHold = (int)Marshal.OffsetOf<NativeHitEvent>(nameof(NativeHitEvent.IsHoldRelated));
+            int offReleaseKey = (int)Marshal.OffsetOf<NativeHitEvent>(nameof(NativeHitEvent.ReleaseKeyCode));
+            bool ok = size == 24 && offTrigger == 0 && offKey == 8 && offRelease == 12
+                      && offHold == 16 && offReleaseKey == 20;
+            error = ok ? "" :
+                $"sizeof={size}, offsets=({offTrigger},{offKey},{offRelease},{offHold},{offReleaseKey})，期望 sizeof=24, offsets=(0,8,12,16,20)";
+            return ok;
+        }
+
         public static void Reset() { Unload(); _dllLoadAttempted = false; }
 
         public static void Unload()
         {
             if (_techDllHandle != IntPtr.Zero) { FreeLibrary(_techDllHandle); _techDllHandle = IntPtr.Zero; }
-            _setTechConfig = null; _buildTechEvents = null; _freeTechEvents = null;
+            _setTechConfig = null; _buildTechEventsEx = null; _buildTechEvents = null; _freeTechEvents = null;
             _dllLoadAttempted = false;
         }
 
@@ -330,7 +433,9 @@ namespace ADOFAIMacro.Macro
                 BpmLimit = _cachedBpmLimit,
                 HandPreference = _cachedHandPreference,
                 SegmentCount = _cachedSegments?.Length ?? 0,
-                SpeedChangeTolerance = _cachedSpeedChangeTolerance
+                SpeedChangeTolerance = _cachedSpeedChangeTolerance,
+                PressDurationMode = _cachedPressDurationMode,
+                MultiChordBalance = _cachedMultiChordBalance
             };
 
             try
@@ -551,8 +656,11 @@ namespace ADOFAIMacro.Macro
             var result = new List<byte>();
             foreach (var part in input!.Split([','], StringSplitOptions.RemoveEmptyEntries))
             {
-                // 统一解析（含十六进制 0xNN）：与 Macro / 按键过滤 / 死亡按键保持一致
-                if (KeyMap.TryParse(part, out byte code)) result.Add(code);
+                // 统一解析（单字符 / 键名 / 十六进制 0xNN）：与 Macro、按键过滤、死亡按键一致。
+                // 注：上游 PR 用的是其重写版 KeyMap.TryGetKeyCode；本分支按"最小合并"策略
+                // 沿用 master 上已有的 KeyMap.TryParse（功能等价，且已统一支持 0xNN）。
+                if (KeyMap.TryParse(part, out byte code))
+                    result.Add(code);
             }
 
             return result.Count > 0 ? [.. result] : fallback;

@@ -70,6 +70,9 @@ namespace ADOFAIMacro.Macro
         private static readonly List<double> _evTimeRecycle = [with(4096)];
         private static readonly List<int> _evPressRecycle = [with(4096)];
         private static readonly List<int> _evFloorRecycle = [with(4096)];
+        // 逐事件速度倍率（scrFloor.speed）：新版原生接口 BuildTechniqueHitEventsEx 用它
+        // 按"实际音符间隔"折算速率，从而原生支持变速谱（旧接口只传全局 bpm×speed）
+        private static readonly List<double> _evSpeedRecycle = [with(4096)];
         private static readonly List<PieceInfo> _piecesRecycle = [with(1024)];
 
         // ─────────────────────────────────────────────
@@ -203,6 +206,10 @@ namespace ADOFAIMacro.Macro
         private static extern bool SetWaitableTimer(IntPtr hTimer, ref long lpDueTime, int lPeriod, IntPtr pfnCompletionRoutine, IntPtr lpArgToCompletionRoutine, bool fResume);
         [DllImport("Kernel32.dll")]
         private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+        // 用于关闭高分辨率可等待定时器句柄（旧实现只创建、从不关闭 → 句柄泄漏；
+        // 且工作线程每次重启都会复用同一个句柄，线程退出后没人释放）
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
 
         // 睡眠至多 seconds 秒（可能略短）；到点必然返回
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -224,6 +231,18 @@ namespace ADOFAIMacro.Macro
             long due = -(long)Math.Ceiling(seconds * 1e7); // 负值 = 相对时间（100ns 单位）
             if (SetWaitableTimer(_hWaitTimer, ref due, 0, IntPtr.Zero, IntPtr.Zero, false))
                 WaitForSingleObject(_hWaitTimer, unchecked((uint)-1)); // INFINITE
+        }
+
+        /// <summary>
+        /// 工作线程确认退出后释放可等待定时器句柄。
+        /// 句柄仅工作线程使用，因此必须在 <c>IsAlive == false</c> 时关闭，避免"释放后使用"；
+        /// 若线程仍在运行（Join 超时）则保留句柄，下次线程退出时再关，不重复创建。
+        /// </summary>
+        private static void CloseWaitTimerIfWorkerStopped()
+        {
+            if (_workerThread?.IsAlive == true) return;
+            IntPtr h = Interlocked.Exchange(ref _hWaitTimer, IntPtr.Zero);
+            if (h != IntPtr.Zero) CloseHandle(h);
         }
 
         private static readonly long perfFrequency;
@@ -1265,10 +1284,12 @@ namespace ADOFAIMacro.Macro
             _evTimeRecycle.Clear();
             _evPressRecycle.Clear();
             _evFloorRecycle.Clear();
+            _evSpeedRecycle.Clear();
 
             var evTime = _evTimeRecycle;
             var evPress = _evPressRecycle;
             var evFloor = _evFloorRecycle;
+            var evSpeed = _evSpeedRecycle;
 
             for (int i = 0; i < floors.Length - 1; i++)
             {
@@ -1281,7 +1302,7 @@ namespace ADOFAIMacro.Macro
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
-                    evTime.Add(t); evPress.Add(-1); evFloor.Add(i);
+                    evTime.Add(t); evPress.Add(-1); evFloor.Add(i); evSpeed.Add(fl.speed);
                     continue;
                 }
 
@@ -1289,6 +1310,7 @@ namespace ADOFAIMacro.Macro
                 evTime.Add(t);
                 evPress.Add(isHoldHead ? 2 : 1);
                 evFloor.Add(i);
+                evSpeed.Add(fl.speed);
             }
 
             int total = evTime.Count;
@@ -1320,17 +1342,25 @@ namespace ADOFAIMacro.Macro
 
                     double speedChangeTolerance = levelConfig?.speedChangeTolerance
                         ?? Main.Settings.SpeedChangeTolerance;
-                    TechniqueSimulator.UpdateConfig(
-                        _techLeftKeys, _techRightKeys,
-                        _techKeyOrders[0], _techKeyOrders[1],
-                        _techPressDur[0], _techPressDur[1],
-                        Main.Settings.TechniqueBpmLimit,
-                        handPref,
-                        speedChangeTolerance,
-                        segments);
+                    // 配置以快照传入（内部会深拷贝），运行期不受 Settings 变更影响
+                    TechniqueSimulator.UpdateConfig(new TechniqueSimulator.TechniqueConfigSnapshot
+                    {
+                        LeftKeys = _techLeftKeys,
+                        RightKeys = _techRightKeys,
+                        LeftKeyOrders = _techKeyOrders[0],
+                        RightKeyOrders = _techKeyOrders[1],
+                        LeftPressTimes = _techPressDur[0],
+                        RightPressTimes = _techPressDur[1],
+                        BpmLimit = Main.Settings.TechniqueBpmLimit,
+                        HandPreference = handPref,
+                        SpeedChangeTolerance = speedChangeTolerance,
+                        Segments = segments,
+                        PressDurationMode = Main.Settings.TechniqueLegacyPressDuration ? 1 : 0,
+                        MultiChordBalance = Main.Settings.TechniqueMultiChordBalance ? 1 : 0,
+                    });
 
                     if (TechniqueSimulator.BuildHitEvents(
-                            [.. evTime], [.. evPress], [.. evFloor],
+                            [.. evTime], [.. evPress], [.. evFloor], [.. evSpeed],
                             total,
                             conductor!.bpm, ADOBase.controller.playerOne.planetarySystem.speed,
                             out var nativeEvents))
@@ -1786,6 +1816,7 @@ namespace ADOFAIMacro.Macro
                 // 必须无界等待上一位 worker 真正退出后再置 null 并新建：若这里改成
                 // 带超时并直接 null，就会有两个 WorkerLoop 并发发按键（重复触发）。
                 _workerThread.Join();
+                CloseWaitTimerIfWorkerStopped();
                 _workerThread = null;
             }
 
@@ -1818,6 +1849,7 @@ namespace ADOFAIMacro.Macro
             // 有界等待：worker 最多在 Sleep(1) 循环里待约 50ms 就会看到 _workerRunning=false
             if (_workerThread != null && !_workerThread.Join(500))
                 Log("[Macro-Main] 工作线程 500ms 内未退出，交由下一次 EnsureWorkerRunning 回收");
+            CloseWaitTimerIfWorkerStopped();
 
             if (skyHookInitialized)
             {

@@ -342,6 +342,23 @@ namespace ADOFAIMacro
             set => _techniqueBpmLimit = Mathf.Clamp(value, 50f, 2000f);
         }
 
+        // ── 手法分片算法（新版原生接口）的两个开关 ──
+        // 按压时长风格：false=跟随音符片长（新，随速度平滑），true=旧版 1.3.0.30 的八度折叠片长
+        private bool _techniqueLegacyPressDuration = false;
+        public bool TechniqueLegacyPressDuration
+        {
+            get => _techniqueLegacyPressDuration;
+            set { if (_techniqueLegacyPressDuration == value) return; _techniqueLegacyPressDuration = value; }
+        }
+
+        // 多押按键均分：false=主手取满后余数给另一手，true=对半均分到两只手（奇数多的一键给主手）
+        private bool _techniqueMultiChordBalance = false;
+        public bool TechniqueMultiChordBalance
+        {
+            get => _techniqueMultiChordBalance;
+            set { if (_techniqueMultiChordBalance == value) return; _techniqueMultiChordBalance = value; }
+        }
+
         public string TechLeftHandKeys = "D,F";
         public string TechRightHandKeys = "J,K";
         public string TechLeftHandOrders = "";
@@ -1348,6 +1365,29 @@ namespace ADOFAIMacro
             GUILayout.EndHorizontal();
             GUILayout.Space(2);
             GUILayout.Label(LocalizationManager.Get("tech.speed_change_tolerance_desc"), tipStyle);
+
+            // ── 新版分片算法的两个开关（改动后需重建事件表，故重启控制器）──
+            GUILayout.Space(6);
+            bool newBalance = UIUtils.M3Switch(TechniqueMultiChordBalance,
+                LocalizationManager.Get("tech.multi_chord_balance"));
+            if (newBalance != TechniqueMultiChordBalance)
+            {
+                TechniqueMultiChordBalance = newBalance;
+                RestartControllerIfAny();
+            }
+            GUILayout.Space(2);
+            GUILayout.Label(LocalizationManager.Get("tech.multi_chord_balance_desc"), tipStyle);
+
+            GUILayout.Space(6);
+            bool newLegacyPress = UIUtils.M3Switch(TechniqueLegacyPressDuration,
+                LocalizationManager.Get("tech.legacy_press_duration"));
+            if (newLegacyPress != TechniqueLegacyPressDuration)
+            {
+                TechniqueLegacyPressDuration = newLegacyPress;
+                RestartControllerIfAny();
+            }
+            GUILayout.Space(2);
+            GUILayout.Label(LocalizationManager.Get("tech.legacy_press_duration_desc"), tipStyle);
 
             // ── 变速分段 ─────────────────────────────────────
             DrawTechniqueSegments();
