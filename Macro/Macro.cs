@@ -741,7 +741,7 @@ namespace ADOFAIMacro.Macro
                         if (!simulateKey)
                         {
                             hitCount++;
-                            Log($"[Macro-Worker] 请求 Hit() EventIndex={i}");
+                            LogVerbose($"[Macro-Worker] 请求 Hit() EventIndex={i}");
                         }
                         else if (ev.ReleaseOnly)
                         {
@@ -752,13 +752,13 @@ namespace ADOFAIMacro.Macro
                                     : ev.ReleaseKeyCode;
                                 SendKey(keyToRelease, false);
                                 if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
-                                Log($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={i} audioNow={audioNow:F6}");
+                                LogVerbose($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={i} audioNow={audioNow:F6}");
                             }
                             else
                             {
                                 if (ev.IsHoldRelated) WorkerReleaseHoldKey();
                                 else WorkerReleaseKey(ev.ReleaseKeyCode);
-                                Log($"[Macro-Worker] 松键(hold={ev.IsHoldRelated} key=0x{ev.ReleaseKeyCode:X2}) EventIndex={i}");
+                                LogVerbose($"[Macro-Worker] 松键(hold={ev.IsHoldRelated} key=0x{ev.ReleaseKeyCode:X2}) EventIndex={i}");
                             }
                         }
                         else if (ev.IsHoldRelated)
@@ -768,12 +768,12 @@ namespace ADOFAIMacro.Macro
                                 if (_isHoldDown) { SendKey(_holdKey, false); _holdKey = 0; _isHoldDown = false; }
                                 SendKey(ev.KeyCode, true);
                                 _holdKey = ev.KeyCode; _isHoldDown = true;
-                                Log($"[Macro-Worker] 直接长按 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
+                                LogVerbose($"[Macro-Worker] 直接长按 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
                             }
                             else
                             {
                                 WorkerHoldKey(ev.KeyCode);
-                                Log($"[Macro-Worker] Hold 按下 0x{ev.KeyCode:X2} EventIndex={i}");
+                                LogVerbose($"[Macro-Worker] Hold 按下 0x{ev.KeyCode:X2} EventIndex={i}");
                             }
                         }
                         else
@@ -781,12 +781,12 @@ namespace ADOFAIMacro.Macro
                             if (enableTechnique)
                             {
                                 SendKey(ev.KeyCode, true);
-                                Log($"[Macro-Worker] 直接按下 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
+                                LogVerbose($"[Macro-Worker] 直接按下 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
                             }
                             else
                             {
                                 WorkerPressKey(ev.KeyCode);
-                                Log($"[Macro-Worker] 按下 0x{ev.KeyCode:X2} EventIndex={i}");
+                                LogVerbose($"[Macro-Worker] 按下 0x{ev.KeyCode:X2} EventIndex={i}");
                             }
                         }
 
@@ -853,7 +853,7 @@ namespace ADOFAIMacro.Macro
             if (_isHoldDown) WorkerReleaseHoldKey();
             SendKey(keyCode, isDown: true);
             _holdKey = keyCode; _isHoldDown = true;
-            Log($"[Macro-Worker] Hold 按下 0x{keyCode:X2}");
+            LogVerbose($"[Macro-Worker] Hold 按下 0x{keyCode:X2}");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -862,7 +862,7 @@ namespace ADOFAIMacro.Macro
             if (!_isHoldDown) return;
             SendKey(_holdKey, isDown: false);
             _holdKey = 0; _isHoldDown = false;
-            Log("[Macro-Worker] Hold 释放");
+            LogVerbose("[Macro-Worker] Hold 释放");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -915,7 +915,7 @@ namespace ADOFAIMacro.Macro
             {
                 int r = AsyncInputManager.DirectPushKey(keyCode, isDown);
                 if (r != 0) Log($"[Macro-Worker] PushKeyEvent 失败 result={r} key=0x{keyCode:X2}");
-                Log($"[Macro-Worker] SkyHook direct key=0x{keyCode:X2} down={isDown}");
+                LogVerbose($"[Macro-Worker] SkyHook direct key=0x{keyCode:X2} down={isDown}");
             }
             else
             {
@@ -925,7 +925,7 @@ namespace ADOFAIMacro.Macro
                 _cachedInput.u.ki.dwFlags = isDown ? KEYEVENTF_KEYDOWN : KEYEVENTF_KEYUP;
                 fixed (SkyHookSystem.INPUT* ptr = &_cachedInput)
                     SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
-                Log($"[Macro-Worker] SendInput key=0x{keyCode:X2} down={isDown}");
+                LogVerbose($"[Macro-Worker] SendInput key=0x{keyCode:X2} down={isDown}");
             }
         }
 
@@ -1967,11 +1967,24 @@ namespace ADOFAIMacro.Macro
         // ─────────────────────────────────────────────
         //  日志
         // ─────────────────────────────────────────────
-        [System.Diagnostics.Conditional("DEBUG")]
+        // ⚠️ 这里不能加 [Conditional("DEBUG")]：那会让 Release 构建把所有调用点
+        // 整个删掉——此前"手法表诊断在 Player.log 里看不到"就是这个原因
+        // （叠加 logToMod=false 的空实现，双保险地什么都打不出来）。
         public static void Log(string message)
         {
-            bool logToMod = false;
-            if (logToMod) Main.Mod?.Logger.Log(message);
+            Main.Mod?.Logger.Log(message);
+        }
+
+        /// <summary>
+        /// 逐音符 / 逐按键级别的高频日志（WorkerLoop 内每次按下·松开、每次 SendKey）。
+        /// 默认关闭：50~100 音/秒的谱面会每秒写 200+ 行，而 UMM 日志是同步写盘，
+        /// 会拖慢工作线程、影响击发时序。需要逐键排障时把 _verboseLog 置 true。
+        /// </summary>
+        private static bool _verboseLog = false;
+        [System.Diagnostics.Conditional("DEBUG")]
+        public static void LogVerbose(string message)
+        {
+            if (_verboseLog) Main.Mod?.Logger.Log(message);
         }
     }
 
