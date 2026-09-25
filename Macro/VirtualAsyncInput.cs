@@ -232,6 +232,67 @@ namespace ADOFAIMacro.Macro
                 Main.Mod?.Logger.Log($"[Macro-Mirror] 注入 {sends} 次(失败 {fails}) | 回声已丢 {echoes} | 失焦跳过 {unfocused}");
         }
 
+        // ─────────────────────────────────────────────────────────
+        //  注入按键的过滤放行（Passthrough）
+        //
+        //  直喂不可用时宏只能走系统注入（SkyHook DirectPushKey / SendInput），
+        //  这些注入键会经 LL 钩子回流到游戏的 HookCallback —— 与镜像回声同一入口
+        //  （回声配额的存在本身即证明注入键确实会回流）。于是它们会被【按键过滤】
+        //  当成玩家按键处理：白名单模式下若未列出宏用的键，宏会把自己的键全部
+        //  过滤掉而完全失效；死亡按键同理。
+        //
+        //  过滤的语义应当是过滤玩家输入，而非宏的输出。这里复用回声配额同一套
+        //  机制（同一把锁、同样的超时清理）：注入前登记"放行配额"，
+        //  HookCallback 命中即放行（跳过过滤）。回声命中是丢弃、放行命中是放行，
+        //  同一次注入只会登记其中一种，互不干扰。
+        // ─────────────────────────────────────────────────────────
+        private static readonly int[] _passDown = new int[256];
+        private static readonly int[] _passUp = new int[256];
+        private static readonly int[] _passExpire = new int[256];
+        private static volatile int _passActive;
+        private static int _passOutstanding;   // MirrorLock 保护
+
+        /// <summary>宏即将注入系统按键：登记一次过滤放行配额（仅在按键过滤开启时调用）。</summary>
+        internal static void RegisterInjectedKey(byte keyCode, bool isDown)
+        {
+            lock (MirrorLock)
+            {
+                int idx = keyCode;
+                _passExpire[idx] = Environment.TickCount + MirrorEchoTimeoutMs;
+                if (isDown) _passDown[idx]++; else _passUp[idx]++;
+                _passOutstanding++;
+                _passActive = 1;
+            }
+        }
+
+        /// <summary>HookCallback Prefix 调用：是否为宏自己注入的键（是 → 跳过按键过滤）。</summary>
+        internal static bool ConsumeInjectedKey(ushort key, EventType type)
+        {
+            if (_passActive == 0 || key >= 256) return false;
+
+            lock (MirrorLock)
+            {
+                int idx = key;
+                if (_passExpire[idx] != 0 && Environment.TickCount - _passExpire[idx] > 0)
+                {
+                    // 超时：注入未回流（钩子未运行等），清配额防误放行真实按键
+                    _passOutstanding -= _passDown[idx] + _passUp[idx];
+                    _passDown[idx] = 0;
+                    _passUp[idx] = 0;
+                    _passExpire[idx] = 0;
+                }
+
+                int[] counts = type == EventType.KeyPressed ? _passDown : _passUp;
+                if (counts[idx] > 0)
+                {
+                    counts[idx]--;
+                    if (--_passOutstanding <= 0) { _passOutstanding = 0; _passActive = 0; }
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>
         /// HookCallback Prefix 调用：该事件是否为镜像注入的回声（是 → 应丢弃）。
         /// </summary>

@@ -142,8 +142,11 @@ namespace ADOFAIMacro
                     // 走 AsyncInputManager.DirectPushKey：它内含"旧版原生 DLL 没有
                     // SendKeyDirect 导出时回退 PushKeyEvent"的逻辑。直接调
                     // InputSystem.SendKeyDirect 在旧 DLL 上会返回 -1 而静默不发键。
+                    // 同时登记过滤放行配额（该注入同样会回流到 HookCallback）。
+                    if (Main.Settings.EnableKeyFilter) Macro.VirtualAsyncInput.RegisterInjectedKey(key, true);
                     ADOFAIMacro.Macro.AsyncInputManager.DirectPushKey(key, true);
                     yield return new WaitForSeconds(0.05f);
+                    if (Main.Settings.EnableKeyFilter) Macro.VirtualAsyncInput.RegisterInjectedKey(key, false);
                     ADOFAIMacro.Macro.AsyncInputManager.DirectPushKey(key, false);
                 }
             }
@@ -659,6 +662,11 @@ namespace ADOFAIMacro
                 //    不经过这里，不受影响）——不丢会导致同一击打判定两次
                 if (Macro.VirtualAsyncInput.ShouldDropMirrorEcho(ev.Key, ev.Type))
                     return false;
+
+                // 0.5 宏自己注入的键：放行并跳过按键过滤。过滤的语义是拦玩家输入，
+                //     不是拦宏的输出 —— 白名单模式下否则会把宏用的键全部过滤掉。
+                if (Macro.VirtualAsyncInput.ConsumeInjectedKey(ev.Key, ev.Type))
+                    return true;
 
                 // 1. 基本检查
                 if (!Application.isPlaying) return true;

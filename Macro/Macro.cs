@@ -875,6 +875,12 @@ namespace ADOFAIMacro.Macro
             // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）
             if (VirtualAsyncInput.Active && VirtualAsyncInput.Send(keyCode, isDown)) return;
 
+            // 直喂未接管 → 这次按键会经系统注入回流到游戏的 HookCallback，
+            // 从而落入【按键过滤】的判定范围。若开了过滤，先登记放行配额，
+            // 否则白名单模式下宏会把自己的键全部拦掉（详见 VirtualAsyncInput 注释）。
+            if (Main.Settings.EnableKeyFilter)
+                VirtualAsyncInput.RegisterInjectedKey(keyCode, isDown);
+
             if (_cachedSkyHookMode)
             {
                 int r = AsyncInputManager.DirectPushKey(keyCode, isDown);
