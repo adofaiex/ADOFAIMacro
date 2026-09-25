@@ -1,4 +1,4 @@
-﻿using ADOFAIMacro.Macro;
+using ADOFAIMacro.Macro;
 using ADOFAIMacro.Localization;
 using HarmonyLib;
 using Newgrounds;
@@ -91,7 +91,9 @@ namespace ADOFAIMacro
         // ─────────────────────────────────────────────
         //  UI 内部状态
         // ─────────────────────────────────────────────
-        public List<TechniqueSegment> techniqueSegments = [];
+        // 注：这里原先还有一个 public List<TechniqueSegment> techniqueSegments 字段。
+        // 它从未被任何代码读写（面板与算法用的都是 TechniqueProfile 上那个同名字段），
+        // 却会被 XmlSerializer 持久化成一个孤立的 <techniqueSegments /> 元素 —— 已删除。
 
         private class SegmentEditState
         {
@@ -419,6 +421,21 @@ namespace ADOFAIMacro
             }
         }
 
+        /// <summary>
+        /// 当前选中的手法配置（安全访问器）。索引越界或列表为空时返回 null，
+        /// 调用方必须判空。持久化值与列表可能不同步，直接索引会抛异常。
+        /// </summary>
+        public TechniqueProfile CurrentTechniqueProfile
+        {
+            get
+            {
+                if (_techniqueProfiles == null || _techniqueProfiles.Count == 0) return null;
+                int i = _selectedTechniqueProfileIndex;
+                if (i < 0 || i >= _techniqueProfiles.Count) i = 0;
+                return _techniqueProfiles[i];
+            }
+        }
+
         private void LoadTechniqueProfileToFields(int index)
         {
             if (index < 0 || index >= _techniqueProfiles.Count) return;
@@ -575,7 +592,25 @@ namespace ADOFAIMacro
             selectedCardIndex = UIUtils.M3SelectionGrid(selectedCardIndex, _tabNames, _tabCount, GUILayout.Height(30));
             GUILayout.Space(10);
 
-            _tabDraws[selectedCardIndex]();
+            // 单张卡抛异常不应让整个 UMM 窗口失效（UMM 只有这一层 OnGUI）。
+            // 注意：若异常发生在 Begin/End 布局对之间，GUILayout 栈可能已失衡；
+            // 这里至少保证异常不逃逸到 UMM 绘制循环，并给出可见的错误信息。
+            try
+            {
+                _tabDraws[selectedCardIndex]();
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
+                try
+                {
+                    GUILayout.BeginVertical(UIUtils.CardStyle);
+                    GUILayout.Label("UI Error", UIUtils.HeaderStyle);
+                    UIUtils.DrawInfoBox($"{ex.GetType().Name}: {ex.Message}", isError: true);
+                    GUILayout.EndVertical();
+                }
+                catch { /* 布局已失衡时忽略绘制错误 */ }
+            }
         }
 
         // ─────────────────────────────────────────────
@@ -604,12 +639,24 @@ namespace ADOFAIMacro
         // ─────────────────────────────────────────────
         //  宏主开关卡
         // ─────────────────────────────────────────────
+        /// <summary>
+        /// 安全重启控制器（让宏重建事件表）。
+        /// UMM 面板在选歌/编辑器等场景也能打开，那里 ADOBase.controller 可能为 null，
+        /// 直接 .Restart() 会在 OnGUI 里抛 NRE 打断整个面板绘制。
+        /// 用 Unity 重载的 != null 判断（?. 对"已销毁但引用非空"的对象无效）。
+        /// </summary>
+        private static void RestartControllerIfAny()
+        {
+            var c = ADOBase.controller;
+            if (c != null) c.Restart();
+        }
+
         private void DrawMainSwitchCard()
         {
             GUILayout.BeginVertical(UIUtils.CardStyle);
             GUILayout.Label(Localization.LocalizationManager.Get("tab.macro"), UIUtils.HeaderStyle);
             bool newMacro = UIUtils.M3Switch(Macro, Localization.LocalizationManager.Get("macro.enable_macro"));
-            if (newMacro != Macro) { Macro = newMacro; ADOBase.controller.Restart(); }
+            if (newMacro != Macro) { Macro = newMacro; RestartControllerIfAny(); }
             GUILayout.EndVertical();
         }
 
@@ -676,7 +723,7 @@ namespace ADOFAIMacro
 
             GUILayout.Space(2);
             bool newSim = UIUtils.M3Switch(SimulateKeyPress, Localization.LocalizationManager.Get("key_settings.key_simulation"));
-            if (newSim != SimulateKeyPress) { SimulateKeyPress = newSim; ADOBase.controller.Restart(); }
+            if (newSim != SimulateKeyPress) { SimulateKeyPress = newSim; RestartControllerIfAny(); }
 
             if (SimulateKeyPress)
             {
@@ -929,7 +976,7 @@ namespace ADOFAIMacro
             if (LockLevelEditor != newLock)
             {
                 LockLevelEditor = newLock;
-                if (ADOBase.sceneName == GCNS.sceneEditor) ADOBase.controller.Restart();
+                if (ADOBase.sceneName == GCNS.sceneEditor) RestartControllerIfAny();
             }
 
             BlockInputWhenUnfocused = UIUtils.M3Switch(BlockInputWhenUnfocused,
@@ -942,6 +989,18 @@ namespace ADOFAIMacro
         // ─────────────────────────────────────────────
         private static readonly string[] _deathKeyQuickSet = ["R", "SPACE", "ENTER", "F2", "ESC"];
 
+        /// <summary>
+        /// UI 展示用版本号（含 Beta 后缀）。
+        /// 绝不改写 Main.Mod.Info.Version —— 那是防篡改校验的比对基准，
+        /// 追加后缀会导致"关闭再启用"被误判为修改 Info.json 而退出游戏。
+        /// </summary>
+        private string UiVersionText()
+        {
+            string v = Main.Mod?.Info.Version ?? "1.3.0";
+            if (IsBeta) v += $"\nBeta{BetaVersion}";
+            return v;
+        }
+
         private void DrawAuthorCard()
         {
             GUILayout.BeginVertical(UIUtils.CardStyle);
@@ -950,7 +1009,7 @@ namespace ADOFAIMacro
             GUILayout.BeginHorizontal();
             GUILayout.Label($"👤 {Main.Mod.Info.Author}", authorStyle);
             GUILayout.FlexibleSpace();
-            string ver = Main.Mod.Info.Version.Replace('\n', ' ').Replace('\r', ' ');
+            string ver = UiVersionText().Replace('\n', ' ').Replace('\r', ' ');
             GUILayout.Label($"📦 {ver}", authorStyle);
             GUILayout.FlexibleSpace();
             string emailKey = Localization.LocalizationManager.IsChinese ? "author.email_chinese" : "author.email_english";
@@ -996,7 +1055,7 @@ namespace ADOFAIMacro
             GUILayout.Space(4);
             _updateLogScrollPos = GUILayout.BeginScrollView(_updateLogScrollPos, GUILayout.Height(150));
             GUIStyle logStyle = UIUtils.LabelStyleVariant(0.88f, 0.88f, 0.9f, 1f, wordWrap: true, richText: true);
-            string ver = Main.Mod.Info.Version.Replace('\n', ' ').Replace('\r', ' ');
+            string ver = UiVersionText().Replace('\n', ' ').Replace('\r', ' ');
             GUILayout.Label(string.Format(Localization.LocalizationManager.Get("update_log.content"), ver), logStyle);
             GUILayout.EndScrollView();
             GUILayout.EndVertical();
@@ -1226,11 +1285,19 @@ namespace ADOFAIMacro
 
             GUILayout.Space(4);
             GUILayout.BeginHorizontal();
-            SpeedChangeTolerance = UIUtils.M3HorizontalSliderWithLabelAndInput(
+            float newSct = UIUtils.M3HorizontalSliderWithLabelAndInput(
                 LocalizationManager.Get("tech.speed_change_tolerance"),
                 SpeedChangeTolerance, 0f, 0.5f,
                 ref _speedChangeToleranceState.input, ref _speedChangeToleranceState.focused,
                 "F2", 200, 240, 60);
+            if (newSct != SpeedChangeTolerance)
+            {
+                // 与"起始手"同理：滑条改动必须同步写回当前配置。旧实现只写全局字段，
+                // 切换配置时 LoadTechniqueProfileToFields 会把旧值灌回来（改动被静默还原），
+                // 而 SaveCurrentToProfile 又会用新值覆盖，两处状态不一致。
+                SpeedChangeTolerance = newSct;
+                _techniqueProfiles[SelectedTechniqueProfileIndex].speedChangeTolerance = newSct;
+            }
             GUILayout.EndHorizontal();
             GUILayout.Space(2);
             GUILayout.Label(LocalizationManager.Get("tech.speed_change_tolerance_desc"), tipStyle);
@@ -1392,7 +1459,8 @@ namespace ADOFAIMacro
                     LocalizationManager.Get("tech.bpm_limit"),
                     seg.bpmLimit, 50f, 2000f,
                     ref state.bpmInput, ref state.bpmFocused,
-                    "F0", 80, 160, 60);
+                    "F0", 80, 160, 60,
+                    controlId: $"SegBpm_{i}");
                 GUILayout.EndHorizontal();
 
                 // 分隔线
@@ -1454,7 +1522,36 @@ namespace ADOFAIMacro
         // ─────────────────────────────────────────────
         public void OnSaveGUI(UnityModManager.ModEntry modEntry) => Save(modEntry);
         public override void Save(UnityModManager.ModEntry modEntry) => Save(this, modEntry);
-        public static Settings Load(UnityModManager.ModEntry modEntry) => Load<Settings>(modEntry);
+
+        public static Settings Load(UnityModManager.ModEntry modEntry)
+        {
+            Settings s = Load<Settings>(modEntry);
+            s.NormalizeAfterLoad();
+            return s;
+        }
+
+        /// <summary>
+        /// 反序列化后的自愈处理。
+        /// SelectedTechniqueProfileIndex 与 TechniqueProfiles 在 XML 里是两个独立元素，
+        /// 可能不同步（手工编辑 XML、删除配置后未保存、元素顺序差异、旧版本遗留值）。
+        /// 而面板里有十余处直接 `_techniqueProfiles[SelectedTechniqueProfileIndex]`，
+        /// 以及 Macro / LevelTechniqueManager 的同类索引 —— 越界会抛
+        /// ArgumentOutOfRangeException（在 OnGUI 里会把整个面板打挂，在
+        /// BuildHitEvents 里会被 catch 吞掉导致手法模拟静默无输出）。
+        /// </summary>
+        private void NormalizeAfterLoad()
+        {
+            if (_techniqueProfiles == null) _techniqueProfiles = [];
+            if (_techniqueProfiles.Count == 0)
+            {
+                _techniqueProfiles.Add(new TechniqueProfile());
+                _selectedTechniqueProfileIndex = 0;
+            }
+            else if (_selectedTechniqueProfileIndex < 0 || _selectedTechniqueProfileIndex >= _techniqueProfiles.Count)
+            {
+                _selectedTechniqueProfileIndex = 0;
+            }
+        }
 
         // ─────────────────────────────────────────────
         //  关卡特定配置辅助方法

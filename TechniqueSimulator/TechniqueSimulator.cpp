@@ -116,7 +116,11 @@ static int CountEventsInRange(const vector<double>& times, int start, double end
 // 将实际 BPM 折叠到 (limit/2, limit] 区间
 static double GetAdviceBpm(double bpm, double speed, double limit)
 {
+    // 防御死循环：limit ≤ 0 时 `r <= limit/2` 对 r==0 恒真 → 无限循环。
+    // limit 来自关卡配置（磁盘 JSON）或全局设置，可能被手工改成 0/负数。
+    if (limit <= 0.0) limit = 500.0;
     double r = bpm * speed;
+    if (r <= 0.0) return limit;
     while (r > limit)      r /= 2.0;
     while (r <= limit / 2.0) r *= 2.0;
     return r;

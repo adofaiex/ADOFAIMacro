@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 本文件基于 [Iridium] 的代码修改
  * 原始项目: [https://github.com/Xbodwf/Iridium]
  * 原始许可证: 无
@@ -583,9 +583,15 @@ namespace ADOFAIMacro
         }
 
         // 带输入框滑动条方法
+        // controlId：输入框的稳定唯一控件名。默认用 label —— 但 label 是本地化文案，
+        // 分段列表里每个分段的 BPM 阈值文案相同，会产生同名控件，导致多个滑块的
+        // isFocused 被同时置位、拖动失效（现象：拖动某个滑块没反应）。
+        // 循环/重复场景必须显式传入唯一 controlId。
         public static float M3HorizontalSliderWithLabelAndInput(string label, float value, float leftValue, float rightValue,
-            ref string inputText, ref bool isFocused, string format = "F2", float labelWidth = 60, float sliderWidth = 120, float fieldWidth = 60)
+            ref string inputText, ref bool isFocused, string format = "F2", float labelWidth = 60, float sliderWidth = 120, float fieldWidth = 60,
+            string? controlId = null)
         {
+            string fieldName = string.IsNullOrEmpty(controlId) ? "SliderInputField_" + label : controlId!;
             GUILayout.BeginHorizontal();
 
             // 标签
@@ -601,7 +607,7 @@ namespace ADOFAIMacro
             // 输入框 - 使用垂直对齐辅助
             GUILayout.BeginVertical(GUILayout.Height(24));
             GUILayout.FlexibleSpace();
-            GUI.SetNextControlName("SliderInputField_" + label);
+            GUI.SetNextControlName(fieldName);
             string newInput = GUILayout.TextField(inputText, TextFieldStyle,
                 GUILayout.Width(fieldWidth),
                 GUILayout.Height(36)); // 文本输入框的实际高度
@@ -609,7 +615,7 @@ namespace ADOFAIMacro
             GUILayout.EndVertical();
 
             // 焦点管理（保持不变）
-            if (GUI.GetNameOfFocusedControl() == "SliderInputField_" + label)
+            if (GUI.GetNameOfFocusedControl() == fieldName)
             {
                 if (!isFocused)
                 {
@@ -640,26 +646,30 @@ namespace ADOFAIMacro
         }
         /// <summary>
         /// Material 3 风格的 SelectionGrid
+        /// 注意：xCount 现在真正生效（按 xCount 个一行换行）。旧实现忽略 xCount，
+        /// 把所有项塞进单行 —— 配置(Profiles)超过 4 个时选项会挤成一团。
         /// </summary>
         public static int M3SelectionGrid(int selected, string[] texts, int xCount, params GUILayoutOption[] options)
         {
             int newSelected = selected;
             var styles = _selGridStyles!;
 
-            GUILayout.BeginHorizontal();
+            if (xCount < 1 || xCount > texts.Length) xCount = texts.Length;
+            if (xCount < 1) return newSelected;
 
-            for (int i = 0; i < texts.Length; i++)
+            for (int start = 0; start < texts.Length; start += xCount)
             {
-                GUIStyle buttonStyle = styles[selected == i ? 1 : 0, i == 0 ? 1 : 0, i == texts.Length - 1 ? 1 : 0];
-
-                // 让按钮平分宽度
-                if (GUILayout.Button(texts[i], buttonStyle, GUILayout.ExpandWidth(true)))
+                int end = Math.Min(start + xCount, texts.Length);
+                GUILayout.BeginHorizontal();
+                for (int i = start; i < end; i++)
                 {
-                    newSelected = i;
+                    // 圆角只给整行/整表的首尾（单选行内不再单独修圆角，视觉与旧版一致）
+                    GUIStyle buttonStyle = styles[selected == i ? 1 : 0, i == 0 ? 1 : 0, i == texts.Length - 1 ? 1 : 0];
+                    if (GUILayout.Button(texts[i], buttonStyle, GUILayout.ExpandWidth(true)))
+                        newSelected = i;
                 }
+                GUILayout.EndHorizontal();
             }
-
-            GUILayout.EndHorizontal();
 
             return newSelected;
         }

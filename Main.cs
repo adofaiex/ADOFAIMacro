@@ -1,4 +1,4 @@
-﻿using ADOFAIMacro.Macro;
+using ADOFAIMacro.Macro;
 using HarmonyLib;
 using SA.GoogleDoc;
 using System;
@@ -124,13 +124,23 @@ namespace ADOFAIMacro
                     Mod?.Logger.Error("Detected BaseMacro, which is incompatible. Exiting...");
                     Application.Quit();
                 }
-                if (IsDebugAssembly())
+                // ⚠️ 绝不可改写 Mod.Info.Version：上面的防篡改校验拿它与硬编码的
+                // "1.3.0" 比对。IsBeta 由程序集 Revision 决定（当前 AssemblyVersion
+                // 1.3.0.30 → Revision=30 → IsBeta 恒为真），旧实现每次启用都追加
+                // "\nBeta30"，导致【关闭再启用】时校验失败 → Application.Quit()，
+                // 用户却看到"Info.json 被修改"的误报。
+                // Beta / 调试后缀只在 UI 展示层拼接（见 Settings.UiVersionText）。
+                if (IsDebugAssembly() && Mod?.Info.DisplayName?.Contains("(Debug)") == false)
                     Mod?.Info.DisplayName += " <color=grey>(Debug)</color>";
-                if (Settings.IsBeta)
-                    Mod?.Info.Version += $"\nBeta{Settings.BetaVersion}";
 
                 IsEnabled = true;
                 Harmony?.PatchAll(Assembly.GetExecutingAssembly());
+
+                // 关闭模组时 OnToggle(false) 会 FreeLibrary 手法模拟 DLL；再次启用必须
+                // 重载，否则手法模拟在本次游戏会话内永久失效（IsDllLoaded() 恒 false，
+                // Release 面板还会据此强制关闭"启用手法模拟"）。
+                if (!TechniqueSimulator.IsDllLoaded() && !TechniqueSimulator.LoadTechniqueDll())
+                    Mod?.Logger.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
                 if (_uiObject == null)
                 {
                     _uiObject = new GameObject("MacroText");
@@ -144,6 +154,9 @@ namespace ADOFAIMacro
                 IsEnabled = false;
                 Harmony?.UnpatchAll(modEntry.Info.Id);
                 TrySetWindowTitle(null);
+                // 卸载补丁后 Macro.Update 不会再被调用，必须在这里把
+                // requireHolding 交还游戏（否则禁用宏后长按地板判定一直是"不需要按住"）
+                ADOFAIMacro.Macro.Macro.RestoreHoldBehavior();
                 InputSystem.EmergencyStop();
                 TechniqueSimulator.Unload();
             }

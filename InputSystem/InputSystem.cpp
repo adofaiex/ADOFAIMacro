@@ -318,28 +318,25 @@ private:
                 size_t batchCount = 0;
                 batch[batchCount++] = evt;
 
+                // 遇到带延迟的事件时必须【先发批内事件、再发它】，否则该事件会插到
+                // 比它更早入队的批内事件之前，破坏 FIFO 顺序（旧实现在 pop 出来
+                // 的瞬间就发了它，然后才发整批）。
+                KeyEvent deferred;
+                bool hasDeferred = false;
+
                 while (batchCount < BATCH_MAX) {
                     KeyEvent next;
-                    if (!ringBuffer_.pop(next) || next.delayMs > 0) {
-                        // 队列空或遇到延迟事件，停止收集
-                        if (next.delayMs > 0) {
-                            // 将延迟事件重新放回？不能直接放回，这里简单处理：停止收集，延迟事件留在队列中留给下次循环
-                            // 由于我们已经pop了next，需要把它放回队列？但无锁队列不支持回退。
-                            // 更好的做法：如果next.delayMs>0，则停止收集，并将next重新入队？但重新入队可能乱序。
-                            // 简化：遇到延迟事件就停止，本次不处理该延迟事件，让它留在队列中？但我们已pop它，无法留回。
-                            // 因此，我们必须在pop前检查，但无法在不pop的情况下查看。所以只能pop出来再判断。
-                            // 如果next.delayMs>0，我们把它单独处理，不加入batch。
-                            // 这样可以保持顺序。
-                            sendKeyCore(next.keyCode, next.isDown);
-                            updateKeyState(next.keyCode, next.isDown);
-                            ++processedCount_;
-                        }
+                    if (!ringBuffer_.pop(next))
+                        break;                       // 队列空
+                    if (next.delayMs > 0) {
+                        deferred = next;
+                        hasDeferred = true;
                         break;
                     }
                     batch[batchCount++] = next;
                 }
 
-                // 批量发送零延迟事件
+                // 按序发送批内零延迟事件
                 for (size_t i = 0; i < batchCount; ++i) {
                     sendKeyCore(batch[i].keyCode, batch[i].isDown);
                 }
@@ -359,6 +356,13 @@ private:
                 }
 
                 processedCount_ += static_cast<int>(batchCount);
+
+                // 再处理被弹出的延迟事件：顺序上它晚于批内全部事件
+                if (hasDeferred) {
+                    sendKeyCore(deferred.keyCode, deferred.isDown);
+                    updateKeyState(deferred.keyCode, deferred.isDown);
+                    ++processedCount_;
+                }
             }
 
             // 更新近似队列大小（用于外部查询）

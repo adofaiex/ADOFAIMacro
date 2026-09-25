@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -134,14 +134,14 @@ namespace ADOFAIMacro.Macro
 
                 if (!File.Exists(dllPath))
                 {
-                    Console.WriteLine($"[InputSystem] 文件不存在: {dllPath}");
+                    LogDiag($"[InputSystem] 文件不存在: {dllPath}");
                     return false;
                 }
 
                 _hModule = LoadLibrary(dllPath);
                 if (_hModule == IntPtr.Zero)
                 {
-                    Console.WriteLine($"[InputSystem] LoadLibrary 失败，错误码: {Marshal.GetLastWin32Error()}");
+                    LogDiag($"[InputSystem] LoadLibrary 失败，错误码: {Marshal.GetLastWin32Error()}");
                     return false;
                 }
 
@@ -151,7 +151,7 @@ namespace ADOFAIMacro.Macro
 
                 if (InitializeFunc == null || PushKeyEventFunc == null)
                 {
-                    Console.WriteLine("[InputSystem] 缺少必要的导出函数");
+                    LogDiag("[InputSystem] 缺少必要的导出函数");
                     FreeLibrary(_hModule);
                     _hModule = IntPtr.Zero;
                     return false;
@@ -176,7 +176,7 @@ namespace ADOFAIMacro.Macro
                 // C++ 环形缓冲区固定 1024，maxQueueSize 参数已忽略
                 // 传 0 即可，保持向后兼容
                 int result = InitializeFunc(0);
-                Console.WriteLine($"[InputSystem] 初始化结果: {result}");
+                LogDiag($"[InputSystem] 初始化结果: {result}");
 
                 _isInitialized = (result == 0);
                 if (_isInitialized)
@@ -189,7 +189,7 @@ namespace ADOFAIMacro.Macro
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[InputSystem] 初始化异常: {ex.Message}");
+                LogDiag($"[InputSystem] 初始化异常: {ex.Message}");
                 return false;
             }
         }
@@ -199,10 +199,27 @@ namespace ADOFAIMacro.Macro
             IntPtr ptr = GetProcAddress(_hModule, name);
             if (ptr == IntPtr.Zero)
             {
-                Console.WriteLine($"[InputSystem] 找不到函数: {name}");
+                LogDiag($"[InputSystem] 找不到函数: {name}");
                 return null;
             }
             return Marshal.GetDelegateForFunctionPointer<T>(ptr);
+        }
+
+        /// <summary>
+        /// 诊断输出。Unity 的 Windows GUI 进程没有附加 stdout，Console.WriteLine
+        /// 的内容不会出现在任何日志文件里 —— 而这里输出的恰恰是最需要排查的信息
+        /// （DLL 缺失、LoadLibrary 失败、导出函数缺失、模式切换）。统一改走 UMM 日志；
+        /// 模组尚未加载完成时退回 Console。
+        /// </summary>
+        private static void LogDiag(string message)
+        {
+            try
+            {
+                var logger = Main.Mod?.Logger;
+                if (logger != null) logger.Log(message);
+                else Console.WriteLine(message);
+            }
+            catch { /* 日志失败绝不影响初始化流程 */ }
         }
 
         private static void SyncModeFromSettings()
@@ -230,10 +247,10 @@ namespace ADOFAIMacro.Macro
             int result = SetInputModeFunc((int)mode);
             if (result < 0)
             {
-                Console.WriteLine($"[InputSystem] SetInputMode 失败: {result}");
+                LogDiag($"[InputSystem] SetInputMode 失败: {result}");
                 return GetInputMode();
             }
-            Console.WriteLine($"[InputSystem] 模式切换 → 请求={mode}, 实际={((InputMode)result)}");
+            LogDiag($"[InputSystem] 模式切换 → 请求={mode}, 实际={((InputMode)result)}");
             return (InputMode)result;
         }
 

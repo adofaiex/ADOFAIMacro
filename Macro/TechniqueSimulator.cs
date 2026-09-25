@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -360,7 +360,14 @@ namespace ADOFAIMacro.Macro
                 if (_cachedSegments != null && _cachedSegments.Length > 0)
                 {
                     int segSize = Marshal.SizeOf<NativeTechniqueSegment>();
-                    config.Segments = Marshal.AllocCoTaskMem(segSize * _cachedSegments.Length);
+                    int segBytes = segSize * _cachedSegments.Length;
+                    config.Segments = Marshal.AllocCoTaskMem(segBytes);
+                    // 必须先清零：AllocCoTaskMem 返回的是未初始化内存。若下面填充
+                    // 分段时抛异常（例如 AllocBytes OOM），catch 会调用
+                    // FreeNativeConfig，而它会遍历完整的 SegmentCount 并对每个槽位
+                    // 按 hasKeyOverride 判断后 FreeCoTaskMem(未初始化指针) —— 垃圾
+                    // 数据会导致释放野指针、堆损坏或进程崩溃。
+                    Marshal.Copy(new byte[segBytes], 0, config.Segments, segBytes);
                     config.SegmentCount = _cachedSegments.Length;
 
                     for (int i = 0; i < _cachedSegments.Length; i++)

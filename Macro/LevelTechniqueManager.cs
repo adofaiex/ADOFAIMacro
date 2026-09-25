@@ -18,7 +18,6 @@ namespace ADOFAIMacro.Macro
         private const string CONFIG_EXTENSION = ".adofaimacro.json";
         private static string? _lastCheckedLevelPath = null;
         private static readonly Dictionary<string, Settings.TechniqueProfile?> _loadedConfigs = new();
-        private static bool _autoLoadEnabled = true;
 
         /// <summary>
         /// 配置状态版本号：加载/保存/删除/关卡切换时递增。
@@ -52,7 +51,9 @@ namespace ADOFAIMacro.Macro
                 _lastCheckedLevelPath = levelPath;
                 CacheVersion++;
 
-                if (_autoLoadEnabled)
+                // 单一事实来源：直接读 Settings 的开关。旧实现在这里维护了一份独立的
+                // _autoLoadEnabled + 从未被任何地方调用的 SetAutoLoad()，两处状态可能不一致。
+                if (Main.Settings.LevelConfigAutoLoad)
                 {
                     LoadConfigForLevel(levelPath);
                 }
@@ -95,6 +96,7 @@ namespace ADOFAIMacro.Macro
 
                 if (config != null)
                 {
+                    SanitizeConfig(config);
                     _loadedConfigs[levelPath] = config;
                     Macro.Log($"[LevelTechnique] 已加载关卡配置: {config.name} ({config.techniqueSegments?.Count ?? 0} 个分段)");
                 }
@@ -145,8 +147,9 @@ namespace ADOFAIMacro.Macro
             }
             else
             {
-                // 更新当前选中的配置
-                var current = settings.TechniqueProfiles[settings.SelectedTechniqueProfileIndex];
+                // 更新当前选中的配置（用安全访问器：持久化索引可能越界）
+                var current = settings.CurrentTechniqueProfile;
+                if (current == null) return;
                 current.leftHandKeys = config.leftHandKeys;
                 current.rightHandKeys = config.rightHandKeys;
                 current.leftHandOrders = config.leftHandOrders;
@@ -162,6 +165,22 @@ namespace ADOFAIMacro.Macro
                     current.techniqueSegments = CloneTechniqueSegments(config.techniqueSegments);
                 }
                 // 如果配置文件没有分段（null），保持当前分段不变
+            }
+        }
+
+        /// <summary>
+        /// 夹紧来自磁盘的配置值。`*.adofaimacro.json` 允许被手工编辑，
+        /// 而 bpmLimit ≤ 0 会让时间片折算陷入死循环（见 Macro.GetAdviceBpm 与
+        /// C++ GetAdviceBpm 的折叠循环），必须在进入算法前拦掉。
+        /// 面板滑条本身的量程就是 [50, 2000]，这里保持一致。
+        /// </summary>
+        private static void SanitizeConfig(Settings.TechniqueProfile config)
+        {
+            if (config.techniqueSegments == null) return;
+            foreach (var seg in config.techniqueSegments)
+            {
+                if (seg.bpmLimit < 50f) seg.bpmLimit = 50f;
+                else if (seg.bpmLimit > 2000f) seg.bpmLimit = 2000f;
             }
         }
 
@@ -201,7 +220,12 @@ namespace ADOFAIMacro.Macro
             try
             {
                 var settings = Main.Settings;
-                var currentProfile = settings.TechniqueProfiles[settings.SelectedTechniqueProfileIndex];
+                var currentProfile = settings.CurrentTechniqueProfile;
+                if (currentProfile == null)
+                {
+                    Macro.Log("[LevelTechnique] 没有可用的手法配置，无法保存关卡配置");
+                    return false;
+                }
                 var profile = new Settings.TechniqueProfile
                 {
                     name = customName ?? $"关卡配置 - {Path.GetFileNameWithoutExtension(levelPath)}",
@@ -283,27 +307,32 @@ namespace ADOFAIMacro.Macro
         }
 
         /// <summary>
-        /// 启用/禁用自动加载
-        /// </summary>
-        public static void SetAutoLoad(bool enabled)
-        {
-            _autoLoadEnabled = enabled;
-        }
-
-        /// <summary>
-        /// 强制重新加载当前关卡配置
+        /// 强制重新加载当前关卡配置（面板「加载」按钮）。
+        /// 注意：不能只依赖 _lastCheckedLevelPath —— 关闭"自动从关卡目录加载"后
+        /// CheckAndLoadLevelConfig 不会被调用，该字段恒为 null，旧实现在这种情况下
+        /// 整个方法直接空转（按钮点了没反应），且即便加载成功 GetCurrentLevelConfig()
+        /// 也因路径未记录而返回 null，配置根本不会生效。
         /// </summary>
         public static void ReloadCurrentLevelConfig()
         {
-            if (!string.IsNullOrEmpty(_lastCheckedLevelPath))
-            {
-                _loadedConfigs.Remove(_lastCheckedLevelPath!); // _lastCheckedLevelPath 已检查过非 null
-                LoadConfigForLevel(_lastCheckedLevelPath!);
+            string? levelPath = !string.IsNullOrEmpty(_lastCheckedLevelPath)
+                ? _lastCheckedLevelPath
+                : ADOBase.levelPath;
 
-                // 手动加载也应用到 Settings，让用户能在 UI 中看到配置项
-                if (_loadedConfigs.TryGetValue(_lastCheckedLevelPath!, out var config) && config != null)
-                    ApplyConfigToSettings(config);
+            if (string.IsNullOrEmpty(levelPath) || !File.Exists(levelPath))
+            {
+                Macro.Log("[LevelTechnique] 无法加载配置：没有有效的关卡路径");
+                return;
             }
+
+            _lastCheckedLevelPath = levelPath;
+            CacheVersion++;
+            _loadedConfigs.Remove(levelPath!);
+            LoadConfigForLevel(levelPath!);
+
+            // 手动加载也应用到 Settings，让用户能在 UI 中看到配置项
+            if (_loadedConfigs.TryGetValue(levelPath!, out var config) && config != null)
+                ApplyConfigToSettings(config);
         }
 
         /// <summary>

@@ -171,6 +171,9 @@ namespace ADOFAIMacro.Macro
 
         // 快路径指示：存在任何未过期配额时才进锁检查（HookCallback 每个真实按键都过一遍）
         private static volatile int _mirrorQuotaActive;
+        // 未消耗的镜像配额总数（MirrorLock 保护）。归零时必须把 _mirrorQuotaActive
+        // 关掉，否则"快路径"在首次使用后永久失效，每个真实按键都要抢一次锁。
+        private static int _mirrorQuotaOutstanding;
 
         // 诊断计数（Interlocked，[Macro-Mirror] 每 3s 输出一次）：
         // 回声已丢 > 0 说明注入确实穿过了 OS 输入流（LL 钩子看见了），
@@ -198,6 +201,7 @@ namespace ADOFAIMacro.Macro
                 int idx = keyCode;
                 _mirrorEchoExpire[idx] = Environment.TickCount + MirrorEchoTimeoutMs;
                 if (isDown) _mirrorEchoDown[idx]++; else _mirrorEchoUp[idx]++;
+                _mirrorQuotaOutstanding++;
                 _mirrorQuotaActive = 1;
             }
 
@@ -242,6 +246,7 @@ namespace ADOFAIMacro.Macro
                     Environment.TickCount - _mirrorEchoExpire[idx] > 0)
                 {
                     // 超时：回声没来（钩子未运行/被系统吃掉），清配额防误吞真实按键
+                    _mirrorQuotaOutstanding -= _mirrorEchoDown[idx] + _mirrorEchoUp[idx];
                     _mirrorEchoDown[idx] = 0;
                     _mirrorEchoUp[idx] = 0;
                     _mirrorEchoExpire[idx] = 0;
@@ -251,6 +256,12 @@ namespace ADOFAIMacro.Macro
                 if (counts[idx] > 0)
                 {
                     counts[idx]--;
+                    if (--_mirrorQuotaOutstanding <= 0)
+                    {
+                        // 已无待消耗配额 → 关闭快路径，后续真实按键零开销
+                        _mirrorQuotaOutstanding = 0;
+                        _mirrorQuotaActive = 0;
+                    }
                     System.Threading.Interlocked.Increment(ref _mirrorStatEcho);
                     FlushMirrorStats();
                     return true;

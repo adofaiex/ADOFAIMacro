@@ -1,4 +1,4 @@
-﻿using ADOFAIMacro.Macro;
+using ADOFAIMacro.Macro;
 using ADOFAIMacro.Platform;
 using HarmonyLib;
 using SkyHook;
@@ -18,6 +18,11 @@ namespace ADOFAIMacro
         private static string _lastFilteredKeysString = "";
         private static int _lastFilterMode = 0;
         private static bool _lastEnableFilter = false;
+
+        // [Macro-Judge] 低频诊断状态（主线程：AddHit postfix 专用）
+        private static double _judgeLogSum;
+        private static int _judgeLogCount;
+        private static int _judgeLogLastMs;
 
         // 异步按键缓存状态（独立，不共享）
         private static bool[] _asyncKeyFilterMap; // 索引 = VK code (0-255), true=在列表中
@@ -115,9 +120,15 @@ namespace ADOFAIMacro
             {
                 if (Main.Settings.EnableDeathKey && Main.IsEnabled && Main.Settings.Macro)
                 {
-                    ADOBase.controller?.StartCoroutine(DelayedSendDeathKey());
-                    ADOBase.editor?.StartCoroutine(DelayedSendDeathKey());
-                    ADOBase.customLevel?.StartCoroutine(DelayedSendDeathKey());
+                    // 旧实现在 controller / editor / customLevel 上各启一个协程，
+                    // 多个对象同时存在时会把同一个死亡键按下 2~3 次（重复触发）。
+                    // 只挑第一个可用宿主启一个协程；且用 Unity 重载的 != null
+                    // 判断（?. 走的是引用判空，已销毁对象会漏过并抛 MissingReferenceException）。
+                    MonoBehaviour host = ADOBase.controller != null ? ADOBase.controller
+                        : ADOBase.editor != null ? ADOBase.editor
+                        : ADOBase.customLevel;
+                    if (host != null)
+                        host.StartCoroutine(DelayedSendDeathKey());
                 }
             }
 
@@ -218,14 +229,15 @@ namespace ADOFAIMacro
                     var conductor = scrConductor.instance;
                     if (conductor == null) return;
 
-                    // 与游戏 AddHit 内部完全相同的换算
-                    float deg = angleDiff * -57.29578f;
+                    // 2026-09 游戏 API 变更：AddHit 现在把自身参数【原地】换算成毫秒误差
+                    //   angleDiff = angleDiff * -57.29578f;          // 弧度 → 度
+                    //   angleDiff = angleDiff * (60.0 / boundary);   // 度 → ms
+                    // Harmony 的 postfix 读到的是【改写后】的实参（已用 0Harmony 实测确认：
+                    // 被 starg.s 改写的参数，postfix 看到的是新值），因此这里直接取用即可。
+                    // 旧实现又乘一次 -57.29578 与 60/boundary，把量纲放大 50~115 倍并翻转
+                    // 符号 → 每个样本饱和到 ±40ms → 闭环校准被推向 ±60ms 轨道。
+                    float errMs = angleDiff;
                     float? spd = (hitFloor ?? planet?.player?.currFloor?.prevfloor)?.speed;
-                    double bpmTimesSpeed = conductor.bpm * (spd ?? 1f);
-                    double boundary = scrMisc.GetAdjustedAngleBoundaryInDeg(
-                        HitMarginGeneral.Counted, bpmTimesSpeed, conductor.song.pitch, marginScale);
-                    if (boundary <= 0) return;
-                    float errMs = deg * (float)(60.0 / boundary);
 
                     int floorId = hitFloor != null ? hitFloor.seqID
                         : planet?.player?.currFloor?.seqID ?? -1;
@@ -234,9 +246,23 @@ namespace ADOFAIMacro
                     // 方案7：闭环校准——把实测判定误差喂给宏
                     ADOFAIMacro.Macro.Macro.RecordJudgedError(errMs, (float)(spd ?? 1f));
 
-                    Main.Mod?.Logger.Log(
-                        $"[Macro-Judge] floor={floorId} err={errMs:+0.0;-0.0}ms " +
-                        $"spdUsed={spd ?? 1f:F2} spdNow={nowSpeed:F2} marginScale={marginScale:F2}");
+                    // ⚠️ 这里在"每一次判定"上执行。旧实现无条件写一行 UMM 日志：
+                    // 高密度谱面每局数千次文件 I/O，是主线程卡顿与日志膨胀的来源。
+                    // 改为低频诊断（≥1s 一行，带窗口内样本数与均值），
+                    // 与 Macro 中 [Macro-Diag] 的既有做法保持一致。
+                    _judgeLogSum += errMs;
+                    _judgeLogCount++;
+                    int nowMs = Environment.TickCount;
+                    if (unchecked(nowMs - _judgeLogLastMs) >= 1000)
+                    {
+                        double avg = _judgeLogCount > 0 ? _judgeLogSum / _judgeLogCount : 0.0;
+                        Main.Mod?.Logger.Log(
+                            $"[Macro-Judge] 近1s {_judgeLogCount} 次判定 | 平均误差 {avg:+0.00;-0.00}ms | " +
+                            $"最近 floor={floorId} err={errMs:+0.0;-0.0}ms spdUsed={spd ?? 1f:F2} spdNow={nowSpeed:F2} marginScale={marginScale:F2}");
+                        _judgeLogSum = 0;
+                        _judgeLogCount = 0;
+                        _judgeLogLastMs = nowMs;
+                    }
                 }
                 catch { }
             }
@@ -409,56 +435,65 @@ namespace ADOFAIMacro
         }
 
         // 修改 CountValidKeysPressed 补丁添加黑白名单逻辑
+        //
+        // ⚠️ 旧实现用 Prefix 返回 false 整体替换了原方法，只重算按键数，
+        // 结果丢掉了原方法的一堆副作用（反编译 Steam 版 Assembly-CSharp 逐条核对）：
+        //   ① 触屏输入计数分支（touchEnabled / Switch）
+        //   ② 联机分支（coopMode → RDInput.playerInputs[playerID]）
+        //   ③ downKeysDuration 字典维护（含 0.5s 剪枝、keyLimiterOverCounter 超限计数）
+        //   ④ scrController.maximumUsedKeys 更新
+        //   ⑤ 仅在 States.PlayerControl 状态下才做记账
+        // 这些状态被游戏其它逻辑读取，宏开启期间一直不更新会造成隐藏的行为差异；
+        // 而且旧实现对 ADOBase.controller?.chosenPlanet?.player 直接解引用（NRE 风险）。
+        //
+        // 现在改为：Prefix 只统计"当前按下的键里有多少被过滤"，Postfix 从原方法
+        // 的结果里减掉。过滤仍然生效，原方法的全部副作用原样保留。
         [HarmonyPatch(typeof(scrPlayer), "CountValidKeysPressed")]
         public static class scrPlayer_CountValidKeysPressed_Patch
         {
+            [ThreadStatic]
+            private static int _blockedKeyCount;
+
             [HarmonyPrefix]
-            public static bool Prefix(ref int __result)
+            public static void Prefix()
             {
-                __result = CountValidKeysPressed();
-                return false;
-            }
+                _blockedKeyCount = 0;
 
-            private static int CountValidKeysPressed()
-            {
-                int num = 0;
-                scrPlayer instance = ADOBase.controller?.chosenPlanet?.player;
-                instance.keyLimiterOverCounter = 0;
+                if (!Main.IsEnabled || !Main.Settings.Macro || !Main.Settings.EnableKeyFilter)
+                    return;
 
-                foreach (AnyKeyCode anyKeyCode in RDInput.GetMainPressKeys())
+                try
                 {
-                    object value = anyKeyCode.value;
-                    if (value is KeyCode keyCode)
+                    foreach (AnyKeyCode anyKeyCode in RDInput.GetMainPressKeys())
                     {
-                        instance.keyFrequency[keyCode] = instance.keyFrequency.TryGetValue(keyCode, out int freq) ? freq + 1 : 0;
-                        instance.keyTotal++;
-
-                        // 黑白名单过滤
-                        if (IsKeyAllowed(keyCode))
+                        object value = anyKeyCode.value;
+                        if (value is KeyCode keyCode)
                         {
-                            num++;
+                            if (!IsKeyAllowed(keyCode))
+                            {
+                                _blockedKeyCount++;
+                                Macro.Macro.Log($"Filtered Key: {keyCode} ({(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")})");
+                            }
                         }
-                        else
+                        else if (value is AsyncKeyCode asyncKeyCode)
                         {
-                            Macro.Macro.Log($"Filtered Key: {keyCode} ({(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")})");
-                        }
-                    }
-                    else if (value is AsyncKeyCode asyncKeyCode)
-                    {
-                        instance.keyFrequency[asyncKeyCode] = instance.keyFrequency.TryGetValue(asyncKeyCode, out int asyncFreq) ? asyncFreq + 1 : 0;
-                        instance.keyTotal++;
-
-                        if (IsAsyncKeyAllowed(asyncKeyCode.key))  // 小写 key
-                        {
-                            num++;
-                        }
-                        else
-                        {
-                            Macro.Macro.Log($"Filtered Async Key in CountValidKeysPressed: {asyncKeyCode.key} (0x{asyncKeyCode.key:X2})");
+                            if (!IsAsyncKeyAllowed(asyncKeyCode.key))  // 小写 key
+                            {
+                                _blockedKeyCount++;
+                                Macro.Macro.Log($"Filtered Async Key in CountValidKeysPressed: {asyncKeyCode.key} (0x{asyncKeyCode.key:X2})");
+                            }
                         }
                     }
                 }
-                return num;
+                catch { _blockedKeyCount = 0; }
+            }
+
+            [HarmonyPostfix]
+            public static void Postfix(ref int __result)
+            {
+                if (_blockedKeyCount > 0)
+                    __result = Math.Max(0, __result - _blockedKeyCount);
+                _blockedKeyCount = 0;
             }
         }
 

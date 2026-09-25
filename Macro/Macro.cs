@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -49,7 +49,6 @@ namespace ADOFAIMacro.Macro
         private static string lastKeysSetting = "";
         // Immutable snapshot - updated atomically, read without lock
         private static volatile byte[] _keyCodesSnapshot = [];
-        private static volatile int _keyCodesVersion = 0;
 
         // ─────────────────────────────────────────────
         //  只读共享数据（初始化后不变）
@@ -57,6 +56,9 @@ namespace ADOFAIMacro.Macro
         private static HitEvent[]? _hitEvents;
         private static int _hitEventCount;
         private static int floorCount;
+        // 初始化时所属关卡路径：仅靠地板数量判断是否需要重建会在"两张谱面地板数
+        // 相同"时漏判，导致沿用错误的时间表。Reset() 通常会兜住，但这里更稳。
+        private static string? _initializedLevelPath;
 
         // ─────────────────────────────────────────────
         //  预分配对象池（减少 GC 压力）
@@ -392,6 +394,8 @@ namespace ADOFAIMacro.Macro
                 ADOBase.sceneName == GCNS.sceneLevelSelect)
             {
                 StopWorkerIfNeeded();
+                // 宏关闭时把 requireHolding 交还游戏（幂等，单次字段写入）
+                if (!settings.Macro) RestoreHoldBehavior();
                 return;
             }
 
@@ -421,10 +425,20 @@ namespace ADOFAIMacro.Macro
                 if (!initialized) return;
             }
 
+            // 先无条件取走积压计数：失焦时命中不能留在计数器里。
+            // 工作线程在 SimulateKeyPress=false 路径不做焦点判断，失焦期间会持续累加，
+            // 回到前台时旧实现会在单帧内把数百次 Hit() 一次性灌进游戏（洪峰）。
+            int pendingHits = Interlocked.Exchange(ref _workerNeedsHit, 0);
             if (!Main.Settings.BlockInputWhenUnfocused || IsGameWindowFocused())
             {
-                int hitCount = Interlocked.Exchange(ref _workerNeedsHit, 0);
-                for (int h = 0; h < hitCount; h++) controller.chosenPlanet.player!.Hit(false);
+                scrPlanet? hitPlanet = controller.chosenPlanet;
+                scrPlayer? hitPlayer = hitPlanet != null ? hitPlanet.player : null;
+                if (hitPlayer != null)
+                {
+                    // 2026-09 游戏 API：Hit(long? hitTick, bool isAuto)。
+                    // 与游戏 scrPlayer.Die 内部同款调用：无输入事件(null)、非自动命中。
+                    for (int h = 0; h < pendingHits; h++) hitPlayer.Hit(null, false);
+                }
             }
 
             // 方案8：游玩期 GC 抑制（每次进关尝试，失败自动回退）
@@ -863,6 +877,7 @@ namespace ADOFAIMacro.Macro
 
             cachedFloors = [.. levelMaker.listFloors];
             floorCount = cachedFloors.Length;
+            _initializedLevelPath = ADOBase.levelPath;
             conductor = scrConductor.instance;
 
             ParseKeyCodes();
@@ -956,7 +971,9 @@ namespace ADOFAIMacro.Macro
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool NeedReinitialize() => levelMaker?.listFloors.Count != floorCount;
+        private static bool NeedReinitialize() =>
+            levelMaker?.listFloors.Count != floorCount ||
+            !string.Equals(ADOBase.levelPath, _initializedLevelPath, StringComparison.Ordinal);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ParseKeyCodes()
@@ -981,7 +998,6 @@ namespace ADOFAIMacro.Macro
             if (newList.Count == 0) newList.Add(0x4A);
             var newArray = newList.ToArray();
             System.Threading.Interlocked.Exchange(ref _keyCodesSnapshot, newArray);
-            System.Threading.Volatile.Write(ref _keyCodesVersion, _keyCodesVersion + 1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -990,6 +1006,26 @@ namespace ADOFAIMacro.Macro
             if (controller == null || !Main.Settings.Macro) return;
             bool simulate = Main.Settings.SimulateKeyPress;
             controller.requireHolding = simulate && Persistence.holdBehavior < HoldBehavior.NoHoldNeeded;
+        }
+
+        /// <summary>
+        /// 把 requireHolding 还给游戏自身语义。
+        /// 游戏在 scrController.SetupImportantVariables（进关）与 UpdateSetting（改设置）
+        /// 里都写入 `Persistence.holdBehavior &lt; HoldBehavior.NoHoldNeeded`；
+        /// 而 ApplyHoldBehavior 在"直接判定"模式下会把它强制为 false。
+        /// 旧实现关闭宏时从不还原 —— 后果是长按地板在整个关卡里一直保持
+        /// "不需要按住"，与玩家设置的长按判定不符，直到下次进关或改设置。
+        /// </summary>
+        internal static void RestoreHoldBehavior()
+        {
+            var controller = ADOBase.controller;
+            if (controller == null) return;
+            try
+            {
+                bool gameValue = Persistence.holdBehavior < HoldBehavior.NoHoldNeeded;
+                if (controller.requireHolding != gameValue) controller.requireHolding = gameValue;
+            }
+            catch { }
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -1067,7 +1103,13 @@ namespace ADOFAIMacro.Macro
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static double GetAdviceBpm(double limit)
         {
-            double bpm = (double)(conductor!.bpm * ADOBase.controller.playerOne.planetarySystem.speed);
+            // 防御死循环：limit ≤ 0 时下面第二个折叠循环 `bpm <= limit/2` 恒真
+            // （bpm 被反复乘 2 仍是 0）；speed 缺失（controller 未就绪）时 bpm 折叠到 0
+            // 同样死循环。关卡配置是磁盘上的 JSON，bpmLimit 可能被手工改成 0 或负数。
+            if (limit <= 0.0) limit = 500.0;
+            double speed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 0.0;
+            double bpm = (double)(conductor!.bpm * speed);
+            if (bpm <= 0.0) return limit;
             while (bpm > limit) bpm /= 2.0;
             while (bpm <= limit / 2.0) bpm *= 2.0;
             return bpm;
@@ -1206,8 +1248,8 @@ namespace ADOFAIMacro.Macro
                     }
                     else
                     {
-                        var currentProfile = Main.Settings.TechniqueProfiles[Main.Settings.SelectedTechniqueProfileIndex];
-                        segments = currentProfile.techniqueSegments.ToArray();
+                        var currentProfile = Main.Settings.CurrentTechniqueProfile;
+                        segments = currentProfile?.techniqueSegments?.ToArray() ?? [];
                         handPref = Main.Settings.TechniqueHandPreference;
                     }
 
@@ -1238,7 +1280,15 @@ namespace ADOFAIMacro.Macro
             }
 
 #if DEBUG
+            // Debug 构建保留 C# 复刻实现作为回退
             BuildCSHarpTechniqueHitEvents();
+#else
+            // Release 没有 C# 回退：原生路径失败时必须显式清空事件表。
+            // 否则 _hitEvents 仍是上一张谱面的数组，而 Initialize() 依旧会置
+            // initialized=true 并发布锚点 → 工作线程按旧谱时间戳乱按键。
+            _hitEvents = [];
+            _hitEventCount = 0;
+            Main.Mod?.Logger.Log("[Macro-Main] C++ 手法模拟未产出事件，事件表已清空（Release 无 C# 回退）");
 #endif
         }
 
@@ -1632,6 +1682,7 @@ namespace ADOFAIMacro.Macro
             cachedFloors = null;
             levelMaker = null;
             conductor = null;
+            _initializedLevelPath = null;
 
             Volatile.Write(ref _workerLastTriggeredFloor, -1);
             Interlocked.Exchange(ref _workerNeedsHit, 0);
@@ -1664,6 +1715,8 @@ namespace ADOFAIMacro.Macro
 
             if (_workerThread != null)
             {
+                // 必须无界等待上一位 worker 真正退出后再置 null 并新建：若这里改成
+                // 带超时并直接 null，就会有两个 WorkerLoop 并发发按键（重复触发）。
                 _workerThread.Join();
                 _workerThread = null;
             }
@@ -1694,7 +1747,9 @@ namespace ADOFAIMacro.Macro
                 catch (SemaphoreFullException) { }
             }
 
-            _workerThread?.Join(500);
+            // 有界等待：worker 最多在 Sleep(1) 循环里待约 50ms 就会看到 _workerRunning=false
+            if (_workerThread != null && !_workerThread.Join(500))
+                Log("[Macro-Main] 工作线程 500ms 内未退出，交由下一次 EnsureWorkerRunning 回收");
 
             if (skyHookInitialized)
             {
