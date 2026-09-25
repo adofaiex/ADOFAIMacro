@@ -1321,10 +1321,12 @@ namespace ADOFAIMacro.Macro
                     if (cur > longest) longest = cur;
                 }
 
-                Log($"[Macro-Tech] 手法表: 按下={presses} 换手={turns} 单音碎块={frag} 最长连击={longest} " +
+                // 注意：Macro.Log 目前是硬编码空实现（logToMod=false），诊断必须
+                // 直接走 UMM logger，否则日志里看不到。
+                Main.Mod?.Logger.Log($"[Macro-Tech] 手法表: 按下={presses} 换手={turns} 单音碎块={frag} 最长连击={longest} " +
                     $"左键={leftUsed} 右键={rightUsed} | 速度倍率 {smin:F2}~{smax:F2} | 拍号BPM={conductor?.bpm:F1}");
             }
-            catch (Exception ex) { Log($"[Macro-Tech] 摘要失败: {ex.Message}"); }
+            catch (Exception ex) { Main.Mod?.Logger.Log($"[Macro-Tech] 摘要失败: {ex.Message}"); }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
