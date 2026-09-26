@@ -1,51 +1,142 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SDK 风格项目文件（由旧式 ToolsVersion="15.0" 格式迁移而来）。
+
+    与旧式格式的差异，以及为什么这样处理：
+      · 目标框架从 <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
+        改为 <TargetFramework>net481</TargetFramework>（等价）。
+      · 源文件不再逐个 <Compile Include>，改由 SDK 的默认通配 **/*.cs 自动
+        包含 —— 新增文件不用再回来改这里。
+      · NuGet 依赖从 packages.config 改为 PackageReference。包会落到全局缓存，
+        不再需要仓库里携带 packages\ 目录。
+      · 程序集元数据（版本 / Guid / ComVisible）从 Properties\AssemblyInfo.cs
+        移到这里，并由 <GenerateAssemblyInfo> 统一生成 —— 删掉
+        AssemblyInfo.cs 避免特性重复定义。
+  -->
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{FFA98501-98B6-4A7F-9A1A-95FBD0AA8E87}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>ADOFAIMacro</RootNamespace>
+    <TargetFramework>net481</TargetFramework>
     <AssemblyName>ADOFAIMacro</AssemblyName>
-    <LangVersion>latest</LangVersion>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
+    <RootNamespace>ADOFAIMacro</RootNamespace>
+    <OutputType>Library</OutputType>
     <Deterministic>true</Deterministic>
-    <TargetFrameworkProfile />
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <!-- 保持与旧式项目一致的可空性语义：源码未做全面可空注解，
+         开启 <Nullable>enable</Nullable> 会产生成百上千条与功能无关的警告。
+         拆分阶段不混入这类行为变更。 -->
+    <Nullable>disable</Nullable>
+    <WarningLevel>4</WarningLevel>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <!--
+      旧式格式逐个 <Compile Include>，天然不会扫到 obj\；SDK 默认的 **\*.cs
+      通配会把 obj\ 下自己生成的 AssemblyInfo / AssemblyAttributes 也当源码收进来，
+      导致 "特性重复 CS0579"。这里把中间目录移出默认项，改由下面的显式
+      Compile ItemGroup 接管。
+    -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**;Backup\**</DefaultItemExcludes>
+    <!-- 上面把 obj\bin 移出默认项还不够：只要默认 Compile 项仍开着，
+         显式列出的文件就会被收两遍（NETSDK1022）。彻底关掉默认项，
+         源文件完全由下面的显式清单决定。 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- 未使用字段在 mod 里普遍存在（回退路径、平台分支），不因它噪声淹没真问题 -->
+    <NoWarn>$(NoWarn);CS0169;CS0414;CS0649</NoWarn>
   </PropertyGroup>
+
+  <!--
+    显式源文件清单：仍按目录分组，保留旧式项目里可读的分类结构。
+    拆分类文件时会同步更新这里。
+  -->
+  <ItemGroup Label="入口与全局">
+    <Compile Include="Main.cs" />
+    <Compile Include="Settings.cs" />
+    <Compile Include="UIUtils.cs" />
+    <Compile Include="Patches.cs" />
+    <Compile Include="ShowText.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="宏核心">
+    <Compile Include="Macro\Macro.cs" />
+    <Compile Include="Macro\Macro.Diagnostics.cs" />
+    <Compile Include="Macro\TechniqueSimulator.cs" />
+    <Compile Include="Macro\LevelTechniqueManager.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="输入">
+    <Compile Include="Macro\InputSystem.cs" />
+    <Compile Include="Macro\VirtualAsyncInput.cs" />
+    <Compile Include="Macro\AsyncInputManager.cs" />
+    <Compile Include="Macro\KeyMap.cs" />
+    <Compile Include="Macro\SkyHookSystem.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="计时与平台">
+    <Compile Include="Macro\PreciseNow.cs" />
+    <Compile Include="Macro\DSPTimeSimulater.cs" />
+    <Compile Include="Platform\BaseSelect.cs" />
+    <Compile Include="Platform\Windows.cs" />
+    <Compile Include="Platform\Linux.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="本地化">
+    <Compile Include="Localization\LocalizationManager.cs" />
+  </ItemGroup>
+
+  <!-- 程序集元数据：原在 Properties\AssemblyInfo.cs，已并入此处。 -->
   <PropertyGroup>
-    <!-- ADOFAI 游戏 Managed 目录（按本机 Steam 安装位置调整） -->
-    <GameManaged>..\..\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\A Dance of Fire and Ice_Data\Managed</GameManaged>
+    <Product>ADOFAIMacro</Product>
+    <AssemblyVersion>1.3.0.30</AssemblyVersion>
+    <FileVersion>1.3.0.30</FileVersion>
+    <Version>1.3.0.30</Version>
+    <Company></Company>
+    <Description></Description>
+    <Copyright>Copyright ©  2026</Copyright>
+    <NeutralLanguage></NeutralLanguage>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+
+  <PropertyGroup>
+    <!-- ADOFAI 游戏 Managed 目录（按本机 Steam 安装位置调整）。
+         抽成 GameManaged 属性后，Reference 里统一用 $(GameManaged)。 -->
+    <GameManaged>$(MSBuildThisFileDirectory)..\..\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\A Dance of Fire and Ice_Data\Managed</GameManaged>
+  </PropertyGroup>
+
+  <!-- 旧式格式里每个配置各写一份；这里用条件属性组保持同样语义。 -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>preview</LangVersion>
+    <!-- 不带 net481 子目录：旧式项目输出到 bin\<Cfg>\，部署脚本与
+         CopyNativeDlls 目标都按那个路径找 DLL。 -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\Debug\</OutputPath>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>preview</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>
+
+  <!--
+    运行时依赖。System.* 那批用 PackageReference 走 NuGet（不再依赖
+    packages\ 目录）；游戏与 UMM 的程序集仍按 HintPath 引用本机安装位置。
+  -->
   <ItemGroup>
-    <Reference Include="0Harmony">
-      <HintPath>$(GameManaged)\UnityModManager\0Harmony.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.3" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Numerics.Vectors" Version="4.6.1" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+    <PackageReference Include="System.Threading.Channels" Version="10.0.3" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="游戏程序集">
     <Reference Include="Assembly-CSharp">
       <HintPath>$(GameManaged)\Assembly-CSharp.dll</HintPath>
       <Private>True</Private>
@@ -54,72 +145,44 @@
       <HintPath>$(GameManaged)\Assembly-CSharp-firstpass.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.Bcl.AsyncInterfaces.10.0.3\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
-    </Reference>
-    <Reference Include="PresentationFramework" />
     <Reference Include="RDTools">
       <HintPath>$(GameManaged)\RDTools.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(GameManaged)\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="SkyHook.Unity">
       <HintPath>$(GameManaged)\SkyHook.Unity.dll</HintPath>
     </Reference>
-    <Reference Include="System">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Core">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Memory, Version=4.0.5.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Memory.4.6.3\lib\net462\System.Memory.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Numerics" />
-    <Reference Include="System.Numerics.Vectors, Version=4.1.6.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.Numerics.Vectors.4.6.1\lib\net462\System.Numerics.Vectors.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.Runtime.CompilerServices.Unsafe.6.1.2\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Threading.Channels, Version=10.0.0.3, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Threading.Channels.10.0.3\lib\net462\System.Threading.Channels.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.4.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Threading.Tasks.Extensions.4.6.3\lib\net462\System.Threading.Tasks.Extensions.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Xml.Linq">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Data.DataSetExtensions">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Microsoft.CSharp">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Data">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Net.Http">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Xml">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="Unity.TextMeshPro">
       <HintPath>$(GameManaged)\Unity.TextMeshPro.dll</HintPath>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="UnityModManager">
+    <Reference Include="UnityModManager">
+      <HintPath>$(GameManaged)\UnityModManager\UnityModManager.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameManaged)\UnityModManager\0Harmony.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Unity 引擎">
     <Reference Include="UnityEngine">
       <HintPath>$(GameManaged)\UnityEngine.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="UnityEngine.AudioModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>$(GameManaged)\UnityEngine.AudioModule.dll</HintPath>
-    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath>
       <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(GameManaged)\UnityEngine.AudioModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
       <HintPath>$(GameManaged)\UnityEngine.IMGUIModule.dll</HintPath>
@@ -129,60 +192,35 @@
       <HintPath>$(GameManaged)\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="UnityEngine.JSONSerializeModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="UnityEngine.JSONSerializeModule">
       <HintPath>$(GameManaged)\UnityEngine.JSONSerializeModule.dll</HintPath>
     </Reference>
-    <Reference Include="UnityEngine.TextRenderingModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="UnityEngine.TextRenderingModule">
       <HintPath>$(GameManaged)\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="UnityEngine.UI, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>$(GameManaged)\UnityEngine.UI.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.UIModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="UnityEngine.UIModule">
       <HintPath>$(GameManaged)\UnityEngine.UIModule.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>$(GameManaged)\Newtonsoft.Json.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="UnityModManager">
-      <HintPath>$(GameManaged)\UnityModManager\UnityModManager.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameManaged)\UnityEngine.UI.dll</HintPath>
     </Reference>
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Macro\DSPTimeSimulater.cs" />
-    <Compile Include="Macro\AsyncInputManager.cs" />
-    <Compile Include="Macro\InputSystem.cs" />
-    <Compile Include="Macro\KeyMap.cs" />
-    <Compile Include="Macro\LevelTechniqueManager.cs" />
-    <Compile Include="Macro\PreciseNow.cs" />
-    <Compile Include="Macro\TechniqueSimulator.cs" />
-    <Compile Include="Macro\VirtualAsyncInput.cs" />
-    <Compile Include="Platform\BaseSelect.cs" />
-    <Compile Include="Platform\Linux.cs" />
-    <Compile Include="Platform\Windows.cs" />
-    <Compile Include="ShowText.cs" />
-    <Compile Include="Main.cs" />
-    <Compile Include="Patches.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Settings.cs" />
-    <Compile Include="Macro\SkyHookSystem.cs" />
-    <Compile Include="Macro\Macro.cs" />
-    <Compile Include="UIUtils.cs" />
+
+  <ItemGroup Label="BCL">
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="PresentationFramework" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Localization\LocalizationManager.cs" />
-  </ItemGroup>
-  <ItemGroup>
+
+  <ItemGroup Label="内容">
     <Content Include="Localization\zh-CN.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -190,34 +228,33 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- 复制 C++ 项目的 DLL 到输出目录、项目根目录和 out 目录 -->
+
+  <!--
+    复制 C++ 项目的原生 DLL 到输出目录、项目根目录和 out 目录。
+    从旧式格式原样迁移：同样依次尝试三个候选路径，存在哪个复制哪个。
+  -->
   <Target Name="CopyNativeDlls" AfterTargets="Build">
     <PropertyGroup>
-      <!-- 可能的 DLL 位置 -->
-      <_TechSimDll1>$(ProjectDir)x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll1>
-      <_TechSimDll2>$(ProjectDir)x64\TechniqueSimulator.dll</_TechSimDll2>
-      <_TechSimDll3>$(ProjectDir)TechniqueSimulator\x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll3>
-      <_InputSysDll1>$(ProjectDir)x64\$(Configuration)\InputSystem.dll</_InputSysDll1>
-      <_InputSysDll2>$(ProjectDir)x64\InputSystem.dll</_InputSysDll2>
-      <_InputSysDll3>$(ProjectDir)InputSystem\x64\$(Configuration)\InputSystem.dll</_InputSysDll3>
-      <_OutDir>$(ProjectDir)out\$(Configuration)\</_OutDir>
+      <_TechSimDll1>$(MSBuildThisFileDirectory)x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll1>
+      <_TechSimDll2>$(MSBuildThisFileDirectory)x64\TechniqueSimulator.dll</_TechSimDll2>
+      <_TechSimDll3>$(MSBuildThisFileDirectory)TechniqueSimulator\x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll3>
+      <_InputSysDll1>$(MSBuildThisFileDirectory)x64\$(Configuration)\InputSystem.dll</_InputSysDll1>
+      <_InputSysDll2>$(MSBuildThisFileDirectory)x64\InputSystem.dll</_InputSysDll2>
+      <_InputSysDll3>$(MSBuildThisFileDirectory)InputSystem\x64\$(Configuration)\InputSystem.dll</_InputSysDll3>
+      <_OutDir>$(MSBuildThisFileDirectory)out\$(Configuration)\</_OutDir>
     </PropertyGroup>
-    <!-- 复制 TechniqueSimulator.dll -->
     <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll1)')" />
     <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll2)')" />
     <Copy SourceFiles="$(_TechSimDll3)" DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll3)')" />
-    <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(ProjectDir)" Condition="Exists('$(_TechSimDll1)')" />
-    <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(ProjectDir)" Condition="Exists('$(_TechSimDll2)')" />
-    <Copy SourceFiles="$(_TechSimDll3)" DestinationFolder="$(ProjectDir)" Condition="Exists('$(_TechSimDll3)')" />
-    <!-- 复制 InputSystem.dll (尝试多个可能位置) -->
+    <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_TechSimDll1)')" />
+    <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_TechSimDll2)')" />
+    <Copy SourceFiles="$(_TechSimDll3)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_TechSimDll3)')" />
     <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll1)')" />
     <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll2)')" />
     <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll3)')" />
-    <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(ProjectDir)" Condition="Exists('$(_InputSysDll1)')" />
-    <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(ProjectDir)" Condition="Exists('$(_InputSysDll2)')" />
-    <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(ProjectDir)" Condition="Exists('$(_InputSysDll3)')" />
-    <!-- 复制到 out 目录 -->
+    <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_InputSysDll1)')" />
+    <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_InputSysDll2)')" />
+    <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_InputSysDll3)')" />
     <MakeDir Directories="$(_OutDir)" Condition="!Exists('$(_OutDir)')" />
     <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_TechSimDll1)')" />
     <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_TechSimDll2)')" />
@@ -225,12 +262,11 @@
     <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_InputSysDll1)')" />
     <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_InputSysDll2)')" />
     <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_InputSysDll3)')" />
-    <!-- 主程序 DLL 也复制到 out -->
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(_OutDir)" Condition="Exists('$(TargetPath)')" />
-    <Copy SourceFiles="$(ProjectDir)Info.json" DestinationFolder="$(_OutDir)" Condition="Exists('$(ProjectDir)Info.json')" />
-    <!-- Localization 与运行时依赖（与 Release 包布局对齐） -->
-    <Copy SourceFiles="$(ProjectDir)Localization\zh-CN.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(ProjectDir)Localization\zh-CN.json')" />
-    <Copy SourceFiles="$(ProjectDir)Localization\en-US.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(ProjectDir)Localization\en-US.json')" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Info.json" DestinationFolder="$(_OutDir)" Condition="Exists('$(MSBuildThisFileDirectory)Info.json')" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Localization\zh-CN.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(MSBuildThisFileDirectory)Localization\zh-CN.json')" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Localization\en-US.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(MSBuildThisFileDirectory)Localization\en-US.json')" />
     <Copy SourceFiles="$(OutDir)System.Memory.dll" DestinationFolder="$(_OutDir)" Condition="Exists('$(OutDir)System.Memory.dll')" />
   </Target>
+
 </Project>
