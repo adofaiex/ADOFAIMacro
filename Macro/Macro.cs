@@ -991,7 +991,7 @@ namespace ADOFAIMacro.Macro
             {
                 var floor = floors[i];
                 if (floor == null) continue;
-                if ((floor.nextfloor != null && floor.nextfloor.auto)) continue;
+                if (floor.auto) continue;
 
                 // 找"下一块真正要判定的砖"：照抄游戏 scrPlayer.cs:411-415
                 // （跳过中旋再判 holdLength）。中旋自己可以带长按
@@ -1003,7 +1003,7 @@ namespace ADOFAIMacro.Macro
                     var cf = floors[ni];
                     if (cf == null) { ni++; continue; }
                     if (cf.midSpin) { if (cf.holdLength > -1) break; ni++; continue; }
-                    if (cf.nextfloor != null && cf.nextfloor.auto) { ni++; continue; }
+                    if (cf.auto) { ni++; continue; }
                     break;
                 }
 
@@ -1396,7 +1396,7 @@ namespace ADOFAIMacro.Macro
             {
                 var fl = floors[i];
                 if (fl == null) continue;
-                if ((fl.nextfloor?.auto ?? false)) continue;
+                if (fl.auto) continue;
 
                 // ── 找"下一块真正要判定的砖"（照抄游戏 scrPlayer.cs:411-415）──
                 //   scrFloor nextfloor = currFloor.nextfloor;
@@ -1420,7 +1420,7 @@ namespace ADOFAIMacro.Macro
                         if (cf.holdLength > -1) break;
                         ni++; continue;                  // 纯中旋，跳过
                     }
-                    if (cf.nextfloor?.auto ?? false) { ni++; continue; }
+                    if (cf.auto) { ni++; continue; }
                     break;
                 }
 
@@ -1573,7 +1573,7 @@ namespace ADOFAIMacro.Macro
             {
                 var fl = floors[i];
                 if (fl == null) continue;
-                if ((fl.nextfloor?.auto ?? false)) continue;
+                if (fl.auto) continue;
 
                 // 找"下一块真正要判定的砖"：照抄游戏 scrPlayer.cs:411-415
                 // （跳过中旋再判 holdLength）。中旋自己可以带长按
@@ -1585,7 +1585,7 @@ namespace ADOFAIMacro.Macro
                     var cf = floors[ni];
                     if (cf == null) { ni++; continue; }
                     if (cf.midSpin) { if (cf.holdLength > -1) break; ni++; continue; }
-                    if (cf.nextfloor?.auto ?? false) { ni++; continue; }
+                    if (cf.auto) { ni++; continue; }
                     break;
                 }
 
