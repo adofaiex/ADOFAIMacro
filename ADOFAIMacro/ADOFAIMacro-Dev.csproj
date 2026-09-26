@@ -72,7 +72,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Calibration 校准与诊断">
-    <Compile Include="Calibration\Macro.Diagnostics.cs" />
+    <Compile Include="Calibration\Calibration.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Input 输入">
