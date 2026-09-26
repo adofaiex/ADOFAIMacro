@@ -3,7 +3,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="ADOFAIMacro-Dev.csproj" Id="ffa98501-98b6-4a7f-9a1a-95fbd0aa8e87" />
+  <Project Path="ADOFAIMacro/ADOFAIMacro-Dev.csproj" Id="ffa98501-98b6-4a7f-9a1a-95fbd0aa8e87" />
   <Project Path="TechniqueSimulator/TechniqueSimulator.vcxproj" Id="d2773672-eed8-401e-b6cd-e47209325d73" />
   <Project Path="InputSystem/InputSystem.vcxproj" Id="561d1139-83df-4a9b-8c5f-b5a8a723c1b4" />
 </Solution>
