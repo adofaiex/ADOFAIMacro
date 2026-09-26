@@ -19,8 +19,7 @@ static TechniqueConfig g_config;
 //  时间片信息
 // ─────────────────────────────────────────────
 struct PieceInfo {
-    int    evCount;      // 本片覆盖的事件数（含长按尾 press==-1）
-    int    realCount;    // 本片真正要按的键数（长按尾不占键位）
+    int    evCount;
     int    hand;        // 0=左, 1=右
     double pieceLen;
     double startTime;
@@ -28,19 +27,10 @@ struct PieceInfo {
     int    evStart;
     int    multiplier;
 
-    PieceInfo(int ec, int h, double pl, double st, double et, int es, int mult = 0, int rc = -1)
-        : evCount(ec), realCount(rc < 0 ? ec : rc), hand(h), pieceLen(pl),
-          startTime(st), endTime(et), evStart(es), multiplier(mult) {
+    PieceInfo(int ec, int h, double pl, double st, double et, int es, int mult = 0)
+        : evCount(ec), hand(h), pieceLen(pl), startTime(st), endTime(et), evStart(es), multiplier(mult) {
     }
 };
-// 按住时长上下限（秒）。与分片模型无关，是纯物理约束：
-//   下限 20ms —— 人手能做出的最短点按，低于此值判定窗口会消失；
-//   上限 120ms —— 参照 ADOFAI_Macro_for_Publish 的 MaxPressSpeed
-//                 （BPM_to_Time(MinPressBPM=500) = 0.12s）。
-// 慢速段（speed 很小）片长会很长，按片几何算出来的松键能到几百毫秒甚至
-// 几秒，人手不会那么按着，所以要封顶。
-static const double MinPressSeconds = 0.02;
-static const double MaxPressSeconds = 0.12;
 
 // ─────────────────────────────────────────────
 //  有效配置（全局 or 分段覆盖）
@@ -179,23 +169,14 @@ static void FixSameKeyOverlaps(vector<HitEvent>& events)
         auto it = pending.find(kc);
         if (it != pending.end()) {
             auto& relEv = events[it->second];
-            if (relEv.TriggerTime >= ev.TriggerTime) {
-                // 同键重叠必须消掉（否则一次按键被吃），但**不能把松键推到按下
-                // 时刻之前**：那等于"按下即松开"，判定窗口直接消失（实测 0ms）。
-                // 音间隔本来就短，所以至少留 MinPressSeconds。
-                double minRel = events[i].TriggerTime + MinPressSeconds;
-                double limit  = ev.TriggerTime - 1e-6;
-                relEv.TriggerTime = (minRel < limit) ? minRel : limit;
-            }
+            if (relEv.TriggerTime >= ev.TriggerTime)
+                relEv.TriggerTime = ev.TriggerTime - 1e-6;
             pending.erase(it);
         }
 
         for (int j = i + 1; j < n; j++) {
             auto& fwd = events[j];
-            // 长按的松键（IsHoldRelated）**也要登记**。原实现用
-            // `!fwd.IsHoldRelated` 排除了它，于是长按键按下后没有配对的松键，
-            // 下一次同键按下会往前错配到别的松键上，把长按时长压到 0。
-            if (fwd.ReleaseOnly && fwd.ReleaseKeyCode == kc) {
+            if (fwd.ReleaseOnly && fwd.ReleaseKeyCode == kc && !fwd.IsHoldRelated) {
                 pending[kc] = j;
                 break;
             }
@@ -251,98 +232,133 @@ static HitEvent* BuildTechniqueHitEventsImpl(
             lastSegIdx   = segIdx;     // 首次不触发边界重置
         }
         double nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
-        (void)nowBpm;   // 新分片模型不再使用（时间基准改为游戏给的 entryTime）
+
+        double nowT = 0.0;
+        int    nowD = 0;
+        int    hand = (g_config.handPreference == 0) ? -1 : 1; // -1=左主, 1=右主
+        int    mult = 0;
+        long long mCnt[16] = {};
+        long long mCntPre[16] = {};
+        int  canMulti = 0;
+        bool needBack = false;
 
         vector<PieceInfo> pieces;
         pieces.reserve(static_cast<std::vector<PieceInfo, std::allocator<PieceInfo>>::size_type>(eventCount / 4) + 4);
 
-        // ══════════════════════════════════════════════════════════════
-        //  按拍分组（不再自造时间网格）
-        // ══════════════════════════════════════════════════════════════
-        //
-        //  旧做法错在哪（读了游戏源码才明白）：
-        //  游戏的时间是**角度驱动**的 —— scrMisc.GetTimeBetweenAngles：
-        //      t = mod(exitangle - entryangle, 2π) / π × (60/bpm) / speed
-        //  scrLevelMaker.CalculateFloorEntryTimes 把它逐块累加成
-        //  scrFloor.entryTime。宏拿到的 entryTime 已经是**游戏算好的真实时刻**，
-        //  角度公式早已应用过了。
-        //
-        //  但旧代码丢掉 entryTime，重新用 pLen = 60/(bpm×speed)/2 自造一个
-        //  "半拍网格"去切，等于**假设每块砖固定转 2π 角度**。实际每块砖转
-        //  多少角度随谱面而变（角度差 = 节奏），所以这个网格和真实节奏毫无
-        //  关系 → 切出来的"片"和音符错位 → 手序乱、时长乱。
-        //
-        //  新做法：
-        //  · 每个音用游戏给的 entryTime（已是真实时刻）；
-        //  · "一拍" = 该音所在砖的本地拍长 60/(bpm×speed_of_floor)；
-        //    逐块砖取，所以变速段自动按各自速度算拍长；
-        //  · 同一拍内的音归同一只手（拍内同手），跨拍换手（拍间换手）；
-        //  · 一片最多装该手的按键数（8 键预算），超出就切到下一拍。
-        //  这样"片"永远由**音符和拍**决定，不会有"切在音中间"。
-        int mainHandI2 = (g_config.handPreference == 0) ? -1 : 1;
-        int nowD = 0;
-        {
-            int mainHandI = mainHandI2;
-            int curHand   = mainHandI;
-            int lastSegIdxLocal = lastSegIdx;
-            double beatEnd = 0.0;      // 当前拍的结束时刻
-            int    segIdxLocal = -2;
-            bool   segInit = false;
+        // ── 时间片划分 ────────────────────────────────────────
+        while (nowD < eventCount) {
 
-            while (nowD < eventCount) {
+            // 根据当前地板索引解析有效配置及段索引
+            int curSegIdx;
+            auto ec = ResolveConfig(evFloor[nowD], &curSegIdx);
 
-                // 解析分段（配置分段：左右手键位/顺序/手性等）
-                int sIdx;
-                auto ecSeg = ResolveConfig(evFloor[nowD], &sIdx);
-                if (!segInit || sIdx != segIdxLocal) {
-                    // 段切换：重置为该段的主手，与旧行为一致
-                    curHand = mainHandI;
-                    segIdxLocal = sIdx;
-                    segInit = true;
-                }
+            // 段边界：重置所有连续状态（手交替·倍乘·回溯·BPM）
+            if (curSegIdx != lastSegIdx) {
+                hand = (g_config.handPreference == 0) ? -1 : 1;
+                mult = 0;
+                memset(mCnt, 0, sizeof(mCnt));
+                memset(mCntPre, 0, sizeof(mCntPre));
+                canMulti = 0;
+                needBack = false;
+                lastSegLimit = ec.bpmLimit;
+                nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
+                lastSegIdx = curSegIdx;
+            }
 
-                // 本地拍长：这块砖的 speed 决定一拍有多长
-                double localSpeed = speed;
-                if (speedMuls) {
-                    int si = (nowD < eventCount) ? nowD : eventCount - 1;
-                    if (si >= 0 && speedMuls[si] > 1e-9) localSpeed = speedMuls[si];
-                }
-                if (localSpeed < 1e-9) localSpeed = 1.0;
-                double beatLen = 60.0 / (bpm * localSpeed);
-                if (beatLen < 1e-9) beatLen = 1e-9;
-
-                double t0 = evTime[nowD];
-                // 新的一拍：从第一个音开始
-                if (!segInit || t0 >= beatEnd - 1e-9) beatEnd = t0 + beatLen;
-
-                int csH = (curHand == 1) ? 1 : 0;
-                int maxK = (csH == 0) ? ecSeg.leftKeyCount : ecSeg.rightKeyCount;
-                if (maxK < 1) maxK = 1;
-
-                // 收集本拍内的音：不跨拍，且不超按键预算
-                int cnt = 0, realCnt = 0;
-                double pieceEnd = beatEnd;
-                while (nowD + cnt < eventCount) {
-                    double te = evTime[nowD + cnt];
-                    if (te >= beatEnd - 1e-9 && cnt > 0) break;   // 跨到下一拍
-                    if (realCnt + 1 > maxK) break;                 // 超按键预算
-                    if (evPress[nowD + cnt] != -1) realCnt++;
-                    cnt++;
-                }
-                if (cnt <= 0) { nowD++; continue; }   // 保险：不让死循环
-
-                double pLen = pieceEnd - t0;
-                if (pLen < 1e-9) pLen = 1e-9;
-
-                pieces.emplace_back(cnt, csH, pLen, t0, pieceEnd, nowD, 0, realCnt);
-                nowD += cnt;
-
-                // 本拍结束 → 换手（拍内同手，拍间换手）
-                if (nowD >= eventCount || evTime[nowD] >= beatEnd - 1e-9) {
-                    curHand = -curHand;
-                    beatEnd = (nowD < eventCount) ? evTime[nowD] + beatLen : beatEnd;
+            // ── 逐地板速度：按本片起始地板的速度折算局部速率 ──
+            // 段边界只处理"配置分段"，而 SetSpeed/BPM 变化不产生分段，必须逐片
+            // 用该地板的实际速度重算 nowBpm。speedMuls 为空时保持历史行为。
+            if (speedMuls) {
+                int si = (nowD < eventCount) ? nowD : eventCount - 1;
+                if (si >= 0) {
+                    double ls = speedMuls[si];
+                    if (ls > 1e-9) nowBpm = GetAdviceBpm(bpm, ls, lastSegLimit);
                 }
             }
+
+            // 防止死循环
+            if (pieces.size() > (size_t)eventCount * 64) break;
+
+            double pLen = 60.0 / (nowBpm * pow(2.0, mult)) / 2.0;
+            if (pLen < 1e-9) pLen = 1e-9;
+
+            int cnt = CountEventsInRange(evTime, nowD, nowT + pLen * 0.995);
+            int csH = (hand == 1) ? 1 : 0;
+            int maxK = (csH == 0) ? ec.leftKeyCount : ec.rightKeyCount;
+            int mainHand = (g_config.handPreference == 0) ? -1 : 1;
+            bool isOffHand = (hand != mainHand);
+
+            // 按键数超限：提升倍乘
+            if (cnt > maxK) {
+                if (canMulti == 1 && isOffHand) needBack = true;
+                if (mult < 7) { mult++; mCnt[mult] = 0; continue; }
+                else { cnt = maxK; }
+            }
+
+            // 回溯到上一片（由主手重新处理）
+            if (needBack && !pieces.empty()) {
+                needBack = false;
+                hand = mainHand;
+                auto& prev = pieces.back();
+                nowT = prev.startTime;
+                nowD = prev.evStart;
+                memcpy(mCnt, mCntPre, sizeof(mCnt));
+                mult = prev.multiplier + 1;
+                if (mult > 7) mult = 7;
+                pieces.pop_back();
+                canMulti = 0;
+                continue;
+            }
+
+            /*
+            // ── 非二进制分片检测（三连音/五连音自适应）──
+            if (cnt > 0 && nowD + cnt < eventCount) {
+                double nextEvTime = evTime[nowD + cnt];
+                double boundary     = nowT + pLen;
+                double diff         = nextEvTime - boundary;
+                if (diff > pLen * 0.001 && diff < pLen * 0.50) {
+                    // 预测不调整时下一个分片的事件数
+                    // 注意 0.995 只乘在 pLen 上（与下次循环的计数范围一致）
+                    int nextCnt = CountEventsInRange(evTime, nowD + cnt, boundary + pLen * 0.995);
+                    // 只有当下一个分片不满（手分配不均）时才调整
+                    if (nextCnt < cnt) {
+                        pLen = nextEvTime - nowT;
+                    }
+                }
+            }
+            */
+
+            // ── 自适应时间片延伸（仅在下一片更稀疏时合并）────
+            if (g_config.speedChangeTolerance > 0.0 && cnt > 0 && nowD + cnt < eventCount) {
+                double nextEvTime = evTime[nowD + cnt];
+                double diff = nextEvTime - (nowT + pLen);
+                if (diff > pLen * 0.001 && diff < pLen * g_config.speedChangeTolerance) {
+                    int nextCnt = CountEventsInRange(evTime, nowD + cnt, (nowT + pLen) + pLen * 0.995);
+                    if (nextCnt < cnt) {
+                        pLen = nextEvTime - nowT;
+                    }
+                }
+            }
+
+            // 提交时间片
+            memcpy(mCntPre, mCnt, sizeof(mCnt));
+            pieces.emplace_back(cnt, csH, pLen, nowT, nowT + pLen, nowD, mult);
+
+            // 更新级联倍乘计数器
+            for (int c = mult; c > 0; c--) {
+                mCnt[c] += (long long)pow(2, 16 - (mult - c));
+                mCnt[c] %= (1LL << 18);
+            }
+            while (mult > 0 && mCnt[mult] == 0) mult--;
+
+            nowD += cnt;
+            nowT += pLen;
+            hand = -hand;
+            canMulti = 1;
+
+            // 微误差矫正
+            if (nowD < eventCount && fabs(evTime[nowD] - nowT) < pLen * 0.01)
+                nowT = evTime[nowD];
         }
 
         // 哨兵片
@@ -359,16 +375,11 @@ static HitEvent* BuildTechniqueHitEventsImpl(
         bool          activeHold = false;
         unsigned char activeHoldKey = 0;
         int           lastSegIdxEvent = -2;
-        // 同键防抖状态（按手各一份）
-        double        lastKeyTime[2] = { -1.0, -1.0 };
-        unsigned char lastKeyUsed[2] = { 0, 0 };
-        int           lastKeyHand = -1;
 
         for (size_t pcnt = 0; pcnt + 1 < pieces.size(); pcnt++) {
             auto& cur = pieces[pcnt];
             auto& next = pieces[pcnt + 1];
             double pStart = (pcnt > 0) ? pieces[pcnt - 1].endTime : 0.0;
-            int    pieceRealIdx = 0;   // 本片内真实按键序号（长按尾不占位）
 
             for (int i = 0; i < cur.evCount; i++) {
                 int    idx = cur.evStart + i;
@@ -390,10 +401,6 @@ static HitEvent* BuildTechniqueHitEventsImpl(
                     }
                     continue;
                 }
-
-                // 轮指序号：只按**真实按键**递增。长按尾(press==-1)不按任何键，
-                // 不占键位，用 i 会让后面的键序号顶偏一位（选错键）。
-                int realIdx = pieceRealIdx++;
 
                 // ── 按当前地板解析有效键位配置 ──────────────────
                 int curFloor = (idx < (int)evFloor.size()) ? evFloor[idx] : evFloor.back();
@@ -426,44 +433,13 @@ static HitEvent* BuildTechniqueHitEventsImpl(
                 // 保护：若 keyCount 为 0，跳过
                 if (!keys || keyCount <= 0) continue;
 
-                // 轮指顺序：用户配置形如 "1|2,1|3,2,1|3,2,1,5|4,3,2,1|..."
-                // 语义是「这一片要按几个音」→ 选第几张表；表内第几个 → 选哪个键。
-                //   这一片按 1 个音 → 表[0] = [1]        → 键1（P / R）
-                //   这一片按 2 个音 → 表[1] = [2,1]      → 键2、键1
-                //   这一片按 3 个音 → 表[2] = [3,2,1]    → 键3、键2、键1
-                // 所以 oi 由**真实按键数**决定（不是 evCount，长按尾不占位），
-                // 表内位置用 realIdx（真实按键序号）。
-                int oi = min(cur.realCount - 1, keyCount - 1);
+                int oi = min(cur.evCount - 1, keyCount - 1);
                 int ki;
-                if (oi < orderCounts && orders && orders[oi] && realIdx < orderLens[oi])
-                    ki = orders[oi][realIdx];
+                if (oi < orderCounts && orders && orders[oi] && i < orderLens[oi])
+                    ki = orders[oi][i];
                 else
-                    ki = realIdx % keyCount;
+                    ki = i % keyCount;
                 ki = max(0, min(ki, keyCount - 1));
-
-                // 同键防抖：一个键刚按过，MinPressSeconds 内任何一只手都不能再按
-                // 同一个键（否则会被 FixSameKeyOverlaps 压成 0ms 按压，判定窗口
-                // 直接消失）。所以查**所有手**最近的按键，不只查本手 —— 实测有
-                // 4 处 0.05ms 就是跨手的。
-                // 注意必须**先试 ki 本身**：之前写成从 ki+1 起找，导致哪怕键1
-                // 空闲也被无条件推到下一个键，右手 P 变 =、左手 R 变 3。
-                if (keyCount > 1) {
-                    bool busy = true;
-                    for (int kk = 0; kk < keyCount && busy; kk++) {
-                        int cand = (ki + kk) % keyCount;
-                        unsigned char ck = keys[cand];
-                        bool conflict = false;
-                        for (int h2 = 0; h2 < 2; h2++) {
-                            if (lastKeyTime[h2] <= 0.0) continue;
-                            if (t - lastKeyTime[h2] < MinPressSeconds &&
-                                lastKeyUsed[h2] == ck) { conflict = true; break; }
-                        }
-                        if (!conflict) { ki = cand; busy = false; }
-                    }
-                }
-                lastKeyHand = cur.hand;
-                lastKeyTime[cur.hand] = t;
-                lastKeyUsed[cur.hand] = keys[ki];
 
                 unsigned char kc = keys[ki];
                 double        ratio = (pressTimes && ki < keyCount) ? pressTimes[ki] : 0.8;
@@ -499,18 +475,15 @@ static HitEvent* BuildTechniqueHitEventsImpl(
 
                 // ── 计算松键时刻 ──────────────────────────────────
                 double dur = CalculateReleaseTime(pStart, cur, next, t, ratio);
-                if (dur < MinPressSeconds) dur = MinPressSeconds;   // 下限
-                if (dur > MaxPressSeconds) dur = MaxPressSeconds;   // 上限
                 double rel = t + dur;
 
-                // 夹到片边界（换手前不能按住超过这片，否则会和下一片撞键）
                 if (next.hand != cur.hand || next.evCount == 0) {
                     if (rel >= next.endTime) rel = next.endTime - 1e-6;
                 }
                 else {
                     if (rel >= cur.endTime) rel = cur.endTime - 1e-6;
                 }
-                if (rel <= t) rel = t + MinPressSeconds;
+                if (rel <= t) rel = t + (next.endTime - t) * 0.4;
 
                 HitEvent releaseEv = {};
                 releaseEv.TriggerTime = rel;

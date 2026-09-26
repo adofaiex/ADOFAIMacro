@@ -991,25 +991,11 @@ namespace ADOFAIMacro.Macro
                 if (floor == null) continue;
                 if ((floor.nextfloor != null && floor.nextfloor.auto) || floor.midSpin) continue;
 
-                // 取**下一个真正要按的块**：auto 块和中旋不产生按键，必须跳过。
-                // auto 块也有 entryTime（游戏照样累加角度时间），直接取 floors[i+1]
-                // 会把时间拉到几乎同一刻 —— 实测那张变速狂谱有 307 处音间隔 <1ms，
-                // 全是被 auto 块拉错造成的。
-                int ni = i + 1;
-                while (ni < n - 1)
-                {
-                    var cf = floors[ni];
-                    if (cf == null) { ni++; continue; }
-                    if (cf.midSpin || (cf.nextfloor != null && cf.nextfloor.auto)) { ni++; continue; }
-                    break;
-                }
-                if (ni >= n - 1) break;
+                double t = floors[i + 1]?.entryTime ?? double.MaxValue;
 
-                double t = floors[ni]?.entryTime ?? double.MaxValue;
-
-                if (simulate && floor.holdLength > -1 && ni < n)
+                if (simulate && floor.holdLength > -1 && i + 1 < n)
                 {
-                    var nf = floors[ni];
+                    var nf = floors[i + 1];
                     if (nf != null && nf.holdLength == -1)
                     {
                         if (overflow != null) overflow.Add(new HitEvent(t, 0, releaseOnly: true));
@@ -1366,24 +1352,7 @@ namespace ADOFAIMacro.Macro
                 if (fl == null) continue;
                 if ((fl.nextfloor?.auto ?? false) || fl.midSpin) continue;
 
-                // 取**下一个真正要按的块**：auto 块和中旋不产生按键，必须跳过。
-                // 原实现直接取 floors[i+1]，而 auto 块也有 entryTime（游戏照样
-                // 累加角度时间），于是时间被拉到几乎同一刻 —— 实测那张变速狂谱
-                // 有 307 处音间隔 <1ms（地10 +132.159 → 地12 +0.084ms → 地13
-                // +1057ms），全是被 auto 块拉错造成的。
-                // 游戏语义：entryTime[i+1] = entryTime[i] + 该砖角度对应的时间，
-                // 中间隔了 auto 块就该用后面那块的时间。
-                int ni = i + 1;
-                while (ni < floors.Length - 1)
-                {
-                    var cf = floors[ni];
-                    if (cf == null) { ni++; continue; }
-                    if (cf.midSpin || (cf.nextfloor?.auto ?? false)) { ni++; continue; }
-                    break;
-                }
-                if (ni >= floors.Length - 1) break;
-
-                var nf = floors[ni];
+                var nf = floors[i + 1];
                 double t = nf?.entryTime ?? double.MaxValue;
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
@@ -1489,20 +1458,7 @@ namespace ADOFAIMacro.Macro
                 if (fl == null) continue;
                 if ((fl.nextfloor?.auto ?? false) || fl.midSpin) continue;
 
-                // 取**下一个真正要按的块**：auto 块和中旋不产生按键，必须跳过。
-                // auto 块也有 entryTime（游戏照样累加角度时间），直接取 floors[i+1]
-                // 会把时间拉到几乎同一刻 —— 实测那张变速狂谱有 307 处音间隔 <1ms。
-                int ni = i + 1;
-                while (ni < floors.Length - 1)
-                {
-                    var cf = floors[ni];
-                    if (cf == null) { ni++; continue; }
-                    if (cf.midSpin || (cf.nextfloor?.auto ?? false)) { ni++; continue; }
-                    break;
-                }
-                if (ni >= floors.Length - 1) break;
-
-                var    nf = floors[ni];
+                var    nf = floors[i + 1];
                 double t  = nf?.entryTime ?? double.MaxValue;
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
