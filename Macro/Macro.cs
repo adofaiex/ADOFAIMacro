@@ -985,7 +985,9 @@ namespace ADOFAIMacro.Macro
             // 静默丢弃 —— 事件数超过 65536 的极端长谱后半段会完全不触发。
             var overflow = (n - 1) > pool.Length ? new List<HitEvent>(n) : null;
 
-            for (int i = 0; i < n - 1; i++)
+            // 终点砖（最后一块）也要按键 —— 通关条件是
+            // GCS.checkpointNum >= listFloors.Count（scrConductor.cs:411）。
+            for (int i = 0; i < n; i++)
             {
                 var floor = floors[i];
                 if (floor == null) continue;
@@ -1004,13 +1006,11 @@ namespace ADOFAIMacro.Macro
                     if (cf.nextfloor != null && cf.nextfloor.auto) { ni++; continue; }
                     break;
                 }
-                if (ni >= n - 1) break;
 
-                double t = floors[ni]?.entryTime ?? double.MaxValue;
+                bool isLastFloor = (i == n - 1);
 
-                // 谱尾附近找不到下一块可判定的砖时，长按仍要发松键尾事件
-                // （否则键一直按着，strictHolds 判中途没松 → 长按失败）。
-                if (ni >= n - 1)
+                // 后面全是 auto/中旋、且当前不是终点砖：长按仍要发松键尾事件
+                if (ni >= n - 1 && !isLastFloor)
                 {
                     if (simulate && floor.holdLength > -1 && !floor.midSpin)
                     {
@@ -1022,6 +1022,17 @@ namespace ADOFAIMacro.Macro
                 }
 
                 if (floor.midSpin && floor.holdLength <= -1) continue;
+
+                // 终点砖：普通按键，无长按头/尾
+                if (isLastFloor)
+                {
+                    if (overflow != null) overflow.Add(new HitEvent(floor.entryTime, keys[keyIdx], releaseOnly: false));
+                    else pool[_hitEventPoolUsed++] = new HitEvent(floor.entryTime, keys[keyIdx], releaseOnly: false);
+                    if (++keyIdx >= keyLen) keyIdx = 0;
+                    continue;
+                }
+
+                double t = floors[ni]?.entryTime ?? double.MaxValue;
 
                 if (simulate && floor.holdLength > -1 && ni < n)
                 {
@@ -1376,7 +1387,12 @@ namespace ADOFAIMacro.Macro
             var evFloor = _evFloorRecycle;
             var evSpeed = _evSpeedRecycle;
 
-            for (int i = 0; i < floors.Length - 1; i++)
+            // 终点砖（最后一块）**也要按键**。通关条件是
+            // GCS.checkpointNum >= listFloors.Count（scrConductor.cs:411），
+            // 必须一路命中到最后一块。scrLevelMaker 里那些
+            // `i < listFloors.Count - 1` 的循环只是**不算终点砖的时间**，
+            // 不代表它不判定 —— 曾被这点误导漏掉了终点砖的按键。
+            for (int i = 0; i < floors.Length; i++)
             {
                 var fl = floors[i];
                 if (fl == null) continue;
@@ -1408,12 +1424,16 @@ namespace ADOFAIMacro.Macro
                     break;
                 }
 
-                // 找不到下一块可判定的砖（后面全是 auto/中旋，或已到谱尾）：
-                // **当前砖是长按时仍必须发松键尾事件**。原来的
-                // `if (ni >= floors.Length - 1) break;` 直接 break，尾事件
-                // 永远不生成 → 键一直按着 → strictHolds 判定中途没松 →
-                // 长按失败（用户报的「长按了没用」）。松键时刻取谱尾那块砖。
-                if (ni >= floors.Length - 1)
+                // 找不到下一块可判定的砖。分两种情况：
+                //  ① 当前砖就是**终点砖**（i == floors.Length-1）→ 它自己
+                //     仍要按键（通关条件 checkpointNum >= listFloors.Count，
+                //     scrConductor.cs:411）。没有"下一块"就没有长按头/尾，
+                //     按普通音处理。
+                //  ② 当前砖是长按、后面全是 auto/中旋 → 必须发松键尾事件，
+                //     否则键一直按着，strictHolds 判中途没松 → 长按失败
+                //     （用户报的「长按了没用」）。松键时刻取谱尾那块砖。
+                bool isLastFloor = (i == floors.Length - 1);
+                if (ni >= floors.Length - 1 && !isLastFloor)
                 {
                     if (sim && fl.holdLength > -1 && !fl.midSpin)
                     {
@@ -1423,11 +1443,32 @@ namespace ADOFAIMacro.Macro
                     break;
                 }
 
-                var nf = floors[ni];
-                double t = nf?.entryTime ?? double.MaxValue;
+                // 终点砖的按键时刻：它没有"下一块"，用**它自己的 entryTime**
+                // 作为判定时刻（玩家在它进场时就得按下去）。
+                scrFloor nf;
+                double t;
+                if (isLastFloor)
+                {
+                    nf = fl;
+                    t = fl.entryTime;
+                }
+                else
+                {
+                    nf = floors[ni];
+                    t  = nf?.entryTime ?? double.MaxValue;
+                }
 
                 // 纯中旋（无长按）不产生按键
                 if (fl.midSpin && fl.holdLength <= -1) continue;
+
+                // 终点砖没有"下一块"，不该产生长按头/尾（nf 被赋成了自己，
+                // 判 holdLength 会把自己当长按头 → 永远等不到尾 → 键不松）。
+                if (isLastFloor)
+                {
+                    evTime.Add(t); evPress.Add(1);
+                    evFloor.Add(i); evSpeed.Add(fl.speed);
+                    continue;
+                }
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
@@ -1526,7 +1567,9 @@ namespace ADOFAIMacro.Macro
             _evPressRecycle.Clear();
             _evFloorRecycle.Clear();
 
-            for (int i = 0; i < floors.Length - 1; i++)
+            // 终点砖（最后一块）也要按键 —— 通关条件是
+            // GCS.checkpointNum >= listFloors.Count（scrConductor.cs:411）。
+            for (int i = 0; i < floors.Length; i++)
             {
                 var fl = floors[i];
                 if (fl == null) continue;
@@ -1545,11 +1588,12 @@ namespace ADOFAIMacro.Macro
                     if (cf.nextfloor?.auto ?? false) { ni++; continue; }
                     break;
                 }
-                if (ni >= floors.Length - 1) break;
 
-                // 谱尾附近找不到下一块可判定的砖时，长按仍要发松键尾事件
+                bool isLastFloor = (i == floors.Length - 1);
+
+                // 后面全是 auto/中旋、且当前砖不是终点砖：长按仍要发松键尾事件
                 // （否则键一直按着，strictHolds 判中途没松 → 长按失败）。
-                if (ni >= floors.Length - 1)
+                if (ni >= floors.Length - 1 && !isLastFloor)
                 {
                     if (sim && fl.holdLength > -1 && !fl.midSpin)
                     {
@@ -1559,10 +1603,17 @@ namespace ADOFAIMacro.Macro
                     break;
                 }
 
+                if (fl.midSpin && fl.holdLength <= -1) continue;
+
+                // 终点砖：普通按键，无长按头/尾
+                if (isLastFloor)
+                {
+                    _evTimeRecycle.Add(fl.entryTime); _evPressRecycle.Add(1); _evFloorRecycle.Add(i);
+                    continue;
+                }
+
                 var    nf = floors[ni];
                 double t  = nf?.entryTime ?? double.MaxValue;
-
-                if (fl.midSpin && fl.holdLength <= -1) continue;
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
