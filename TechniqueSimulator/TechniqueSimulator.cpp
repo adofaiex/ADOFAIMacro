@@ -262,8 +262,14 @@ static HitEvent* BuildTechniqueHitEventsImpl(
         //  修补，不是速率容差，两回事。
         const int    BaseWindow   = 32;    // 滑动窗口音数
         const double BaseLimitMul = 2.0;   // 局部速率相对窗口基准的允许倍数
+        // 死区：候选速率相对 lockedRate 的变化在这个范围内直接无视。
+        // 用户实测：「必须要把变速容差开到最大的 0.5，不然手法都很诡异，
+        // 有的手法会突然变成左撇子」—— 所以默认取 0.5。
+        // （0.5 意味着小于 50% 的变速一律不改变片长；真正的段落转折通常
+        //   ≥50%，仍会被跟随。）
+        // 用户在设置里调 SpeedChangeTolerance 可覆盖；0 = 关闭死区。
         double deadZone = (g_config.speedChangeTolerance > 0.0)
-                        ? g_config.speedChangeTolerance : 0.10;
+                        ? g_config.speedChangeTolerance : 0.50;
         if (deadZone < 0.0) deadZone = 0.0;
         if (deadZone > 0.9) deadZone = 0.9;
 

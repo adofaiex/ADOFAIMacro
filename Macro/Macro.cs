@@ -989,13 +989,30 @@ namespace ADOFAIMacro.Macro
             {
                 var floor = floors[i];
                 if (floor == null) continue;
-                if ((floor.nextfloor != null && floor.nextfloor.auto) || floor.midSpin) continue;
+                if ((floor.nextfloor != null && floor.nextfloor.auto)) continue;
 
-                double t = floors[i + 1]?.entryTime ?? double.MaxValue;
-
-                if (simulate && floor.holdLength > -1 && i + 1 < n)
+                // 找"下一块真正要判定的砖"：照抄游戏 scrPlayer.cs:411-415
+                // （跳过中旋再判 holdLength）。中旋自己可以带长按
+                // （scnGame.cs:1174 把 Hold 的 duration 写在这块砖上），
+                // 只有"不带长按的中旋"才跳过。
+                int ni = i + 1;
+                while (ni < n - 1)
                 {
-                    var nf = floors[i + 1];
+                    var cf = floors[ni];
+                    if (cf == null) { ni++; continue; }
+                    if (cf.midSpin) { if (cf.holdLength > -1) break; ni++; continue; }
+                    if (cf.nextfloor != null && cf.nextfloor.auto) { ni++; continue; }
+                    break;
+                }
+                if (ni >= n - 1) break;
+
+                double t = floors[ni]?.entryTime ?? double.MaxValue;
+
+                if (floor.midSpin && floor.holdLength <= -1) continue;
+
+                if (simulate && floor.holdLength > -1 && ni < n)
+                {
+                    var nf = floors[ni];
                     if (nf != null && nf.holdLength == -1)
                     {
                         if (overflow != null) overflow.Add(new HitEvent(t, 0, releaseOnly: true));
@@ -1350,10 +1367,40 @@ namespace ADOFAIMacro.Macro
             {
                 var fl = floors[i];
                 if (fl == null) continue;
-                if ((fl.nextfloor?.auto ?? false) || fl.midSpin) continue;
+                if ((fl.nextfloor?.auto ?? false)) continue;
 
-                var nf = floors[i + 1];
+                // ── 找"下一块真正要判定的砖"（照抄游戏 scrPlayer.cs:411-415）──
+                //   scrFloor nextfloor = currFloor.nextfloor;
+                //   while (nextfloor.midSpin && nextfloor.nextfloor) nextfloor = nextfloor.nextfloor;
+                //   __nextTileIsHoldCached = nextfloor.holdLength > -1;
+                // 游戏跳过中旋再判长按 —— 中旋的 holdLength 语义不同，直接取
+                // floors[i+1] 会误判长按头/尾。
+                //
+                // 中旋**自己**仍可能带长按：scnGame.cs:1171-1174 的 Hold 事件
+                //   floor7.holdLength = (floor7.nextfloor && duration >= 0) ? duration : -1;
+                // 直接写在这块砖上，这块砖可以是中旋。所以中旋不能无条件跳过 ——
+                // 只有"不带长按的中旋"才跳过（那才是纯装饰、不需要按键）。
+                int ni = i + 1;
+                while (ni < floors.Length - 1)
+                {
+                    var cf = floors[ni];
+                    if (cf == null) { ni++; continue; }
+                    if (cf.midSpin)
+                    {
+                        // 中旋自己带长按 → 它就是要按的那一块，停下
+                        if (cf.holdLength > -1) break;
+                        ni++; continue;                  // 纯中旋，跳过
+                    }
+                    if (cf.nextfloor?.auto ?? false) { ni++; continue; }
+                    break;
+                }
+                if (ni >= floors.Length - 1) break;
+
+                var nf = floors[ni];
                 double t = nf?.entryTime ?? double.MaxValue;
+
+                // 纯中旋（无长按）不产生按键
+                if (fl.midSpin && fl.holdLength <= -1) continue;
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
@@ -1456,10 +1503,27 @@ namespace ADOFAIMacro.Macro
             {
                 var fl = floors[i];
                 if (fl == null) continue;
-                if ((fl.nextfloor?.auto ?? false) || fl.midSpin) continue;
+                if ((fl.nextfloor?.auto ?? false)) continue;
 
-                var    nf = floors[i + 1];
+                // 找"下一块真正要判定的砖"：照抄游戏 scrPlayer.cs:411-415
+                // （跳过中旋再判 holdLength）。中旋自己可以带长按
+                // （scnGame.cs:1174 把 Hold 的 duration 写在这块砖上），
+                // 只有"不带长按的中旋"才跳过。
+                int ni = i + 1;
+                while (ni < floors.Length - 1)
+                {
+                    var cf = floors[ni];
+                    if (cf == null) { ni++; continue; }
+                    if (cf.midSpin) { if (cf.holdLength > -1) break; ni++; continue; }
+                    if (cf.nextfloor?.auto ?? false) { ni++; continue; }
+                    break;
+                }
+                if (ni >= floors.Length - 1) break;
+
+                var    nf = floors[ni];
                 double t  = nf?.entryTime ?? double.MaxValue;
+
+                if (fl.midSpin && fl.holdLength <= -1) continue;
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
