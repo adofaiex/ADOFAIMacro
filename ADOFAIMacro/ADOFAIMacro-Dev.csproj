@@ -111,9 +111,11 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <!-- 仓库根目录（本 csproj 位于 <根>\ADOFAIMacro\ 下）。 -->
+    <RepoRoot>$(MSBuildThisFileDirectory)..\</RepoRoot>
     <!-- ADOFAI 游戏 Managed 目录（按本机 Steam 安装位置调整）。
          抽成 GameManaged 属性后，Reference 里统一用 $(GameManaged)。 -->
-    <GameManaged>$(MSBuildThisFileDirectory)..\..\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\A Dance of Fire and Ice_Data\Managed</GameManaged>
+    <GameManaged>$(RepoRoot)..\..\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\A Dance of Fire and Ice_Data\Managed</GameManaged>
   </PropertyGroup>
 
   <!-- 旧式格式里每个配置各写一份；这里用条件属性组保持同样语义。 -->
@@ -244,43 +246,31 @@
   </ItemGroup>
 
   <!--
-    复制 C++ 项目的原生 DLL 到输出目录、项目根目录和 out 目录。
-    从旧式格式原样迁移：同样依次尝试三个候选路径，存在哪个复制哪个。
+    把原生 TechniqueSimulator.dll / InputSystem.dll 收集到统一输出目录。
+    C++ 项目在仓库根的 TechniqueSimulator\ 与 InputSystem\ 下（与托管项目
+    分开，因为 vcxproj 不能放进 SDK 项目的目录树里）。
+    打包目录 out\<Cfg>\ 是部署布局的单一来源。
   -->
   <Target Name="CopyNativeDlls" AfterTargets="Build">
     <PropertyGroup>
-      <_TechSimDll1>$(MSBuildThisFileDirectory)x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll1>
-      <_TechSimDll2>$(MSBuildThisFileDirectory)x64\TechniqueSimulator.dll</_TechSimDll2>
-      <_TechSimDll3>$(MSBuildThisFileDirectory)TechniqueSimulator\x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll3>
-      <_InputSysDll1>$(MSBuildThisFileDirectory)x64\$(Configuration)\InputSystem.dll</_InputSysDll1>
-      <_InputSysDll2>$(MSBuildThisFileDirectory)x64\InputSystem.dll</_InputSysDll2>
-      <_InputSysDll3>$(MSBuildThisFileDirectory)InputSystem\x64\$(Configuration)\InputSystem.dll</_InputSysDll3>
-      <_OutDir>$(MSBuildThisFileDirectory)out\$(Configuration)\</_OutDir>
+      <_TechSimDll>$(RepoRoot)TechniqueSimulator\x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll>
+      <_InputSysDll>$(RepoRoot)InputSystem\x64\$(Configuration)\InputSystem.dll</_InputSysDll>
+      <_PackDir>$(RepoRoot)out\$(Configuration)\</_PackDir>
     </PropertyGroup>
-    <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll1)')" />
-    <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll2)')" />
-    <Copy SourceFiles="$(_TechSimDll3)" DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll3)')" />
-    <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_TechSimDll1)')" />
-    <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_TechSimDll2)')" />
-    <Copy SourceFiles="$(_TechSimDll3)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_TechSimDll3)')" />
-    <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll1)')" />
-    <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll2)')" />
-    <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll3)')" />
-    <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_InputSysDll1)')" />
-    <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_InputSysDll2)')" />
-    <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(MSBuildThisFileDirectory)" Condition="Exists('$(_InputSysDll3)')" />
-    <MakeDir Directories="$(_OutDir)" Condition="!Exists('$(_OutDir)')" />
-    <Copy SourceFiles="$(_TechSimDll1)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_TechSimDll1)')" />
-    <Copy SourceFiles="$(_TechSimDll2)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_TechSimDll2)')" />
-    <Copy SourceFiles="$(_TechSimDll3)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_TechSimDll3)')" />
-    <Copy SourceFiles="$(_InputSysDll1)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_InputSysDll1)')" />
-    <Copy SourceFiles="$(_InputSysDll2)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_InputSysDll2)')" />
-    <Copy SourceFiles="$(_InputSysDll3)" DestinationFolder="$(_OutDir)" Condition="Exists('$(_InputSysDll3)')" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(_OutDir)" Condition="Exists('$(TargetPath)')" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Info.json" DestinationFolder="$(_OutDir)" Condition="Exists('$(MSBuildThisFileDirectory)Info.json')" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Localization\zh-CN.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(MSBuildThisFileDirectory)Localization\zh-CN.json')" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Localization\en-US.json" DestinationFolder="$(_OutDir)Localization" Condition="Exists('$(MSBuildThisFileDirectory)Localization\en-US.json')" />
-    <Copy SourceFiles="$(OutDir)System.Memory.dll" DestinationFolder="$(_OutDir)" Condition="Exists('$(OutDir)System.Memory.dll')" />
+
+    <!-- 先落在 bin\<Cfg>\ —— 那是本项目的正常输出目录 -->
+    <Copy SourceFiles="$(_TechSimDll)"  DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll)')" />
+    <Copy SourceFiles="$(_InputSysDll)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll)')" />
+
+    <!-- 再汇总到打包目录 -->
+    <MakeDir Directories="$(_PackDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(_PackDir)" />
+    <Copy SourceFiles="$(RepoRoot)Info.json" DestinationFolder="$(_PackDir)" Condition="Exists('$(RepoRoot)Info.json')" />
+    <Copy SourceFiles="$(OutDir)TechniqueSimulator.dll" DestinationFolder="$(_PackDir)" Condition="Exists('$(OutDir)TechniqueSimulator.dll')" />
+    <Copy SourceFiles="$(OutDir)InputSystem.dll"        DestinationFolder="$(_PackDir)" Condition="Exists('$(OutDir)InputSystem.dll')" />
+    <Copy SourceFiles="$(OutDir)System.Memory.dll"     DestinationFolder="$(_PackDir)" Condition="Exists('$(OutDir)System.Memory.dll')" />
+    <Copy SourceFiles="Localization\zh-CN.json" DestinationFolder="$(_PackDir)Localization" />
+    <Copy SourceFiles="Localization\en-US.json" DestinationFolder="$(_PackDir)Localization" />
   </Target>
 
 </Project>

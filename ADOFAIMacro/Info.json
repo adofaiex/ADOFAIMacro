@@ -1,0 +1,13 @@
+{
+  "Id": "ADOFAIMacro",
+  "DisplayName": "ADOFAI Macro",
+  "Author": "HitMargin",
+  "Version": "1.3.0",
+  "ManagerVersion": "0.27.0",
+  "IsCheat": true,
+  "Requirements": [],
+  "AssemblyName": "ADOFAIMacro.dll",
+  "EntryMethod": "ADOFAIMacro.Main.Load",
+  "HomePage": "https://github.com/2228293026/ADOFAIMacro-Dev",
+  "Repository": "https://raw.githubusercontent.com/2228293026/ADOFAIMacro-Dev/refs/heads/master/Repository.json"
+}
