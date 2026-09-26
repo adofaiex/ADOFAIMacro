@@ -1018,7 +1018,8 @@ namespace ADOFAIMacro.Macro
                         if (overflow != null) overflow.Add(new HitEvent(te, 0, releaseOnly: true));
                         else pool[_hitEventPoolUsed++] = new HitEvent(te, 0, releaseOnly: true);
                     }
-                    break;
+                    // continue 而非 break：处理完还要继续后面的砖（含终点砖）
+                    continue;
                 }
 
                 if (floor.midSpin && floor.holdLength <= -1) continue;
@@ -1440,7 +1441,12 @@ namespace ADOFAIMacro.Macro
                         double te = floors[floors.Length - 1]?.entryTime ?? double.MaxValue;
                         evTime.Add(te); evPress.Add(-1); evFloor.Add(i); evSpeed.Add(fl.speed);
                     }
-                    break;
+                    // 用 continue 不是 break：i=9 这类「长按在倒数第二」的情况
+                    // 处理完还要**继续处理后面的砖**（尤其是终点砖）。
+                    // 原来写 break 导致 i=9 之后整个循环结束，终点砖 i=10 从头
+                    // 到尾都没被处理 —— 实测 10 个地板只判定 9 个
+                    // （谱尾诊断：i=8 有事件、i=9 和 i=10 都无事件）。
+                    continue;
                 }
 
                 // 终点砖的按键时刻：它没有"下一块"，用**它自己的 entryTime**
@@ -1485,6 +1491,38 @@ namespace ADOFAIMacro.Macro
 
             int total = evTime.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
+
+            // ── 谱尾诊断（临时）────────────────────────────────
+            // 用户报「最后一格子还是没有按键」。终点砖的判定时刻用
+            // fl.entryTime，但如果它同时是 midSpin / auto / hold，
+            // 就会被前面的 continue 分支吃掉。落盘谱尾 6 块砖的真实状态，
+            // 以及本轮是否为每块砖生成了事件。
+            try
+            {
+                var sbT = new System.Text.StringBuilder();
+                int last = floors.Length - 1;
+                sbT.AppendLine($"floors.Length={floors.Length}  事件数={total}  谱尾索引={last}");
+                int emitted = 0;
+                for (int k = 0; k < evTime.Count; k++)
+                    if (evPress[k] != -1) emitted++;
+                sbT.AppendLine($"按下事件={emitted}");
+                for (int k = Math.Max(0, last - 5); k < floors.Length; k++)
+                {
+                    var fk = floors[k];
+                    bool got = false;
+                    for (int q = 0; q < evFloor.Count; q++)
+                        if (evFloor[q] == k) { got = true; break; }
+                    sbT.AppendLine(
+                        $"  i={k} seqID={fk?.seqID} entryTime={fk?.entryTime:F3} hold={fk?.holdLength} " +
+                        $"midSpin={fk?.midSpin} auto={fk?.auto} freeroam={fk?.freeroam} " +
+                        $"next={(fk?.nextfloor == null ? "null" : $"seqID={fk.nextfloor.seqID} auto={fk.nextfloor.auto} mid={fk.nextfloor.midSpin}")} " +
+                        $"→{(got ? "有事件" : "无事件")}");
+                }
+                System.IO.File.WriteAllText(
+                    System.IO.Path.Combine(UnityEngine.Application.persistentDataPath, "ADOFAIMacro-谱尾诊断.txt"),
+                    sbT.ToString());
+            }
+            catch { }
 
 #if DEBUG
             bool useCppVersion = Main.Settings.UseCppTechniqueInDebug;
@@ -1600,7 +1638,8 @@ namespace ADOFAIMacro.Macro
                         double te = floors[floors.Length - 1]?.entryTime ?? double.MaxValue;
                         _evTimeRecycle.Add(te); _evPressRecycle.Add(-1); _evFloorRecycle.Add(i);
                     }
-                    break;
+                    // continue 而非 break：处理完还要继续后面的砖（含终点砖）
+                    continue;
                 }
 
                 if (fl.midSpin && fl.holdLength <= -1) continue;
