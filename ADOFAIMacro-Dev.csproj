@@ -46,41 +46,55 @@
   </PropertyGroup>
 
   <!--
-    显式源文件清单：仍按目录分组，保留旧式项目里可读的分类结构。
-    拆分类文件时会同步更新这里。
+    源文件按职责分目录组织，与 JipperKeyViewer 的分层风格一致：
+      Core/         入口、生命周期、Harmony 补丁
+      Technique/    ★ 手法模拟核心（分片算法、事件表、原生绑定）
+      Input/        按键注入、虚拟键盘、SkyHook
+      Timing/       高精度时钟
+      Calibration/  判定校准与诊断统计
+      Settings/     设置模型与持久化
+      UI/           通用 UI 工具
+      Platform/     平台分支
+      Localization/ 本地化
+
+    显式列出而非用 SDK 默认通配：便于一眼看清每个目录包含什么，
+    同时避免把 obj\ 下自己生成的文件当源码收进来。
   -->
-  <ItemGroup Label="入口与全局">
-    <Compile Include="Main.cs" />
-    <Compile Include="Settings.cs" />
-    <Compile Include="UIUtils.cs" />
-    <Compile Include="Patches.cs" />
-    <Compile Include="ShowText.cs" />
+  <ItemGroup Label="Core 入口与补丁">
+    <Compile Include="Core\Main.cs" />
+    <Compile Include="Core\Patches.cs" />
   </ItemGroup>
 
-  <ItemGroup Label="宏核心">
-    <Compile Include="Macro\Macro.cs" />
-    <Compile Include="Macro\Macro.Diagnostics.cs" />
-    <Compile Include="Macro\TechniqueSimulator.cs" />
-    <Compile Include="Macro\LevelTechniqueManager.cs" />
+  <ItemGroup Label="Technique 手法模拟">
+    <Compile Include="Technique\Macro.cs" />
+    <Compile Include="Technique\TechniqueSimulator.cs" />
+    <Compile Include="Technique\LevelTechniqueManager.cs" />
   </ItemGroup>
 
-  <ItemGroup Label="输入">
-    <Compile Include="Macro\InputSystem.cs" />
-    <Compile Include="Macro\VirtualAsyncInput.cs" />
-    <Compile Include="Macro\AsyncInputManager.cs" />
-    <Compile Include="Macro\KeyMap.cs" />
-    <Compile Include="Macro\SkyHookSystem.cs" />
+  <ItemGroup Label="Calibration 校准与诊断">
+    <Compile Include="Calibration\Macro.Diagnostics.cs" />
   </ItemGroup>
 
-  <ItemGroup Label="计时与平台">
-    <Compile Include="Macro\PreciseNow.cs" />
-    <Compile Include="Macro\DSPTimeSimulater.cs" />
+  <ItemGroup Label="Input 输入">
+    <Compile Include="Input\InputSystem.cs" />
+    <Compile Include="Input\VirtualAsyncInput.cs" />
+    <Compile Include="Input\AsyncInputManager.cs" />
+    <Compile Include="Input\KeyMap.cs" />
+    <Compile Include="Input\SkyHookSystem.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="Timing 计时">
+    <Compile Include="Timing\PreciseNow.cs" />
+    <Compile Include="Timing\DSPTimeSimulater.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="Settings / UI / Platform / Localization">
+    <Compile Include="Settings\Settings.cs" />
+    <Compile Include="UI\UIUtils.cs" />
+    <Compile Include="UI\ShowText.cs" />
     <Compile Include="Platform\BaseSelect.cs" />
     <Compile Include="Platform\Windows.cs" />
     <Compile Include="Platform\Linux.cs" />
-  </ItemGroup>
-
-  <ItemGroup Label="本地化">
     <Compile Include="Localization\LocalizationManager.cs" />
   </ItemGroup>
 
