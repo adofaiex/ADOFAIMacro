@@ -1008,6 +1008,19 @@ namespace ADOFAIMacro.Macro
 
                 double t = floors[ni]?.entryTime ?? double.MaxValue;
 
+                // 谱尾附近找不到下一块可判定的砖时，长按仍要发松键尾事件
+                // （否则键一直按着，strictHolds 判中途没松 → 长按失败）。
+                if (ni >= n - 1)
+                {
+                    if (simulate && floor.holdLength > -1 && !floor.midSpin)
+                    {
+                        double te = floors[n - 1]?.entryTime ?? double.MaxValue;
+                        if (overflow != null) overflow.Add(new HitEvent(te, 0, releaseOnly: true));
+                        else pool[_hitEventPoolUsed++] = new HitEvent(te, 0, releaseOnly: true);
+                    }
+                    break;
+                }
+
                 if (floor.midSpin && floor.holdLength <= -1) continue;
 
                 if (simulate && floor.holdLength > -1 && ni < n)
@@ -1394,7 +1407,21 @@ namespace ADOFAIMacro.Macro
                     if (cf.nextfloor?.auto ?? false) { ni++; continue; }
                     break;
                 }
-                if (ni >= floors.Length - 1) break;
+
+                // 找不到下一块可判定的砖（后面全是 auto/中旋，或已到谱尾）：
+                // **当前砖是长按时仍必须发松键尾事件**。原来的
+                // `if (ni >= floors.Length - 1) break;` 直接 break，尾事件
+                // 永远不生成 → 键一直按着 → strictHolds 判定中途没松 →
+                // 长按失败（用户报的「长按了没用」）。松键时刻取谱尾那块砖。
+                if (ni >= floors.Length - 1)
+                {
+                    if (sim && fl.holdLength > -1 && !fl.midSpin)
+                    {
+                        double te = floors[floors.Length - 1]?.entryTime ?? double.MaxValue;
+                        evTime.Add(te); evPress.Add(-1); evFloor.Add(i); evSpeed.Add(fl.speed);
+                    }
+                    break;
+                }
 
                 var nf = floors[ni];
                 double t = nf?.entryTime ?? double.MaxValue;
@@ -1519,6 +1546,18 @@ namespace ADOFAIMacro.Macro
                     break;
                 }
                 if (ni >= floors.Length - 1) break;
+
+                // 谱尾附近找不到下一块可判定的砖时，长按仍要发松键尾事件
+                // （否则键一直按着，strictHolds 判中途没松 → 长按失败）。
+                if (ni >= floors.Length - 1)
+                {
+                    if (sim && fl.holdLength > -1 && !fl.midSpin)
+                    {
+                        double te = floors[floors.Length - 1]?.entryTime ?? double.MaxValue;
+                        _evTimeRecycle.Add(te); _evPressRecycle.Add(-1); _evFloorRecycle.Add(i);
+                    }
+                    break;
+                }
 
                 var    nf = floors[ni];
                 double t  = nf?.entryTime ?? double.MaxValue;
