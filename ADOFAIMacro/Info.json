@@ -7,7 +7,7 @@
   "IsCheat": true,
   "Requirements": [],
   "AssemblyName": "ADOFAIMacro.dll",
-  "EntryMethod": "ADOFAIMacro.Main.Load",
+  "EntryMethod": "ADOFAIMacro.Core.Main.Load",
   "HomePage": "https://github.com/2228293026/ADOFAIMacro-Dev",
   "Repository": "https://raw.githubusercontent.com/2228293026/ADOFAIMacro-Dev/refs/heads/master/Repository.json"
 }

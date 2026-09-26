@@ -19,7 +19,7 @@ using UnityEngine;
 
 #nullable enable
 
-namespace ADOFAIMacro
+namespace ADOFAIMacro.UI
 {
     public static class UIUtils
     {

@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 #nullable enable
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Input
 {
     #region SkyHook 系统独立实现
 

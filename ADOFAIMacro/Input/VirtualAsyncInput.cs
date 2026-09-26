@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using ADOFAIMacro.Platform;
+using ADOFAIMacro.Core;
+using ADOFAIMacro.Timing;
 using SkyHook;
 
 #nullable enable
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Input
 {
     /// <summary>
     /// 虚拟异步键盘：宏工作线程在精确触发时刻，把合成事件直接塞进游戏

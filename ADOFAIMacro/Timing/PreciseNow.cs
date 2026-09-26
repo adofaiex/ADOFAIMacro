@@ -1,7 +1,7 @@
 using System;
 using ADOFAIMacro.Platform;
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Timing
 {
     /// <summary>
     /// 精确本地时间（.NET ticks，与 DateTime.Now.Ticks 同域）。

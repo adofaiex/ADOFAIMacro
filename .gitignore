@@ -370,4 +370,6 @@ ADOFAIMacro.dll
 # Agent instructions (project-specific LLM context)
 CLAUDE.md
 AGENTS.md
-.codegraph/
+.codegraph/piecedump.txt
+build_cpp.out
+piecelen.txt

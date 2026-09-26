@@ -1,8 +1,9 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using ADOFAIMacro.Core;
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Input
 {
     public enum InputMode : int
     {
@@ -227,7 +228,7 @@ namespace ADOFAIMacro.Macro
         {
             try
             {
-                if (Main.Mod != null && Main.Settings is Settings settings)
+                if (Main.Mod != null && Main.Settings is global::ADOFAIMacro.Settings.Settings settings)
                 {
                     Main.Log($"[InputSystem] 从设置同步模式: {settings.InputMode}");
                     SetInputMode((InputMode)settings.InputMode);

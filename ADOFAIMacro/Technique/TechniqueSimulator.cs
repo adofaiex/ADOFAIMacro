@@ -5,9 +5,13 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using ADOFAIMacro.Technique;
+using ADOFAIMacro.Core;
+using ADOFAIMacro.Input;
+using Settings = global::ADOFAIMacro.Settings.Settings;
 
 #nullable enable
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Technique
 {
     internal class TechniqueSimulator
     {
@@ -199,7 +203,7 @@ namespace ADOFAIMacro.Macro
 
                 if (!File.Exists(dllPath))
                 {
-                    Macro.Log($"[Macro] 找不到手法模拟DLL: {dllPath}");
+                    MacroEngine.Log($"[Macro] 找不到手法模拟DLL: {dllPath}");
                     return false;
                 }
 
@@ -220,7 +224,7 @@ namespace ADOFAIMacro.Macro
 
                 if (setPtr == IntPtr.Zero || buildPtr == IntPtr.Zero || freePtr == IntPtr.Zero)
                 {
-                    Macro.Log("[Macro] 获取函数地址失败");
+                    MacroEngine.Log("[Macro] 获取函数地址失败");
                     FreeLibrary(_techDllHandle);
                     _techDllHandle = IntPtr.Zero;
                     return false;
@@ -240,7 +244,7 @@ namespace ADOFAIMacro.Macro
             }
             catch (Exception ex)
             {
-                Macro.Log($"[Macro] 加载DLL异常: {ex.Message}");
+                MacroEngine.Log($"[Macro] 加载DLL异常: {ex.Message}");
                 return false;
             }
         }
@@ -253,7 +257,7 @@ namespace ADOFAIMacro.Macro
             int[] floorIndices,
             int eventCount,
             double bpm, double speed,
-            out Macro.HitEvent[]? hitEvents)
+            out MacroEngine.HitEvent[]? hitEvents)
             => BuildHitEvents(entryTimes, pressTypes, floorIndices, null, eventCount, bpm, speed, out hitEvents);
 
         /// <summary>构建手法模拟事件（逐地板速度倍率；变速谱面按局部速率切片）</summary>
@@ -265,13 +269,13 @@ namespace ADOFAIMacro.Macro
             double[]? speedMuls,
             int eventCount,
             double bpm, double speed,
-            out Macro.HitEvent[]? hitEvents)
+            out MacroEngine.HitEvent[]? hitEvents)
         {
             hitEvents = null;
 
             if (_cachedLeftKeys == null)
             {
-                Macro.Log("[Macro] 手法模拟配置未初始化");
+                MacroEngine.Log("[Macro] 手法模拟配置未初始化");
                 return false;
             }
 
@@ -302,7 +306,7 @@ namespace ADOFAIMacro.Macro
 
                 if (nativeEvents != IntPtr.Zero && outCount > 0)
                 {
-                    var events = new Macro.HitEvent[outCount];
+                    var events = new MacroEngine.HitEvent[outCount];
                     int size = Marshal.SizeOf<NativeHitEvent>();
 
                     // 使用 unsafe 批量复制，避免 Marshal.PtrToStructure 的开销
@@ -320,7 +324,7 @@ namespace ADOFAIMacro.Macro
                             byte releaseKeyCode = *(src + i * size + 20);
                             // 偏移 21-23: padding
 
-                            events[i] = new Macro.HitEvent(
+                            events[i] = new MacroEngine.HitEvent(
                                 triggerTime,
                                 keyCode,
                                 releaseOnlyInt != 0,
@@ -337,7 +341,7 @@ namespace ADOFAIMacro.Macro
             }
             catch (Exception ex)
             {
-                Macro.Log($"[Macro] DLL调用异常: {ex.Message}");
+                MacroEngine.Log($"[Macro] DLL调用异常: {ex.Message}");
                 return false;
             }
             finally

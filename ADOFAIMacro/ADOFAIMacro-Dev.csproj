@@ -66,7 +66,16 @@
   </ItemGroup>
 
   <ItemGroup Label="Technique 手法模拟">
-    <Compile Include="Technique\Macro.cs" />
+    <!-- MacroEngine.cs 是这个 partial class 的主体（字段、TimeAnchor、Win32
+         声明、每帧 Update）；其余文件按职责补上，详见各文件头部注释。 -->
+    <Compile Include="Technique\MacroEngine.cs" />
+    <Compile Include="Technique\ConfigParser.cs" />
+    <Compile Include="Technique\EventBuilder.cs" />
+    <Compile Include="Technique\NativeTechnique.cs" />
+    <Compile Include="Technique\PieceBuilder.cs" />
+    <Compile Include="Technique\KeyWorker.cs" />
+    <Compile Include="Technique\Clock.cs" />
+    <Compile Include="Technique\Lifecycle.cs" />
     <Compile Include="Technique\TechniqueSimulator.cs" />
     <Compile Include="Technique\LevelTechniqueManager.cs" />
   </ItemGroup>

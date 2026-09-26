@@ -1,4 +1,6 @@
-using ADOFAIMacro.Macro;
+using ADOFAIMacro.UI;
+using ADOFAIMacro.Technique;
+using ADOFAIMacro.Input;
 using HarmonyLib;
 using SA.GoogleDoc;
 using System;
@@ -15,7 +17,7 @@ using static UnityModManagerNet.UnityModManager;
 
 #nullable enable
 
-namespace ADOFAIMacro
+namespace ADOFAIMacro.Core
 {
 #if DEBUG
     [EnableReloading]
@@ -24,7 +26,7 @@ namespace ADOFAIMacro
     {
         public static UnityModManager.ModEntry? Mod { get; private set; }
         public static Harmony? Harmony { get; private set; }
-        public static Settings Settings { get; private set; } = null!;
+        public static ADOFAIMacro.Settings.Settings Settings { get; private set; } = null!;
         private static GameObject? _uiObject;
 
         /// <summary>
@@ -57,7 +59,7 @@ namespace ADOFAIMacro
         {
             Mod = modEntry;
             LogStartup("[ADOFAIMacro] Build: 2026-08-17-2 (focus-cache-fix)");
-            Settings = Settings.Load(modEntry);
+            Settings = global::ADOFAIMacro.Settings.Settings.Load(modEntry);
             // 设置一加载完就把日志总开关接上，之后所有日志都受它控制
             LoggingEnabled = Settings.EnableLogging;
 
@@ -144,7 +146,7 @@ namespace ADOFAIMacro
                 // None
 
 #else
-                if (modEntry.Info.Version != "1.3.0" || modEntry.Info.Id != "ADOFAIMacro" || modEntry.Info.DisplayName != "ADOFAI Macro" || modEntry.Info.Author != "HitMargin" || modEntry.Info.AssemblyName != "ADOFAIMacro.dll" || modEntry.Info.EntryMethod != "ADOFAIMacro.Main.Load")
+                if (modEntry.Info.Version != "1.3.0" || modEntry.Info.Id != "ADOFAIMacro" || modEntry.Info.DisplayName != "ADOFAI Macro" || modEntry.Info.Author != "HitMargin" || modEntry.Info.AssemblyName != "ADOFAIMacro.dll" || modEntry.Info.EntryMethod != "ADOFAIMacro.Core.Main.Load")
                 {
                     Mod?.Logger.Error("Modifying the Info.json file is NOT allowed!");
                     Application.Quit();
@@ -195,7 +197,7 @@ namespace ADOFAIMacro
                 TrySetWindowTitle(null);
                 // 卸载补丁后 Macro.Update 不会再被调用，必须在这里把
                 // requireHolding 交还游戏（否则禁用宏后长按地板判定一直是"不需要按住"）
-                ADOFAIMacro.Macro.Macro.RestoreHoldBehavior();
+                MacroEngine.RestoreHoldBehavior();
                 InputSystem.EmergencyStop();
                 TechniqueSimulator.Unload();
                 // 覆盖层必须销毁：ShowText 的 _showMacroText 跟的是"启用宏"开关而不是

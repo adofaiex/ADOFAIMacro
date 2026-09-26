@@ -1,13 +1,14 @@
-﻿using ADOFAIMacro.Platform;
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
-using static ADOFAIMacro.Macro.SkyHookSystem;
+using ADOFAIMacro.Core;
+using static ADOFAIMacro.Input.SkyHookSystem;
+using ADOFAIMacro.Technique;
 
 #nullable enable
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Input
 {
     public static class AsyncInputManager
     {
@@ -50,7 +51,7 @@ namespace ADOFAIMacro.Macro
         {
             if (_isInitialized)
             {
-                Macro.Log("[InputSystem] 已在运行中");
+                MacroEngine.Log("[InputSystem] 已在运行中");
                 return;
             }
 
@@ -77,11 +78,11 @@ namespace ADOFAIMacro.Macro
 
                 _isInitialized = true;
 
-                Macro.Log("[InputSystem] 启动成功（直接调用模式）");
+                MacroEngine.Log("[InputSystem] 启动成功（直接调用模式）");
             }
             catch (Exception ex)
             {
-                Macro.Log($"[InputSystem] 启动失败: {ex.Message}");
+                MacroEngine.Log($"[InputSystem] 启动失败: {ex.Message}");
                 _isInitialized = false;
                 timeEndPeriod(1);
             }
@@ -102,7 +103,7 @@ namespace ADOFAIMacro.Macro
             timeEndPeriod(1);
 
             _isInitialized = false;
-            Macro.Log($"[InputSystem] 已停止 | 处理: {_totalProcessed} | 丢弃: {Interlocked.Read(ref _totalDropped)}");
+            MacroEngine.Log($"[InputSystem] 已停止 | 处理: {_totalProcessed} | 丢弃: {Interlocked.Read(ref _totalDropped)}");
         }
 
         // ══════════════════════════════════════════════════════
@@ -154,7 +155,7 @@ namespace ADOFAIMacro.Macro
             if (_isInitialized)
                 InputSystem.ClearQueue();
 
-            Macro.Log("[InputSystem] 队列已清空");
+            MacroEngine.Log("[InputSystem] 队列已清空");
         }
 
         // ══════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-﻿/*
+/*
 * Copy in Cover Mod
 * Assembly: Cover.dll
 * NameSpace: Cover._Core
@@ -16,7 +16,7 @@ using ADOFAIMacro.Platform;
 using UnityEngine;
 
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Timing
 {
     public static unsafe class DSPTimeSimulater
     {

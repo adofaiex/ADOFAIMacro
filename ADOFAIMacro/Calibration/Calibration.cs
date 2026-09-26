@@ -2,18 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using ADOFAIMacro.Core;
 using UnityEngine;
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Technique
 {
     /// <summary>
     /// 校准与诊断统计：判定误差回灌与自动校准、击发延迟统计、GC 抑制、
     /// 手法表摘要与日志出口。
     ///
-    /// 这些都与「按出手法」无关 —— 手法本身在 Technique\Macro.cs 与
+    /// 这些都与「按出手法」无关 —— 手法本身在 Technique\MacroEngine.cs 与
     /// 原生 TechniqueSimulator.dll 里。全部走 Main.Log，受日志总开关控制。
+    ///
+    /// ⚠️ 本文件是 partial class MacroEngine 的一部分，与 Technique\ 下的其余
+    ///    7 个文件同属 ADOFAIMacro.Technique 命名空间 —— partial 的所有部分
+    ///    必须同命名空间，否则 C# 会当成两个不同的类。放在 Calibration\ 目录
+    ///    只是为了按职责分类，IDE0130 是可接受的代价。
     /// </summary>
-    internal static partial class Macro
+    internal static partial class MacroEngine
     {
         // ── 判定误差统计与自动校准 ──────────────────────────────
         //  环路为纯单局控制器：每局从 0 起步，主段 ~1s 收敛，无跨局状态。

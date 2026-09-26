@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 #nullable enable
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Input
 {
     /// <summary>
     /// 统一的按键名称到虚拟键码映射

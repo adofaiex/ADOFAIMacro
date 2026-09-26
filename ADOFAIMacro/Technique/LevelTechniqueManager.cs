@@ -4,10 +4,13 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 using Newtonsoft.Json;
+using ADOFAIMacro.Core;
+using ADOFAIMacro.Technique;
+using Settings = global::ADOFAIMacro.Settings.Settings;
 
 #nullable enable
 
-namespace ADOFAIMacro.Macro
+namespace ADOFAIMacro.Technique
 {
     /// <summary>
     /// 关卡特定手法配置管理器
@@ -64,7 +67,7 @@ namespace ADOFAIMacro.Macro
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] CheckAndLoadLevelConfig error: {ex.Message}");
+                MacroEngine.Log($"[LevelTechnique] CheckAndLoadLevelConfig error: {ex.Message}");
             }
         }
 
@@ -86,7 +89,7 @@ namespace ADOFAIMacro.Macro
                 string configPath = GetConfigPath(levelPath);
                 if (!File.Exists(configPath))
                 {
-                    Macro.Log($"[LevelTechnique] 关卡配置不存在: {configPath}");
+                    MacroEngine.Log($"[LevelTechnique] 关卡配置不存在: {configPath}");
                     CacheVersion++;
                     return;
                 }
@@ -98,13 +101,13 @@ namespace ADOFAIMacro.Macro
                 {
                     SanitizeConfig(config);
                     _loadedConfigs[levelPath] = config;
-                    Macro.Log($"[LevelTechnique] 已加载关卡配置: {config.name} ({config.techniqueSegments?.Count ?? 0} 个分段)");
+                    MacroEngine.Log($"[LevelTechnique] 已加载关卡配置: {config.name} ({config.techniqueSegments?.Count ?? 0} 个分段)");
                 }
                 CacheVersion++;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] 加载配置失败: {ex.Message}");
+                MacroEngine.Log($"[LevelTechnique] 加载配置失败: {ex.Message}");
             }
         }
 
@@ -213,7 +216,7 @@ namespace ADOFAIMacro.Macro
             string? levelPath = ADOBase.levelPath;
             if (string.IsNullOrEmpty(levelPath) || !File.Exists(levelPath))
             {
-                Macro.Log("[LevelTechnique] 无法保存配置：没有有效的关卡路径");
+                MacroEngine.Log("[LevelTechnique] 无法保存配置：没有有效的关卡路径");
                 return false;
             }
 
@@ -223,7 +226,7 @@ namespace ADOFAIMacro.Macro
                 var currentProfile = settings.CurrentTechniqueProfile;
                 if (currentProfile == null)
                 {
-                    Macro.Log("[LevelTechnique] 没有可用的手法配置，无法保存关卡配置");
+                    MacroEngine.Log("[LevelTechnique] 没有可用的手法配置，无法保存关卡配置");
                     return false;
                 }
                 var profile = new Settings.TechniqueProfile
@@ -246,12 +249,12 @@ namespace ADOFAIMacro.Macro
 
                 _loadedConfigs[levelPath] = profile;
                 CacheVersion++;
-                Macro.Log($"[LevelTechnique] 已保存关卡配置到: {configPath}");
+                MacroEngine.Log($"[LevelTechnique] 已保存关卡配置到: {configPath}");
                 return true;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] 保存配置失败: {ex.Message}");
+                MacroEngine.Log($"[LevelTechnique] 保存配置失败: {ex.Message}");
                 return false;
             }
         }
@@ -294,14 +297,14 @@ namespace ADOFAIMacro.Macro
                     File.Delete(configPath);
                     _loadedConfigs.Remove(levelPath!); // levelPath 已检查过非 null
                     CacheVersion++;
-                    Macro.Log($"[LevelTechnique] 已删除关卡配置: {configPath}");
+                    MacroEngine.Log($"[LevelTechnique] 已删除关卡配置: {configPath}");
                     return true;
                 }
                 return false;
             }
             catch (Exception ex)
             {
-                Macro.Log($"[LevelTechnique] 删除配置失败: {ex.Message}");
+                MacroEngine.Log($"[LevelTechnique] 删除配置失败: {ex.Message}");
                 return false;
             }
         }
@@ -327,7 +330,7 @@ namespace ADOFAIMacro.Macro
 
             if (string.IsNullOrEmpty(levelPath) || !File.Exists(levelPath))
             {
-                Macro.Log("[LevelTechnique] 无法加载配置：没有有效的关卡路径");
+                MacroEngine.Log("[LevelTechnique] 无法加载配置：没有有效的关卡路径");
                 return;
             }
 

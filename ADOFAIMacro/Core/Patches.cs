@@ -1,5 +1,7 @@
-using ADOFAIMacro.Macro;
 using ADOFAIMacro.Platform;
+using ADOFAIMacro.Technique;
+using ADOFAIMacro.Input;
+using ADOFAIMacro.Timing;
 using HarmonyLib;
 using SkyHook;
 using System;
@@ -8,8 +10,9 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
+using Settings = global::ADOFAIMacro.Settings.Settings;
 
-namespace ADOFAIMacro
+namespace ADOFAIMacro.Core
 {
     public class Patches
     {
@@ -50,7 +53,7 @@ namespace ADOFAIMacro
             [HarmonyPrefix]
             public static void Prefix(scrController __instance)
             {
-                Macro.Macro.Update(__instance);
+                MacroEngine.Update(__instance);
             }
         }
 
@@ -60,7 +63,7 @@ namespace ADOFAIMacro
             [HarmonyPostfix]
             public static void Postfix(scrController __instance)
             {
-                Macro.Macro.Reset(__instance);
+                MacroEngine.Reset(__instance);
                 // 关卡重置时，尝试加载关卡特定配置
                 if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
                 {
@@ -76,7 +79,7 @@ namespace ADOFAIMacro
             [HarmonyPrefix]
             public static void Prefix(scrController __instance)
             {
-                Macro.Macro.Reset(__instance);
+                MacroEngine.Reset(__instance);
                 // 关卡重启时，尝试加载关卡特定配置
                 if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
                 {
@@ -143,11 +146,11 @@ namespace ADOFAIMacro
                     // SendKeyDirect 导出时回退 PushKeyEvent"的逻辑。直接调
                     // InputSystem.SendKeyDirect 在旧 DLL 上会返回 -1 而静默不发键。
                     // 同时登记过滤放行配额（该注入同样会回流到 HookCallback）。
-                    if (Main.Settings.EnableKeyFilter) Macro.VirtualAsyncInput.RegisterInjectedKey(key, true);
-                    ADOFAIMacro.Macro.AsyncInputManager.DirectPushKey(key, true);
+                    if (Main.Settings.EnableKeyFilter) VirtualAsyncInput.RegisterInjectedKey(key, true);
+                    Input.AsyncInputManager.DirectPushKey(key, true);
                     yield return new WaitForSeconds(0.05f);
-                    if (Main.Settings.EnableKeyFilter) Macro.VirtualAsyncInput.RegisterInjectedKey(key, false);
-                    ADOFAIMacro.Macro.AsyncInputManager.DirectPushKey(key, false);
+                    if (Main.Settings.EnableKeyFilter) VirtualAsyncInput.RegisterInjectedKey(key, false);
+                    Input.AsyncInputManager.DirectPushKey(key, false);
                 }
             }
         }
@@ -251,7 +254,7 @@ namespace ADOFAIMacro
                     double nowSpeed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 0.0;
 
                     // 方案7：闭环校准——把实测判定误差喂给宏
-                    ADOFAIMacro.Macro.Macro.RecordJudgedError(errMs, (float)(spd ?? 1f));
+                    ADOFAIMacro.Technique.MacroEngine.RecordJudgedError(errMs, (float)(spd ?? 1f));
 
                     // ⚠️ 这里在"每一次判定"上执行。旧实现无条件写一行 UMM 日志：
                     // 高密度谱面每局数千次文件 I/O，是主线程卡顿与日志膨胀的来源。
@@ -479,7 +482,7 @@ namespace ADOFAIMacro
                             if (!IsKeyAllowed(keyCode))
                             {
                                 _blockedKeyCount++;
-                                Macro.Macro.Log($"Filtered Key: {keyCode} ({(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")})");
+                                MacroEngine.Log($"Filtered Key: {keyCode} ({(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")})");
                             }
                         }
                         else if (value is AsyncKeyCode asyncKeyCode)
@@ -487,7 +490,7 @@ namespace ADOFAIMacro
                             if (!IsAsyncKeyAllowed(asyncKeyCode.key))  // 小写 key
                             {
                                 _blockedKeyCount++;
-                                Macro.Macro.Log($"Filtered Async Key in CountValidKeysPressed: {asyncKeyCode.key} (0x{asyncKeyCode.key:X2})");
+                                MacroEngine.Log($"Filtered Async Key in CountValidKeysPressed: {asyncKeyCode.key} (0x{asyncKeyCode.key:X2})");
                             }
                         }
                     }
@@ -591,24 +594,24 @@ namespace ADOFAIMacro
                 if (AsyncKeyVKMap.TryGetValue(trimmedKey, out ushort vkCode))
                 {
                     result.Add(vkCode);
-                    Macro.Macro.Log($"Parsed async key: {trimmedKey} -> VK 0x{vkCode:X2}");
+                    MacroEngine.Log($"Parsed async key: {trimmedKey} -> VK 0x{vkCode:X2}");
                 }
                 // 十六进制 (0x26 格式)
                 else if (trimmedKey.StartsWith("0X") && ushort.TryParse(trimmedKey.Substring(2),
                     System.Globalization.NumberStyles.HexNumber, null, out ushort hexCode))
                 {
                     result.Add(hexCode);
-                    Macro.Macro.Log($"Parsed async hex: {trimmedKey} -> 0x{hexCode:X2}");
+                    MacroEngine.Log($"Parsed async hex: {trimmedKey} -> 0x{hexCode:X2}");
                 }
                 // 纯数字
                 else if (ushort.TryParse(trimmedKey, out ushort numCode))
                 {
                     result.Add(numCode);
-                    Macro.Macro.Log($"Parsed async number: {trimmedKey} -> 0x{numCode:X2}");
+                    MacroEngine.Log($"Parsed async number: {trimmedKey} -> 0x{numCode:X2}");
                 }
                 else
                 {
-                    Macro.Macro.Log($"Failed to parse async key: {trimmedKey}");
+                    MacroEngine.Log($"Failed to parse async key: {trimmedKey}");
                 }
             }
             return result;
@@ -660,12 +663,12 @@ namespace ADOFAIMacro
                 // 0. 镜像回声丢弃：虚拟按键直喂成功后注入的显示用真实按键
                 //    会经钩子回流，配额命中即丢弃（虚拟直喂走 KeyUpdated.Invoke，
                 //    不经过这里，不受影响）——不丢会导致同一击打判定两次
-                if (Macro.VirtualAsyncInput.ShouldDropMirrorEcho(ev.Key, ev.Type))
+                if (VirtualAsyncInput.ShouldDropMirrorEcho(ev.Key, ev.Type))
                     return false;
 
                 // 0.5 宏自己注入的键：放行并跳过按键过滤。过滤的语义是拦玩家输入，
                 //     不是拦宏的输出 —— 白名单模式下否则会把宏用的键全部过滤掉。
-                if (Macro.VirtualAsyncInput.ConsumeInjectedKey(ev.Key, ev.Type))
+                if (VirtualAsyncInput.ConsumeInjectedKey(ev.Key, ev.Type))
                     return true;
 
                 // 1. 基本检查
@@ -691,7 +694,7 @@ namespace ADOFAIMacro
 
                 bool allowed = IsAsyncKeyAllowed(ev.Key);
                 if (!allowed)
-                    Macro.Macro.Log($"Filtered Async Key: {ev.Label} ({ev.Key}) - {(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")}");
+                    MacroEngine.Log($"Filtered Async Key: {ev.Label} ({ev.Key}) - {(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")}");
 
                 return allowed;
             }

@@ -1,10 +1,13 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System;
 using System.Collections.Generic;
-using ADOFAIMacro.Macro;
+using ADOFAIMacro;
+using ADOFAIMacro.Core;
+using ADOFAIMacro.Input;
+using ADOFAIMacro.Timing;
 using ADOFAIMacro.Localization;
 
-namespace ADOFAIMacro
+namespace ADOFAIMacro.UI
 {
     public class ShowText : MonoBehaviour
     {
@@ -58,7 +61,7 @@ namespace ADOFAIMacro
             {
                 // 当前驱动路径角标：HIT=直接判定 / VIRT=虚拟异步键盘 / NT=NT注入 / SI=SendInput
                 string tag = !Main.Settings.SimulateKeyPress ? "HIT"
-                    : Macro.VirtualAsyncInput.Active ? "VIRT"
+                    : VirtualAsyncInput.Active ? "VIRT"
                     : Main.Settings.SkyHookMode ? "NT/SI"
                     : "SI";
                 string text = $"{LocalizationManager.Get("macro.enabled_text")} [{tag}]";
@@ -85,15 +88,15 @@ namespace ADOFAIMacro
             _downSnapshot.Clear();
             _upSnapshot.Clear();
             int nowMs = Environment.TickCount;
-            lock (Macro.VirtualAsyncInput.DisplayLock)
+            lock (VirtualAsyncInput.DisplayLock)
             {
-                foreach (var kv in Macro.VirtualAsyncInput.DisplayDown)
+                foreach (var kv in VirtualAsyncInput.DisplayDown)
                     _downSnapshot[kv.Key] = kv.Value;
-                for (int i = Macro.VirtualAsyncInput.DisplayUps.Count - 1; i >= 0; i--)
+                for (int i = VirtualAsyncInput.DisplayUps.Count - 1; i >= 0; i--)
                 {
-                    var up = Macro.VirtualAsyncInput.DisplayUps[i];
+                    var up = VirtualAsyncInput.DisplayUps[i];
                     if (nowMs - up.time <= 300) _upSnapshot.Add(up);
-                    else Macro.VirtualAsyncInput.DisplayUps.RemoveAt(i);
+                    else VirtualAsyncInput.DisplayUps.RemoveAt(i);
                 }
             }
 

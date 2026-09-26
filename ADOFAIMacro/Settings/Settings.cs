@@ -1,4 +1,3 @@
-using ADOFAIMacro.Macro;
 using ADOFAIMacro.Localization;
 using HarmonyLib;
 using Newgrounds;
@@ -9,85 +8,98 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityModManagerNet;
+using ADOFAIMacro.Technique;
+using ADOFAIMacro.Core;
+using ADOFAIMacro.Input;
+using ADOFAIMacro.UI;
+// `Newgrounds` 里也有一个 Main，与我们的 ADOFAIMacro.Core.Main 冲突 → 用别名消歧
+using Main = ADOFAIMacro.Core.Main;
 
-namespace ADOFAIMacro
+// 命名空间跟目录对齐（消 IDE0130）。
+//
+// TechniqueProfile / TechniqueSegment 原本是 Settings 的**嵌套类**（写成
+// `Settings.TechniqueProfile`）。但命名空间也叫 ADOFAIMacro.Settings，编译器会把
+// 裸写的 `Settings` 优先解析成命名空间 → CS0234。`using Settings = ...` 别名压不住
+// （方法签名的名字查找先于别名生效）。
+// 解决：把这两个类型提为命名空间下的**顶层类型**，调用点直接写 `TechniqueProfile`。
+namespace ADOFAIMacro.Settings
 {
+    // ─────────────────────────────────────────────
+    //  手法配置文件
+    // ─────────────────────────────────────────────
+    [Serializable]
+    public class TechniqueProfile
+    {
+        public string name = "默认配置";
+        public string leftHandKeys = "D,F";
+        public string rightHandKeys = "J,K";
+        public string leftHandOrders = "";
+        public string rightHandOrders = "";
+        public string leftHandPressTimes = "0.8,0.8";
+        public string rightHandPressTimes = "0.8,0.8";
+        public int handPreference = 1; // 0=左手优先, 1=右手优先
+        public float speedChangeTolerance = 0f;
+        public List<TechniqueSegment> techniqueSegments = [];
+
+        public TechniqueProfile() { }
+
+        public TechniqueProfile Clone()
+        {
+            return new TechniqueProfile
+            {
+                name = this.name + " (副本)",
+                leftHandKeys = this.leftHandKeys,
+                rightHandKeys = this.rightHandKeys,
+                leftHandOrders = this.leftHandOrders,
+                rightHandOrders = this.rightHandOrders,
+                leftHandPressTimes = this.leftHandPressTimes,
+                rightHandPressTimes = this.rightHandPressTimes,
+                handPreference = this.handPreference,
+                speedChangeTolerance = this.speedChangeTolerance,
+                techniqueSegments = [.. this.techniqueSegments.Select(s => new TechniqueSegment {
+                    startFloor          = s.startFloor,
+                    endFloor            = s.endFloor,
+                    bpmLimit            = s.bpmLimit,
+                    leftHandKeys        = s.leftHandKeys,
+                    rightHandKeys       = s.rightHandKeys,
+                    leftHandOrders      = s.leftHandOrders,
+                    rightHandOrders     = s.rightHandOrders,
+                    leftHandPressTimes  = s.leftHandPressTimes,
+                    rightHandPressTimes = s.rightHandPressTimes,
+                })]
+            };
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  变速分段（含可选按键覆盖）
+    // ─────────────────────────────────────────────
+    [Serializable]
+    public class TechniqueSegment
+    {
+        public int startFloor;
+        public int endFloor;
+        public float bpmLimit;
+
+        // 可选按键覆盖（留空 = 继承全局配置）
+        public string leftHandKeys = "";
+        public string rightHandKeys = "";
+        public string leftHandOrders = "";
+        public string rightHandOrders = "";
+        public string leftHandPressTimes = "";
+        public string rightHandPressTimes = "";
+
+        /// <summary>任一手的按键字段非空即视为有覆盖</summary>
+        public bool HasKeyOverride =>
+            !string.IsNullOrWhiteSpace(leftHandKeys) ||
+            !string.IsNullOrWhiteSpace(rightHandKeys);
+    }
+
     /// <summary>
     /// Mod settings class / Mod 设置类
     /// </summary>
     public class Settings : UnityModManager.ModSettings
     {
-        // ─────────────────────────────────────────────
-        //  手法配置文件
-        // ─────────────────────────────────────────────
-        [Serializable]
-        public class TechniqueProfile
-        {
-            public string name = "默认配置";
-            public string leftHandKeys = "D,F";
-            public string rightHandKeys = "J,K";
-            public string leftHandOrders = "";
-            public string rightHandOrders = "";
-            public string leftHandPressTimes = "0.8,0.8";
-            public string rightHandPressTimes = "0.8,0.8";
-            public int handPreference = 1; // 0=左手优先, 1=右手优先
-            public float speedChangeTolerance = 0f;
-            public List<TechniqueSegment> techniqueSegments = [];
-
-            public TechniqueProfile() { }
-
-            public TechniqueProfile Clone()
-            {
-                return new TechniqueProfile
-                {
-                    name = this.name + " (副本)",
-                    leftHandKeys = this.leftHandKeys,
-                    rightHandKeys = this.rightHandKeys,
-                    leftHandOrders = this.leftHandOrders,
-                    rightHandOrders = this.rightHandOrders,
-                    leftHandPressTimes = this.leftHandPressTimes,
-                    rightHandPressTimes = this.rightHandPressTimes,
-                    handPreference = this.handPreference,
-                    speedChangeTolerance = this.speedChangeTolerance,
-                    techniqueSegments = [.. this.techniqueSegments.Select(s => new TechniqueSegment {
-                        startFloor          = s.startFloor,
-                        endFloor            = s.endFloor,
-                        bpmLimit            = s.bpmLimit,
-                        leftHandKeys        = s.leftHandKeys,
-                        rightHandKeys       = s.rightHandKeys,
-                        leftHandOrders      = s.leftHandOrders,
-                        rightHandOrders     = s.rightHandOrders,
-                        leftHandPressTimes  = s.leftHandPressTimes,
-                        rightHandPressTimes = s.rightHandPressTimes,
-                    })]
-                };
-            }
-        }
-
-        // ─────────────────────────────────────────────
-        //  变速分段（含可选按键覆盖）
-        // ─────────────────────────────────────────────
-        [Serializable]
-        public class TechniqueSegment
-        {
-            public int startFloor;
-            public int endFloor;
-            public float bpmLimit;
-
-            // 可选按键覆盖（留空 = 继承全局配置）
-            public string leftHandKeys = "";
-            public string rightHandKeys = "";
-            public string leftHandOrders = "";
-            public string rightHandOrders = "";
-            public string leftHandPressTimes = "";
-            public string rightHandPressTimes = "";
-
-            /// <summary>任一手的按键字段非空即视为有覆盖</summary>
-            public bool HasKeyOverride =>
-                !string.IsNullOrWhiteSpace(leftHandKeys) ||
-                !string.IsNullOrWhiteSpace(rightHandKeys);
-        }
-
         // ─────────────────────────────────────────────
         //  UI 内部状态
         // ─────────────────────────────────────────────
@@ -282,8 +294,8 @@ namespace ADOFAIMacro
             {
                 if (_inputMode == value) return;
                 _inputMode = value;
-                if (ADOFAIMacro.Macro.InputSystem.IsInitialized)
-                    ADOFAIMacro.Macro.InputSystem.SetInputMode((Macro.InputMode)value);
+                if (InputSystem.IsInitialized)
+                    InputSystem.SetInputMode((InputMode)value);
             }
         }
 
@@ -833,10 +845,10 @@ namespace ADOFAIMacro
                     GUILayout.EndHorizontal();
                     GUILayout.Space(4);
 
-                    bool hasInject = !ADOFAIMacro.Macro.InputSystem.IsInitialized ||
-                                     ADOFAIMacro.Macro.InputSystem.IsModeAvailable(ADOFAIMacro.Macro.InputMode.NtUserInjectKeyboard);
-                    bool hasNtSend = !ADOFAIMacro.Macro.InputSystem.IsInitialized ||
-                                     ADOFAIMacro.Macro.InputSystem.IsModeAvailable(ADOFAIMacro.Macro.InputMode.NtUserSendInput);
+                    bool hasInject = !InputSystem.IsInitialized ||
+                                     InputSystem.IsModeAvailable(ADOFAIMacro.Input.InputMode.NtUserInjectKeyboard);
+                    bool hasNtSend = !InputSystem.IsInitialized ||
+                                     InputSystem.IsModeAvailable(ADOFAIMacro.Input.InputMode.NtUserSendInput);
 
                     GUILayout.BeginHorizontal();
                     for (int i = 0; i < 4; i++)
@@ -874,12 +886,12 @@ namespace ADOFAIMacro
             GUILayout.EndVertical();
         }
 
-        private string GetModeLabel(Macro.InputMode mode) => mode switch
+        private string GetModeLabel(ADOFAIMacro.Input.InputMode mode) => mode switch
         {
-            ADOFAIMacro.Macro.InputMode.Auto => LocalizationManager.Get("key_mode.auto"),
-            ADOFAIMacro.Macro.InputMode.NtUserInjectKeyboard => LocalizationManager.Get("key_mode.ntinject"),
-            ADOFAIMacro.Macro.InputMode.NtUserSendInput => LocalizationManager.Get("key_mode.ntsendinput"),
-            ADOFAIMacro.Macro.InputMode.SendInput => LocalizationManager.Get("key_mode.sendinput"),
+            ADOFAIMacro.Input.InputMode.Auto => LocalizationManager.Get("key_mode.auto"),
+            ADOFAIMacro.Input.InputMode.NtUserInjectKeyboard => LocalizationManager.Get("key_mode.ntinject"),
+            ADOFAIMacro.Input.InputMode.NtUserSendInput => LocalizationManager.Get("key_mode.ntsendinput"),
+            ADOFAIMacro.Input.InputMode.SendInput => LocalizationManager.Get("key_mode.sendinput"),
             _ => mode.ToString()
         };
 
@@ -1155,7 +1167,7 @@ namespace ADOFAIMacro
                 if (newUseCpp != UseCppTechniqueInDebug)
                 {
                     UseCppTechniqueInDebug = newUseCpp;
-                    ADOFAIMacro.Macro.Macro.Log($"[Macro] 手法模拟切换到{(newUseCpp ? "C++" : "C#")}版本");
+                    ADOFAIMacro.Technique.MacroEngine.Log($"[Technique] 手法模拟切换到{(newUseCpp ? "C++" : "C#")}版本");
                 }
                 GUILayout.EndHorizontal();
             }
