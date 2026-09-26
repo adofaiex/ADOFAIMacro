@@ -1244,6 +1244,22 @@ namespace ADOFAIMacro.Macro
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static double GetAdviceBpm() => GetAdviceBpm(Main.Settings.TechniqueBpmLimit);
 
+        /// <summary>
+        /// 按**指定速率倍率**折叠建议 BPM —— 对应原生的 GetAdviceBpm(bpm, rate, limit)。
+        /// 把 bpm×rate 按 2 的幂折叠到 (limit/2, limit]。
+        /// 上面那个重载只能用全局 speed，等价于 rate = planetarySystem.speed。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double GetAdviceBpm(double limit, double rate)
+        {
+            if (limit <= 0.0) limit = 500.0;
+            double bpm = (double)(conductor!.bpm * rate);
+            if (bpm <= 0.0) return limit;
+            while (bpm > limit) bpm /= 2.0;
+            while (bpm <= limit / 2.0) bpm *= 2.0;
+            return bpm;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float GetSegmentBpmLimit(int floorIdx)
         {
@@ -1605,6 +1621,8 @@ namespace ADOFAIMacro.Macro
             _evTimeRecycle.Clear();
             _evPressRecycle.Clear();
             _evFloorRecycle.Clear();
+            _evSpeedRecycle.Clear();
+            var evSpeed = _evSpeedRecycle;
 
             // 终点砖（最后一块）也要按键 —— 通关条件是
             // GCS.checkpointNum >= listFloors.Count（scrConductor.cs:411）。
@@ -1638,6 +1656,7 @@ namespace ADOFAIMacro.Macro
                     {
                         double te = floors[floors.Length - 1]?.entryTime ?? double.MaxValue;
                         _evTimeRecycle.Add(te); _evPressRecycle.Add(-1); _evFloorRecycle.Add(i);
+                        evSpeed.Add(fl.speed);
                     }
                     // continue 而非 break：处理完还要继续后面的砖（含终点砖）
                     continue;
@@ -1649,6 +1668,7 @@ namespace ADOFAIMacro.Macro
                 if (isLastFloor)
                 {
                     _evTimeRecycle.Add(fl.entryTime); _evPressRecycle.Add(1); _evFloorRecycle.Add(i);
+                    evSpeed.Add(fl.speed);
                     continue;
                 }
 
@@ -1658,6 +1678,7 @@ namespace ADOFAIMacro.Macro
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
                     _evTimeRecycle.Add(t); _evPressRecycle.Add(-1); _evFloorRecycle.Add(i);
+                    evSpeed.Add(fl.speed);
                     continue;
                 }
 
@@ -1665,13 +1686,14 @@ namespace ADOFAIMacro.Macro
                 _evTimeRecycle.Add(t);
                 _evPressRecycle.Add(isHoldHead ? 2 : 1);
                 _evFloorRecycle.Add(i);
+                evSpeed.Add(fl.speed);
             }
 
             int total = _evTimeRecycle.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
 
             _piecesRecycle.Clear();
-            BuildPieces(_evTimeRecycle, _evPressRecycle, _evFloorRecycle, total, _piecesRecycle);
+            BuildPieces(_evTimeRecycle, _evPressRecycle, _evFloorRecycle, total, _piecesRecycle, evSpeed);
 
             if (_piecesRecycle.Count > 0)
             {
@@ -1715,7 +1737,8 @@ namespace ADOFAIMacro.Macro
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BuildPieces(
             List<double> evTime, List<int> evPress, List<int> evFloor,
-            int total, List<PieceInfo> pieces)
+            int total, List<PieceInfo> pieces,
+            List<double>? evSpeed = null)   // 逐地板速度；为 null 时退化成全局速度
         {
             double nowT    = 0.0;
             int    nowD    = 0;
@@ -1728,8 +1751,19 @@ namespace ADOFAIMacro.Macro
             int  canMulti  = 0;
             bool needBack  = false;
 
+            // ── 速率容差：滑动窗口基准 + 死区（与原生 TechniqueSimulator.cpp 同步）──
+            const int    BaseWindow   = 32;    // 滑动窗口音数
+            const double BaseLimitMul = 2.0;   // 局部速率相对窗口基准的允许倍数
+            double deadZone = (Main.Settings.SpeedChangeTolerance > 0.0)
+                            ? Main.Settings.SpeedChangeTolerance : 0.50;
+            if (deadZone < 0.0) deadZone = 0.0;
+            if (deadZone > 0.9) deadZone = 0.9;
+
+            double lockedRate = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 1.0;
+            if (evSpeed != null && evSpeed.Count > 0 && evSpeed[0] > 1e-9) lockedRate = evSpeed[0];
+
             float  lastSegLimit = GetSegmentBpmLimit(evFloor[0]);
-            double nowBpm       = GetAdviceBpm(lastSegLimit);
+            double nowBpm       = GetAdviceBpm(lastSegLimit, lockedRate);
             int    lastSegIdx   = FindSegmentIndex(evFloor[0]);
 
             while (nowD < total)
@@ -1747,8 +1781,43 @@ namespace ADOFAIMacro.Macro
                     canMulti  = 0;
                     needBack  = false;
                     lastSegLimit = curSegLimit;
-                    nowBpm       = GetAdviceBpm(curSegLimit);
+                    // 段切换：锁定速率回到本段第一块地的速度（死区状态清零）
+                    lockedRate = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 1.0;
+                    if (evSpeed != null && curFloorIdx < evSpeed.Count && evSpeed[curFloorIdx] > 1e-9)
+                        lockedRate = evSpeed[curFloorIdx];
+                    nowBpm       = GetAdviceBpm(lastSegLimit, lockedRate);
                     lastSegIdx   = curSegIdx;
+                }
+
+                // ── 逐片速率容差 ──────────────────────────────
+                // 与原生一致：滑动窗口基准 → ±BaseLimitMul 限幅 → 死区。
+                // 小于死区的变速不改变片长（人的手法有容差和忽略）。
+                if (evSpeed != null && evSpeed.Count > 0)
+                {
+                    int si = (nowD < evSpeed.Count) ? nowD : evSpeed.Count - 1;
+                    if (si >= 0)
+                    {
+                        double baseRate = 0.0;
+                        int w0 = si - BaseWindow + 1; if (w0 < 0) w0 = 0;
+                        for (int w = w0; w <= si; w++)
+                            if (evSpeed[w] > baseRate) baseRate = evSpeed[w];
+                        if (baseRate <= 1e-9) baseRate = evSpeed[si];
+                        if (baseRate <= 1e-9) baseRate = lockedRate;
+
+                        double lo = baseRate / BaseLimitMul;
+                        double hi = baseRate * BaseLimitMul;
+
+                        double ls = evSpeed[si];
+                        if (ls > 1e-9)
+                        {
+                            if (ls < lo) ls = lo;
+                            if (ls > hi) ls = hi;
+                            double rel = (lockedRate > 1e-9)
+                                       ? Math.Abs(ls / lockedRate - 1.0) : 1.0;
+                            if (rel > deadZone) lockedRate = ls;
+                            nowBpm = GetAdviceBpm(lastSegLimit, lockedRate);
+                        }
+                    }
                 }
 
                 if (pieces.Count > total * 64) break;
