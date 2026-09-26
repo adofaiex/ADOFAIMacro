@@ -233,6 +233,45 @@ static HitEvent* BuildTechniqueHitEventsImpl(
         }
         double nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
 
+        // ══════════════════════════════════════════════════════════════
+        //  速率容差：滑动窗口基准 + 死区
+        // ══════════════════════════════════════════════════════════════
+        //
+        //  用户诉求：「一些小的变速上就不应该根据当前的变速执行，人的手法又不是
+        //  机器，有容差和忽略」。
+        //
+        //  现状问题（原本每片无条件用本片地板 speed 重算 nowBpm → pLen 立刻
+        //  变）：实测那张变速狂谱 12886 音里有 2130 个变速点，其中 712 处
+        //  （33.4%）相对变化 <25%，每一处都让片长突变一次 → 手法纹理在小
+        //  变速点上抖动，不像人。
+        //
+        //  试过的方案 A（照抄游戏 scrMisc.cs:304 的"全谱最高速单一基准"
+        //  + ±2× 限幅）**实测无效**：那张谱速度跨度 0.14~58.67，全谱最高
+        //  58.67 把基准抬得极高，±2× 限幅几乎不起作用，纹理跳变率
+        //  18.7% → 18.5%，基本没动。
+        //
+        //  改为 B + C 组合（都零调参）：
+        //   C. 滑动窗口基准 —— 基准取**最近 Window 个音的最高速率**，而不是
+        //      全谱最高，局部慢的段落不会被远处的 58.67× 绑架；
+        //   B. 死区 —— 候选速率相对**锁定速率**的相对变化在 DeadZone 内时
+        //      直接无视，沿用锁定速率。人手不会为微小变化改指法。
+        //      DeadZone < 1 时复用已有的 SpeedChangeTolerance（0 = 关闭）。
+        //
+        //  两者都作用在 nowBpm（片长）上，是速率决策；原来的
+        //  speedChangeTolerance 只做"下一片稀疏时把 pLen 拉长"，那是几何
+        //  修补，不是速率容差，两回事。
+        const int    BaseWindow   = 32;    // 滑动窗口音数
+        const double BaseLimitMul = 2.0;   // 局部速率相对窗口基准的允许倍数
+        double deadZone = (g_config.speedChangeTolerance > 0.0)
+                        ? g_config.speedChangeTolerance : 0.10;
+        if (deadZone < 0.0) deadZone = 0.0;
+        if (deadZone > 0.9) deadZone = 0.9;
+
+        // 锁定速率（speed 倍率），决定片长
+        double lockedRate = speed;
+        if (speedMuls && eventCount > 0 && speedMuls[0] > 1e-9) lockedRate = speedMuls[0];
+        nowBpm = GetAdviceBpm(bpm, lockedRate, lastSegLimit);
+
         double nowT = 0.0;
         int    nowD = 0;
         int    hand = (g_config.handPreference == 0) ? -1 : 1; // -1=左主, 1=右主
@@ -261,18 +300,50 @@ static HitEvent* BuildTechniqueHitEventsImpl(
                 canMulti = 0;
                 needBack = false;
                 lastSegLimit = ec.bpmLimit;
-                nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
+                // 段切换：锁定速率回到本段第一块地的速度（死区状态清零）
+                lockedRate = speed;
+                if (speedMuls && nowD < eventCount && speedMuls[nowD] > 1e-9)
+                    lockedRate = speedMuls[nowD];
+                nowBpm = GetAdviceBpm(bpm, lockedRate, lastSegLimit);
                 lastSegIdx = curSegIdx;
             }
 
-            // ── 逐地板速度：按本片起始地板的速度折算局部速率 ──
-            // 段边界只处理"配置分段"，而 SetSpeed/BPM 变化不产生分段，必须逐片
-            // 用该地板的实际速度重算 nowBpm。speedMuls 为空时保持历史行为。
+            // ── 速率容差：滑动窗口基准 + 死区 ──────────────────
+            // 段边界只处理"配置分段"，而 SetSpeed/BPM 变化不产生分段。
+            //
+            // 每片不再无条件跟随本片速度，而是：
+            //   1) C 滑动窗口基准：取最近 BaseWindow 个音的最高速率。
+            //      局部段落不会被远处的极高速绑架（方案 A 失败的原因）。
+            //   2) 限幅：局部速率夹在 [基准/2, 基准×2]。
+            //   3) B 死区：候选相对 lockedRate 的变化在 deadZone 内 → 无视，
+            //      沿用锁定速率。人手不会为微小变化改指法。
             if (speedMuls) {
                 int si = (nowD < eventCount) ? nowD : eventCount - 1;
                 if (si >= 0) {
+                    // 1) 滑动窗口基准
+                    double base = 0.0;
+                    int w0 = si - BaseWindow + 1; if (w0 < 0) w0 = 0;
+                    for (int w = w0; w <= si; w++) {
+                        if (speedMuls[w] > base) base = speedMuls[w];
+                    }
+                    if (base <= 1e-9) base = speedMuls[si];
+                    if (base <= 1e-9) base = speed;
+                    double lo = base / BaseLimitMul;
+                    double hi = base * BaseLimitMul;
+
                     double ls = speedMuls[si];
-                    if (ls > 1e-9) nowBpm = GetAdviceBpm(bpm, ls, lastSegLimit);
+                    if (ls > 1e-9) {
+                        // 2) 限幅
+                        if (ls < lo) ls = lo;
+                        if (ls > hi) ls = hi;
+                        // 3) 死区：变化太小就不动
+                        double rel = (lockedRate > 1e-9)
+                                   ? fabs(ls / lockedRate - 1.0) : 1.0;
+                        if (rel > deadZone) {
+                            lockedRate = ls;
+                        }
+                        nowBpm = GetAdviceBpm(bpm, lockedRate, lastSegLimit);
+                    }
                 }
             }
 
