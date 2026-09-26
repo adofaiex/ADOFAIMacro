@@ -70,7 +70,6 @@
     "update_log.title": "Update Log",
     "update_log.whats_new": "What's New",
     "update_log.content": "<b>Version {0}</b>\n• All-new multi-language system (Chinese/English switch)\n• Protected translations prevent UI text tampering\n• Fixed JsonUtility Dictionary deserialization issue\n• Using Newtonsoft.Json for reliable translations",
-    "tech.note_first_death": "Note: The first time you enter the game, you need to die once to calibrate the time.",
     "tech.debug_mode": "🔧 Debug Mode - {0}",
     "tech.dll_available": "DLL Available",
     "tech.dll_unavailable": "DLL Unavailable",

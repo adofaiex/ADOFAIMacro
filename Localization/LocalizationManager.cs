@@ -102,7 +102,6 @@ namespace ADOFAIMacro.Localization
             ["update_log.title"] = "更新日志",
             ["update_log.whats_new"] = "What's New",
             ["update_log.content"] = "<b>版本 {0}</b>\n• 手法模拟优化和修复\n• 分段支持按键覆盖",
-            ["tech.note_first_death"] = "注：最开始进入游戏需要死亡一次来校准时间",
             ["tech.debug_mode"] = "🔧 调试模式 - {0}",
             ["tech.dll_available"] = "DLL可用",
             ["tech.dll_unavailable"] = "DLL不可用",

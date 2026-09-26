@@ -1133,10 +1133,6 @@ namespace ADOFAIMacro
             GUILayout.BeginVertical(UIUtils.CardStyle);
             GUILayout.Label(LocalizationManager.Get("tab.technique_simulation"), UIUtils.HeaderStyle);
             GUILayout.Space(2);
-            GUILayout.Label(
-                LocalizationManager.Get("tech.note_first_death"),
-                UIUtils.HeaderStyle);
-            GUILayout.Space(2);
 
             bool dllLoaded = TechniqueSimulator.IsDllLoaded();
 
