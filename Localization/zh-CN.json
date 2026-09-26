@@ -16,6 +16,7 @@
     "language.chinese": "中文",
     "language.english": "英文",
     "macro.enable_macro": "启用宏",
+    "macro.enable_logging": "启用日志（关闭后不再写入 Player.log）",
     "offset.allow_ctrl_adjust": "允许Ctrl+左右键调整步长偏移(游戏中)",
     "offset.adjust_step": "调整步长",
     "offset.offset_ms": "延迟 (ms)",

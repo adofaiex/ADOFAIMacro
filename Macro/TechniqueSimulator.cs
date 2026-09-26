@@ -203,12 +203,12 @@ namespace ADOFAIMacro.Macro
                     return false;
                 }
 
-                Main.Mod?.Logger.Log($"[Macro] 加载DLL: {dllPath}");
+                Main.Log($"[Macro] 加载DLL: {dllPath}");
                 _techDllHandle = LoadLibrary(dllPath);
 
                 if (_techDllHandle == IntPtr.Zero)
                 {
-                    Main.Mod?.Logger.Log($"[Macro] LoadLibrary 失败，错误码: {Marshal.GetLastWin32Error()}");
+                    Main.Log($"[Macro] LoadLibrary 失败，错误码: {Marshal.GetLastWin32Error()}");
                     return false;
                 }
 
@@ -233,7 +233,7 @@ namespace ADOFAIMacro.Macro
                     : null;
                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
 
-                Main.Mod?.Logger.Log(buildExPtr != IntPtr.Zero
+                Main.Log(buildExPtr != IntPtr.Zero
                     ? "[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度）"
                     : "[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度）");
                 return true;

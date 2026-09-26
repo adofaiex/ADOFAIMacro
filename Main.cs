@@ -26,11 +26,40 @@ namespace ADOFAIMacro
         public static Harmony? Harmony { get; private set; }
         public static Settings Settings { get; private set; } = null!;
         private static GameObject? _uiObject;
+
+        /// <summary>
+        /// 日志总开关。关闭后 mod 自己发出的所有日志都不再写入 Player.log。
+        /// 只影响本 mod 的日志，不影响游戏和其他 mod。
+        /// 默认 true（保持原来一直打日志的行为）。
+        /// </summary>
+        public static bool LoggingEnabled { get; set; } = true;
+
+        /// <summary>统一日志出口。总开关关闭时静默丢弃，避免各处漏判。</summary>
+        internal static void Log(string msg)
+        {
+            if (!LoggingEnabled) return;
+            try { Mod?.Logger.Log(msg); }
+            catch { }
+        }
+
+        /// <summary>
+        /// 启动阶段的日志出口。此时 Settings 还没加载完，LoggingEnabled 还是
+        /// 默认值 true，用户在设置里关掉的开关要等 Settings.Load 之后才生效
+        /// —— 所以启动这几行一定会打（每次进游戏最多十几行）。
+        /// </summary>
+        private static void LogStartup(string msg)
+        {
+            try { Mod?.Logger.Log(msg); }
+            catch { }
+        }
+
         public static bool Load(UnityModManager.ModEntry modEntry)
         {
             Mod = modEntry;
-            modEntry.Logger.Log("[ADOFAIMacro] Build: 2026-08-17-2 (focus-cache-fix)");
+            LogStartup("[ADOFAIMacro] Build: 2026-08-17-2 (focus-cache-fix)");
             Settings = Settings.Load(modEntry);
+            // 设置一加载完就把日志总开关接上，之后所有日志都受它控制
+            LoggingEnabled = Settings.EnableLogging;
 
             // 初始化本地化系统
             Localization.LocalizationManager.Initialize(modEntry.Path);
@@ -43,30 +72,30 @@ namespace ADOFAIMacro
             // 手动初始化 InputSystem
             if (InputSystem.Initialize())
             {
-                modEntry.Logger.Log("[InputSystem] 初始化成功");
+                LogStartup("[InputSystem] 初始化成功");
             }
             else
             {
-                modEntry.Logger.Log("[InputSystem] 初始化失败");
+                LogStartup("[InputSystem] 初始化失败");
             }
 
             if (InputSystem.IsUsingNtFunctions())
             {
-                modEntry.Logger.Log("[InputSystem] 当前使用 NT 内核函数");
+                LogStartup("[InputSystem] 当前使用 NT 内核函数");
             }
             else
             {
-                modEntry.Logger.Log("[InputSystem] 当前使用传统输入模拟");
+                LogStartup("[InputSystem] 当前使用传统输入模拟");
             }
 
             if (TechniqueSimulator.LoadTechniqueDll())
             {
-                modEntry.Logger.Log("[TechniqueSimulator] 技巧模拟器 DLL 加载成功");
+                LogStartup("[TechniqueSimulator] 技巧模拟器 DLL 加载成功");
 
             }
             else
             {
-                modEntry.Logger.Log("[TechniqueSimulator] 技巧模拟器 DLL 加载失败");
+                LogStartup("[TechniqueSimulator] 技巧模拟器 DLL 加载失败");
             }
 
             modEntry.OnToggle = OnToggle;
@@ -150,7 +179,7 @@ namespace ADOFAIMacro
                 // 重载，否则手法模拟在本次游戏会话内永久失效（IsDllLoaded() 恒 false，
                 // Release 面板还会据此强制关闭"启用手法模拟"）。
                 if (!TechniqueSimulator.IsDllLoaded() && !TechniqueSimulator.LoadTechniqueDll())
-                    Mod?.Logger.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
+                    Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
                 if (_uiObject == null)
                 {
                     _uiObject = new GameObject("MacroText");
@@ -223,21 +252,21 @@ namespace ADOFAIMacro
 
                     if (SetWindowText(hwnd, newTitle))
                     {
-                        Mod?.Logger.Log($"成功设置窗口标题: {newTitle}");
+                        Main.Log($"成功设置窗口标题: {newTitle}");
                     }
                     else
                     {
-                        Mod?.Logger.Log("设置窗口标题失败");
+                        Main.Log("设置窗口标题失败");
                     }
                 }
                 else
                 {
-                    Mod?.Logger.Log("未获取到主窗口句柄");
+                    Main.Log("未获取到主窗口句柄");
                 }
             }
             catch (Exception ex)
             {
-                Mod?.Logger.Log($"设置窗口标题异常: {ex.Message}");
+                Main.Log($"设置窗口标题异常: {ex.Message}");
             }
         }
         public static bool IsEnabled { get; internal set; }

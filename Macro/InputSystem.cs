@@ -213,6 +213,7 @@ namespace ADOFAIMacro.Macro
         /// </summary>
         private static void LogDiag(string message)
         {
+            if (!Main.LoggingEnabled) return;
             try
             {
                 var logger = Main.Mod?.Logger;
@@ -228,13 +229,13 @@ namespace ADOFAIMacro.Macro
             {
                 if (Main.Mod != null && Main.Settings is Settings settings)
                 {
-                    Main.Mod.Logger.Log($"[InputSystem] 从设置同步模式: {settings.InputMode}");
+                    Main.Log($"[InputSystem] 从设置同步模式: {settings.InputMode}");
                     SetInputMode((InputMode)settings.InputMode);
                 }
             }
             catch (Exception ex)
             {
-                Main.Mod?.Logger.Log($"[InputSystem] 同步模式失败: {ex.Message}");
+                Main.Log($"[InputSystem] 同步模式失败: {ex.Message}");
             }
         }
 

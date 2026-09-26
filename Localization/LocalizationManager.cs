@@ -195,7 +195,8 @@ namespace ADOFAIMacro.Localization
 
                 if (!File.Exists(filePath))
                 {
-                    UnityEngine.Debug.LogWarning($"[Localization] 语言文件不存在: {filePath}, 使用默认翻译");
+                    if (Main.LoggingEnabled)
+                        UnityEngine.Debug.LogWarning($"[Localization] 语言文件不存在: {filePath}, 使用默认翻译");
                     _currentTranslations = new Dictionary<string, string>(_fallbackTranslations);
                     _currentLanguage = "zh-CN";
                     return false;
@@ -206,7 +207,8 @@ namespace ADOFAIMacro.Localization
 
                 if (langData == null || langData.translations == null)
                 {
-                    UnityEngine.Debug.LogError($"[Localization] 语言文件格式错误或translations为空: {filePath}");
+                    if (Main.LoggingEnabled)
+                        UnityEngine.Debug.LogError($"[Localization] 语言文件格式错误或translations为空: {filePath}");
                     _currentTranslations = new Dictionary<string, string>(_fallbackTranslations);
                     _currentLanguage = "zh-CN";
                     return false;
@@ -215,12 +217,14 @@ namespace ADOFAIMacro.Localization
                 _currentTranslations = new Dictionary<string, string>(langData.translations);
                 _currentLanguage = languageCode;
 
-                UnityEngine.Debug.Log($"[Localization] 已加载语言: {langData.name} ({languageCode})");
+                if (Main.LoggingEnabled)
+                    UnityEngine.Debug.Log($"[Localization] 已加载语言: {langData.name} ({languageCode})");
                 return true;
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"[Localization] 加载语言失败: {ex.Message}");
+                if (Main.LoggingEnabled)
+                    UnityEngine.Debug.LogError($"[Localization] 加载语言失败: {ex.Message}");
                 _currentTranslations = new Dictionary<string, string>(_fallbackTranslations);
                 _currentLanguage = "zh-CN";
                 return false;
@@ -279,6 +283,7 @@ namespace ADOFAIMacro.Localization
 
         private static void WarnOnce(string key, string message)
         {
+            if (!Main.LoggingEnabled) return;
             if (_warnedKeys.Add(key))
                 UnityEngine.Debug.LogWarning(message);
         }

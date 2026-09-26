@@ -60,9 +60,9 @@ namespace ADOFAIMacro.Macro
         {
             _layoutOk = SelfTest();
             if (!_layoutOk)
-                Main.Mod?.Logger.Log("[VirtualAsyncInput] SkyHookEvent 布局自检失败，直喂模式禁用（回退系统注入）");
+                Main.Log("[VirtualAsyncInput] SkyHookEvent 布局自检失败，直喂模式禁用（回退系统注入）");
             else
-                Main.Mod?.Logger.Log("[VirtualAsyncInput] 布局自检通过，虚拟异步键盘就绪");
+                Main.Log("[VirtualAsyncInput] 布局自检通过，虚拟异步键盘就绪");
             return _layoutOk;
         }
 
@@ -133,7 +133,7 @@ namespace ADOFAIMacro.Macro
                 if (_sendProbeDone == false)
                 {
                     _sendProbeDone = true;
-                    Main.Mod?.Logger.Log($"[Macro-KeyPath] Send-first-ok mirror={Main.Settings.MirrorVirtualKeys} " +
+                    Main.Log($"[Macro-KeyPath] Send-first-ok mirror={Main.Settings.MirrorVirtualKeys} " +
                               $"settings#{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Main.Settings)}");
                 }
                 if (Main.Settings.MirrorVirtualKeys)
@@ -229,7 +229,7 @@ namespace ADOFAIMacro.Macro
             System.Threading.Interlocked.Add(ref _mirrorStatEcho, -echoes);
             System.Threading.Interlocked.Add(ref _mirrorStatUnfocused, -unfocused);
             if (sends > 0 || echoes > 0 || unfocused > 0)
-                Main.Mod?.Logger.Log($"[Macro-Mirror] 注入 {sends} 次(失败 {fails}) | 回声已丢 {echoes} | 失焦跳过 {unfocused}");
+                Main.Log($"[Macro-Mirror] 注入 {sends} 次(失败 {fails}) | 回声已丢 {echoes} | 失焦跳过 {unfocused}");
         }
 
         // ─────────────────────────────────────────────────────────

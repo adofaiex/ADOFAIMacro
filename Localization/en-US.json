@@ -16,6 +16,7 @@
     "language.chinese": "Chinese",
     "language.english": "English",
     "macro.enable_macro": "Enable Macro",
+    "macro.enable_logging": "Enable Logging (off = no output to Player.log)",
     "offset.allow_ctrl_adjust": "Allow adjusting step offset using Ctrl and arrow keys (in-game)",
     "offset.adjust_step": "Adjust Step",
     "offset.offset_ms": "Offset (ms)",

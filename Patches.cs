@@ -263,7 +263,7 @@ namespace ADOFAIMacro
                     if (unchecked(nowMs - _judgeLogLastMs) >= 1000)
                     {
                         double avg = _judgeLogCount > 0 ? _judgeLogSum / _judgeLogCount : 0.0;
-                        Main.Mod?.Logger.Log(
+                        Main.Log(
                             $"[Macro-Judge] 近1s {_judgeLogCount} 次判定 | 平均误差 {avg:+0.00;-0.00}ms | " +
                             $"最近 floor={floorId} err={errMs:+0.0;-0.0}ms spdUsed={spd ?? 1f:F2} spdNow={nowSpeed:F2} marginScale={marginScale:F2}");
                         _judgeLogSum = 0;

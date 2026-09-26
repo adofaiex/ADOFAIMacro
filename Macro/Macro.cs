@@ -375,7 +375,7 @@ namespace ADOFAIMacro.Macro
             if (_autoOffsetMs > 60f) _autoOffsetMs = 60f;
             else if (_autoOffsetMs < -60f) _autoOffsetMs = -60f;
 
-            Main.Mod?.Logger.Log($"[Macro-Cali] err={mean:F2}ms autoOffset={_autoOffsetMs:F2}ms");
+            Main.Log($"[Macro-Cali] err={mean:F2}ms autoOffset={_autoOffsetMs:F2}ms");
         }
 
         // ─────────────────────────────────────────────
@@ -397,7 +397,7 @@ namespace ADOFAIMacro.Macro
                 if (GC.TryStartNoGCRegion(256L << 20))
                 {
                     _noGcActive = true;
-                    Main.Mod?.Logger.Log("[Macro-GC] NoGCRegion 已启用（游玩期抑制 GC 停顿）");
+                    Main.Log("[Macro-GC] NoGCRegion 已启用（游玩期抑制 GC 停顿）");
                 }
                 else _noGcBroken = true;   // 本关不再重试（避免每帧空转）
             }
@@ -413,7 +413,7 @@ namespace ADOFAIMacro.Macro
                 GC.EndNoGCRegion();
                 // NoGCRegion 会重置延迟模式，恢复低延迟设置
                 System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
-                Main.Mod?.Logger.Log("[Macro-GC] NoGCRegion 已结束");
+                Main.Log("[Macro-GC] NoGCRegion 已结束");
             }
             catch { /* 预算被突破时 End 会抛异常，属正常回退 */ }
         }
@@ -516,7 +516,7 @@ namespace ADOFAIMacro.Macro
                 if (!_formulaEngaged)
                 {
                     _formulaEngaged = true;
-                    Main.Mod?.Logger.Log("[Macro] 判定公式基线已接管（无需击中即对齐判定）");
+                    Main.Log("[Macro] 判定公式基线已接管（无需击中即对齐判定）");
                 }
                 anchorPos = judgedPos;
                 _slewSeeded = false;   // 公式接管时清除兜底低通状态
@@ -615,7 +615,7 @@ namespace ADOFAIMacro.Macro
             int now = Environment.TickCount;
             if (unchecked(now - _fireStatLastMs) < 3000) return;
             _fireStatLastMs = now;
-            Main.Mod?.Logger.Log($"[Macro-Diag] 击发 {_fireCount} 次 | 平均迟发 {_fireErrSum / _fireCount * 1000.0:F3}ms | 最大 {_fireErrMax * 1000.0:F3}ms");
+            Main.Log($"[Macro-Diag] 击发 {_fireCount} 次 | 平均迟发 {_fireErrSum / _fireCount * 1000.0:F3}ms | 最大 {_fireErrMax * 1000.0:F3}ms");
             _fireErrSum = 0; _fireErrMax = 0; _fireCount = 0;
         }
 
@@ -895,7 +895,7 @@ namespace ADOFAIMacro.Macro
             if (!_keyPathProbeDone)
             {
                 _keyPathProbeDone = true;
-                Main.Mod?.Logger.Log($"[Macro-KeyPath] active={VirtualAsyncInput.Active} mirror={Main.Settings.MirrorVirtualKeys} " +
+                Main.Log($"[Macro-KeyPath] active={VirtualAsyncInput.Active} mirror={Main.Settings.MirrorVirtualKeys} " +
                     $"skyHook={_cachedSkyHookMode} blockUF={Main.Settings.BlockInputWhenUnfocused} " +
                     $"focus={IsGameWindowFocused()} key=0x{keyCode:X2} down={isDown}");
             }
@@ -1056,7 +1056,7 @@ namespace ADOFAIMacro.Macro
             {
                 _hitEvents = overflow.ToArray();
                 _hitEventCount = _hitEvents.Length;
-                Main.Mod?.Logger.Log($"[Macro-Main] 事件数 {_hitEventCount} 超出事件池容量 {pool.Length}，已改用动态分配");
+                Main.Log($"[Macro-Main] 事件数 {_hitEventCount} 超出事件池容量 {pool.Length}，已改用动态分配");
             }
             else if (_hitEventPoolUsed > 0)
             {
@@ -1365,10 +1365,10 @@ namespace ADOFAIMacro.Macro
 
                 // 注意：Macro.Log 目前是硬编码空实现（logToMod=false），诊断必须
                 // 直接走 UMM logger，否则日志里看不到。
-                Main.Mod?.Logger.Log($"[Macro-Tech] 手法表: 按下={presses} 换手={turns} 单音碎块={frag} 最长连击={longest} " +
+                Main.Log($"[Macro-Tech] 手法表: 按下={presses} 换手={turns} 单音碎块={frag} 最长连击={longest} " +
                     $"左键={leftUsed} 右键={rightUsed} | 速度倍率 {smin:F2}~{smax:F2} | 拍号BPM={conductor?.bpm:F1}");
             }
-            catch (Exception ex) { Main.Mod?.Logger.Log($"[Macro-Tech] 摘要失败: {ex.Message}"); }
+            catch (Exception ex) { Main.Log($"[Macro-Tech] 摘要失败: {ex.Message}"); }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1492,11 +1492,12 @@ namespace ADOFAIMacro.Macro
             int total = evTime.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
 
-            // ── 谱尾诊断（临时）────────────────────────────────
-            // 用户报「最后一格子还是没有按键」。终点砖的判定时刻用
-            // fl.entryTime，但如果它同时是 midSpin / auto / hold，
-            // 就会被前面的 continue 分支吃掉。落盘谱尾 6 块砖的真实状态，
-            // 以及本轮是否为每块砖生成了事件。
+            // ── 谱尾诊断（临时，可由日志总开关关闭）──────────────
+            // 用户报「最后一格子还是没有按键」「10个地板只判定9个」。
+            // 终点砖的判定时刻用 fl.entryTime，但如果它同时是 midSpin / auto /
+            // hold，就会被前面的 continue 分支吃掉。落盘谱尾 6 块砖的真实状态，
+            // 以及每块砖是否生成了事件。
+            if (Main.LoggingEnabled)
             try
             {
                 var sbT = new System.Text.StringBuilder();
@@ -1584,7 +1585,7 @@ namespace ADOFAIMacro.Macro
             // initialized=true 并发布锚点 → 工作线程按旧谱时间戳乱按键。
             _hitEvents = [];
             _hitEventCount = 0;
-            Main.Mod?.Logger.Log("[Macro-Main] C++ 手法模拟未产出事件，事件表已清空（Release 无 C# 回退）");
+            Main.Log("[Macro-Main] C++ 手法模拟未产出事件，事件表已清空（Release 无 C# 回退）");
 #endif
         }
 
@@ -2165,7 +2166,7 @@ namespace ADOFAIMacro.Macro
         // （叠加 logToMod=false 的空实现，双保险地什么都打不出来）。
         public static void Log(string message)
         {
-            Main.Mod?.Logger.Log(message);
+            Main.Log(message);
         }
 
         /// <summary>
@@ -2177,7 +2178,7 @@ namespace ADOFAIMacro.Macro
         [System.Diagnostics.Conditional("DEBUG")]
         public static void LogVerbose(string message)
         {
-            if (_verboseLog) Main.Mod?.Logger.Log(message);
+            if (_verboseLog) Main.Log(message);
         }
     }
 

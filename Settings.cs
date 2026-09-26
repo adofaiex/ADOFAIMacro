@@ -141,12 +141,14 @@ namespace ADOFAIMacro
                 // Initialize 之后完成，这里只在已初始化时响应运行时切换。
                 if (!ADOFAIMacro.Localization.LocalizationManager.IsInitialized) return;
 
-                Main.Mod?.Logger.Log($"[Settings] 切换语言 → UseChinese={value}");
+                if (Main.LoggingEnabled)
+                    Main.Log($"[Settings] 切换语言 → UseChinese={value}");
                 bool success = value
                     ? ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("zh-CN")
                     : ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("en-US");
-                Main.Mod?.Logger.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
-                         $"{ADOFAIMacro.Localization.LocalizationManager.CurrentLanguage}");
+                if (Main.LoggingEnabled)
+                    Main.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
+                             $"{ADOFAIMacro.Localization.LocalizationManager.CurrentLanguage}");
             }
         }
 
@@ -247,8 +249,8 @@ namespace ADOFAIMacro
                 // Harmony 的 PatchAll（模组启用）时执行一次 —— 因此改动必须重新启用
                 // 模组或重启游戏才生效。其余同类开关（高精度时间/高级输入/虚拟键盘）
                 // 都是实时的，这里明确告知，避免用户把"切换了没反应"当成功能损坏。
-                if (Main.IsEnabled)
-                    Main.Mod?.Logger.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
+                if (Main.IsEnabled && Main.LoggingEnabled)
+                    Main.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
                         "该特性在模组启用时改写游戏方法，需重新启用模组（或重启游戏）后生效");
             }
         }
@@ -406,6 +408,18 @@ namespace ADOFAIMacro
         }
 
         private (string input, bool focused) _speedChangeToleranceState = (string.Empty, false);
+
+        /// <summary>
+        /// 日志总开关。关闭后 mod 不再往 Player.log 写任何日志。
+        /// 手法表/诊断落盘文件仍会生成（那是给用户看手法用的，不算日志）。
+        /// 默认 true。
+        /// </summary>
+        [SerializeField] private bool _enableLogging = true;
+        public bool EnableLogging
+        {
+            get => _enableLogging;
+            set => _enableLogging = value;
+        }
 
         private (string input, bool focused) _techLeftKeysState = (string.Empty, false);
         private (string input, bool focused) _techRightKeysState = (string.Empty, false);
@@ -641,7 +655,8 @@ namespace ADOFAIMacro
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
+                if (Main.LoggingEnabled)
+                    UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
                 try
                 {
                     GUILayout.BeginVertical(UIUtils.CardStyle);
@@ -669,7 +684,8 @@ namespace ADOFAIMacro
             int newSel = UIUtils.M3SelectionGrid(sel, _langPairCache, 2, GUILayout.Width(200));
             if (newSel != sel)
             {
-                UnityEngine.Debug.Log($"[DrawLanguageCard] Switching: UseChinese = {newSel == 0}");
+                if (Main.LoggingEnabled)
+                    UnityEngine.Debug.Log($"[DrawLanguageCard] Switching: UseChinese = {newSel == 0}");
                 UseChinese = newSel == 0;
             }
             GUILayout.EndHorizontal();
@@ -697,6 +713,14 @@ namespace ADOFAIMacro
             GUILayout.Label(Localization.LocalizationManager.Get("tab.macro"), UIUtils.HeaderStyle);
             bool newMacro = UIUtils.M3Switch(Macro, Localization.LocalizationManager.Get("macro.enable_macro"));
             if (newMacro != Macro) { Macro = newMacro; RestartControllerIfAny(); }
+            GUILayout.Space(2);
+            bool newLogging = UIUtils.M3Switch(EnableLogging,
+                Localization.LocalizationManager.Get("macro.enable_logging"));
+            if (newLogging != EnableLogging)
+            {
+                EnableLogging = newLogging;
+                Main.LoggingEnabled = newLogging;
+            }
             GUILayout.EndVertical();
         }
 
