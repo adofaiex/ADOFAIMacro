@@ -1,16 +1,16 @@
 /*
-* Copy in Cover Mod
-* Assembly: Cover.dll
-* NameSpace: Cover._Core
-* Categoty: StaticClass
-* Name: DSPTimeSimulater
-* Flag: public auto ansi abstract sealed beforefieldinit flag(200000)
-* Extends: [mscorlib]System.Object
+    * Copy in Cover Mod
+    * Assembly: Cover.dll
+    * NameSpace: Cover._Core
+    * Categoty: StaticClass
+    * Name: DSPTimeSimulater
+    * Flag: public auto ansi abstract sealed beforefieldinit flag(200000)
+    * Extends: [mscorlib]System.Object
 */
 /*
-* 本文件基于 [AsyncInputOptimize] 的代码修改
-* 原始项目: [https://github.com/adofaiex/AsyncInputOptimize]
-* 原始许可证: GPL-3.0
+    * 本文件基于 [AsyncInputOptimize] 的代码修改
+    * 原始项目: [https://github.com/adofaiex/AsyncInputOptimize]
+    * 原始许可证: GPL-3.0
 */
 using ADOFAIMacro.Platform;
 using UnityEngine;
@@ -74,16 +74,16 @@ namespace ADOFAIMacro.Timing
         {
             long l = BaseSelect.GetFileTime();
             double res = _cachedCaptureFramerate != 0
-                ? 1.0 / _cachedCaptureFramerate
-                : (l - m_lastTime) / SECOND_2_TICK * GetTimeScaleAsDouble();
+            ? 1.0 / _cachedCaptureFramerate
+            : (l - m_lastTime) / SECOND_2_TICK * GetTimeScaleAsDouble();
             m_lastTime = l;
             return res;
         }
         private static double GetPreciseDeltaTime()
         {
             return _cachedCaptureFramerate > 0
-                ? 1.0 / _cachedCaptureFramerate
-                : (BaseSelect.GetFileTime() - m_lastTime) / SECOND_2_TICK * GetTimeScaleAsDouble();
+            ? 1.0 / _cachedCaptureFramerate
+            : (BaseSelect.GetFileTime() - m_lastTime) / SECOND_2_TICK * GetTimeScaleAsDouble();
         }
         private static DSPLimit GetDSPTimeDeltasLimit()
         {

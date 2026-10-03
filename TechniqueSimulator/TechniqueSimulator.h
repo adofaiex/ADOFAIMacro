@@ -81,7 +81,9 @@ struct TechniqueConfig {
     TechniqueSegment* segments;
     int               segmentCount;
     // 4 bytes padding
-    double speedChangeTolerance;
+    // 【2026-10-03】原末尾的 double speedChangeTolerance 已删除（变速容差整条
+    // 移除）。它是被删除的速率死区 + 几何修补的唯一入口，删除后 sizeof 不变
+    // （本结构体末尾已有 4 bytes padding，字段被 padding 吸收），故 ABI 无变化。
 };
 
 #pragma pack(pop)

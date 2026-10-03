@@ -35,13 +35,72 @@ namespace ADOFAIMacro.Core
 
         private static readonly WeakReference<scrController> _cachedControllerRef = new WeakReference<scrController>(null);
 
+        // ─────────────────────────────────────────────
+        //  补丁入口异常防护
+        // ─────────────────────────────────────────────
+        // Harmony 前缀/后缀直接插在游戏方法上，异常一旦逃出去就会抛进
+        // scrController 自己的调用栈 —— PlayerControl_Update 是**每帧**跑的，
+        // 一个没兜住的 NRE 会变成每帧一条日志的刷屏，而且可能连带打断游戏
+        // 这一帧的其余逻辑。
+        //
+        // 所以补丁入口一律走 Guarded()：捕获 + 记日志 + 吞掉。
+        // 宏自己的状态在异常时通常已经自洽（事件表没建成就没建，initialized
+        // 仍是 false，下一帧重试），吞掉比让游戏炸掉安全。
+        //
+        // 日志要节流：同一个异常每帧都发生时，只记前 3 条，之后每 10 秒记一条
+        // 「仍在发生」，否则防护本身又成了刷屏源。
+        private const int    GuardLogHead = 3;      // 前 N 条逐条记
+        private const double GuardLogEverySec = 10; // 之后每 N 秒记一条
+        private static readonly Dictionary<string, int> _guardCount = new();
+        private static readonly Dictionary<string, int> _guardLastMs = new();
+
+        private static void Guarded(string tag, Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    int n = _guardCount.TryGetValue(tag, out int c) ? c + 1 : 1;
+                    _guardCount[tag] = n;
+
+                    bool log = n <= GuardLogHead;
+                    if (!log)
+                    {
+                        int now = Environment.TickCount;
+                        if (_guardLastMs.TryGetValue(tag, out int last) &&
+                            unchecked(now - last) < (int)(GuardLogEverySec * 1000))
+                        {
+                            return;
+                        }
+                        _guardLastMs[tag] = now;
+                    }
+                    Main.Log($"[Patches] {tag} 异常（第 {n} 次，已拦截）: {ex.GetType().Name}: {ex.Message}");
+                }
+                catch
+                {
+                    // 连记日志都失败就彻底放弃，绝不把异常抛回游戏
+                }
+            }
+        }
+
+        /// <summary>重置异常计数（关卡切换/宏启停时调用，避免旧计数掩盖新问题）。</summary>
+        public static void ResetGuardCounters()
+        {
+            _guardCount.Clear();
+            _guardLastMs.Clear();
+        }
+
         private static scrController CachedController
         {
             get
             {
                 scrController ctrl;
                 if (_cachedControllerRef.TryGetTarget(out ctrl) && ctrl != null)
-                    return ctrl;
+                return ctrl;
                 return null;
             }
             set => _cachedControllerRef.SetTarget(value);
@@ -53,7 +112,7 @@ namespace ADOFAIMacro.Core
             [HarmonyPrefix]
             public static void Prefix(scrController __instance)
             {
-                MacroEngine.Update(__instance);
+                Guarded("PlayerControl_Update", () => MacroEngine.Update(__instance));
             }
         }
 
@@ -63,13 +122,16 @@ namespace ADOFAIMacro.Core
             [HarmonyPostfix]
             public static void Postfix(scrController __instance)
             {
-                MacroEngine.Reset(__instance);
-                // 关卡重置时，尝试加载关卡特定配置
-                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
+                Guarded("Awake_Rewind", () =>
                 {
-                    LevelTechniqueManager.ResetCheckState();
-                    LevelTechniqueManager.CheckAndLoadLevelConfig();
-                }
+                    MacroEngine.Reset(__instance);
+                    // 关卡重置时，尝试加载关卡特定配置
+                    if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
+                    {
+                        LevelTechniqueManager.ResetCheckState();
+                        LevelTechniqueManager.CheckAndLoadLevelConfig();
+                    }
+                });
             }
         }
 
@@ -79,13 +141,16 @@ namespace ADOFAIMacro.Core
             [HarmonyPrefix]
             public static void Prefix(scrController __instance)
             {
-                MacroEngine.Reset(__instance);
-                // 关卡重启时，尝试加载关卡特定配置
-                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
+                Guarded("Restart", () =>
                 {
-                    LevelTechniqueManager.ResetCheckState();
-                    LevelTechniqueManager.CheckAndLoadLevelConfig();
-                }
+                    MacroEngine.Reset(__instance);
+                    // 关卡重启时，尝试加载关卡特定配置
+                    if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
+                    {
+                        LevelTechniqueManager.ResetCheckState();
+                        LevelTechniqueManager.CheckAndLoadLevelConfig();
+                    }
+                });
             }
         }
 
@@ -111,7 +176,7 @@ namespace ADOFAIMacro.Core
             public static void Postfix(scnEditor __instance)
             {
                 if (Main.Settings.LockLevelEditor)
-                    __instance.LockPathEditing(true);
+                __instance.LockPathEditing(true);
             }
         }
 
@@ -128,10 +193,10 @@ namespace ADOFAIMacro.Core
                     // 只挑第一个可用宿主启一个协程；且用 Unity 重载的 != null
                     // 判断（?. 走的是引用判空，已销毁对象会漏过并抛 MissingReferenceException）。
                     MonoBehaviour host = ADOBase.controller != null ? ADOBase.controller
-                        : ADOBase.editor != null ? ADOBase.editor
-                        : ADOBase.customLevel;
+                    : ADOBase.editor != null ? ADOBase.editor
+                    : ADOBase.customLevel;
                     if (host != null)
-                        host.StartCoroutine(DelayedSendDeathKey());
+                    host.StartCoroutine(DelayedSendDeathKey());
                 }
             }
 
@@ -164,9 +229,9 @@ namespace ADOFAIMacro.Core
                 if (Main.Settings.Macro)
                 {
                     if (Main.Settings.ChangeJudementInPlay)
-                        __instance.editorDifficultySelector.SetChangeable(true);
+                    __instance.editorDifficultySelector.SetChangeable(true);
                     if (Main.Settings.ChangeNoFaillInPlay)
-                        __instance.buttonNoFail.interactable = true;
+                    __instance.buttonNoFail.interactable = true;
                 }
             }
         }
@@ -250,7 +315,7 @@ namespace ADOFAIMacro.Core
                     float? spd = (hitFloor ?? planet?.player?.currFloor?.prevfloor)?.speed;
 
                     int floorId = hitFloor != null ? hitFloor.seqID
-                        : planet?.player?.currFloor?.seqID ?? -1;
+                    : planet?.player?.currFloor?.seqID ?? -1;
                     double nowSpeed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 0.0;
 
                     // 方案7：闭环校准——把实测判定误差喂给宏
@@ -399,7 +464,7 @@ namespace ADOFAIMacro.Core
         private static bool IsKeyAllowed(KeyCode keyCode)
         {
             if (!Main.IsEnabled || !Main.Settings.Macro)
-                return true; // 如果宏未启用，不过滤任何按键
+            return true; // 如果宏未启用，不过滤任何按键
             if (!Main.Settings.EnableKeyFilter) return true;
 
             // 需要重建位图？
@@ -470,7 +535,7 @@ namespace ADOFAIMacro.Core
                 _blockedKeyCount = 0;
 
                 if (!Main.IsEnabled || !Main.Settings.Macro || !Main.Settings.EnableKeyFilter)
-                    return;
+                return;
 
                 try
                 {
@@ -502,7 +567,7 @@ namespace ADOFAIMacro.Core
             public static void Postfix(ref int __result)
             {
                 if (_blockedKeyCount > 0)
-                    __result = Math.Max(0, __result - _blockedKeyCount);
+                __result = Math.Max(0, __result - _blockedKeyCount);
                 _blockedKeyCount = 0;
             }
         }
@@ -621,7 +686,7 @@ namespace ADOFAIMacro.Core
         private static bool IsAsyncKeyAllowed(ushort keyCode)
         {
             if (!Main.IsEnabled || !Main.Settings.Macro)
-                return true; // 如果宏未启用，不过滤任何按键
+            return true; // 如果宏未启用，不过滤任何按键
             if (!Main.Settings.EnableKeyFilter) return true;
 
             // 需要重建位图？
@@ -664,12 +729,12 @@ namespace ADOFAIMacro.Core
                 //    会经钩子回流，配额命中即丢弃（虚拟直喂走 KeyUpdated.Invoke，
                 //    不经过这里，不受影响）——不丢会导致同一击打判定两次
                 if (VirtualAsyncInput.ShouldDropMirrorEcho(ev.Key, ev.Type))
-                    return false;
+                return false;
 
                 // 0.5 宏自己注入的键：放行并跳过按键过滤。过滤的语义是拦玩家输入，
                 //     不是拦宏的输出 —— 白名单模式下否则会把宏用的键全部过滤掉。
                 if (VirtualAsyncInput.ConsumeInjectedKey(ev.Key, ev.Type))
-                    return true;
+                return true;
 
                 // 1. 基本检查
                 if (!Application.isPlaying) return true;
@@ -690,13 +755,45 @@ namespace ADOFAIMacro.Core
 
                 // 6. 状态检查
                 if (!(ctrl.stateMachine.GetState() is States s && s == States.PlayerControl))
-                    return true;
+                return true;
 
                 bool allowed = IsAsyncKeyAllowed(ev.Key);
                 if (!allowed)
-                    MacroEngine.Log($"Filtered Async Key: {ev.Label} ({ev.Key}) - {(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")}");
+                MacroEngine.Log($"Filtered Async Key: {ev.Label} ({ev.Key}) - {(Main.Settings.FilterMode == 0 ? "Blacklist" : "Whitelist")}");
 
                 return allowed;
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        //  放行游戏硬编码过滤掉的四个特殊按键
+        // ─────────────────────────────────────────────
+        // RDInputType_AsyncKeyboard.GetSpecialInput() 无条件把 SpecialKeys
+        // （PrintScreen / F12 / LAlt / Super）里当前按下的键收进"特殊输入"表，
+        // Main(ButtonState.WentDown) 随后用这张表把这些键从本帧的普通按键
+        // 候选里 RemoveWhere 掉（RDInputType_AsyncKeyboard.cs:216-222）。
+        // 结果：这四个键在异步输入下**永远进不了判定** —— 宏拿其中之一当
+        // 触发键时表现为"按了没反应"。
+        //
+        // 这四个键在游戏里没有任何玩法用途（LAlt 只被读作 LShift，
+        // PrintScreen / F12 / Super 无绑定），直接放行；其余特殊键
+        // （Escape / 暂停键 / 方向键 / 关卡选择 / CLS）一律保持原样。
+        [HarmonyPatch(typeof(RDInputType_AsyncKeyboard), "GetSpecialInput")]
+        public static class AsyncKeyboard_GetSpecialInput_Patch
+        {
+            private static readonly KeyLabel[] PassThrough =
+            {
+                KeyLabel.PrintScreen, KeyLabel.F12, KeyLabel.LAlt, KeyLabel.Super
+            };
+
+            [HarmonyPostfix]
+            public static void Postfix(List<AsyncKeyCode> __result)
+            {
+                Guarded("AsyncGetSpecialInput", () =>
+                {
+                    if (__result == null || __result.Count == 0) return;
+                    __result.RemoveAll(k => Array.IndexOf(PassThrough, k.label) >= 0);
+                });
             }
         }
     }

@@ -233,50 +233,48 @@ static HitEvent* BuildTechniqueHitEventsImpl(
         }
         double nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
 
-        // ══════════════════════════════════════════════════════════════
-        //  速率容差：滑动窗口基准 + 死区
-        // ══════════════════════════════════════════════════════════════
+        // ── 【2026-10-03 变速容差整条移除】─────────────────────
         //
-        //  用户诉求：「一些小的变速上就不应该根据当前的变速执行，人的手法又不是
-        //  机器，有容差和忽略」。
+        //  这里原来有一整套"变速容差"，现已删除。被删的东西：
+        //    const int    BaseWindow   = 32;   // 滑动窗口音数
+        //    const double BaseLimitMul = 2.0;  // 相对窗口基准的允许倍数
+        //    double deadZone = (g_config.speedChangeTolerance > 0.0)
+        //                    ? g_config.speedChangeTolerance : 0.50;
+        //    double lockedRate;               // 跨片保持的锁定速率
+        //    每片重算：取最近 BaseWindow 个音的最高速率为基准，把本片速率夹到
+        //    [基准/2, 基准×2]，相对变化 < deadZone 就沿用 lockedRate。
+        //    段边界把 lockedRate 重置为本段第一块地的速度。
+        //  另外在主循环末尾还有一处"自适应时间片延伸"（几何修补），
+        //    由 speedChangeTolerance 控制，触发条件
+        //      diff > pLen*0.001 && diff < pLen*speedChangeTolerance
+        //  也一并删除。
         //
-        //  现状问题（原本每片无条件用本片地板 speed 重算 nowBpm → pLen 立刻
-        //  变）：实测那张变速狂谱 12886 音里有 2130 个变速点，其中 712 处
-        //  （33.4%）相对变化 <25%，每一处都让片长突变一次 → 手法纹理在小
-        //  变速点上抖动，不像人。
+        //  起因（保留作历史记录）：用户诉求「一些小的变速上就不应该根据当前
+        //  的变速执行，人的手法又不是机器，有容差和忽略」。原本每片无条件用
+        //  本片地板 speed 重算 nowBpm → pLen 立刻变；那张变速狂谱 12886 音里
+        //  有 2130 个变速点，其中 712 处（33.4%）相对变化 <25%，每处都让片长
+        //  突变一次。曾试方案 A（照抄游戏 scrMisc.cs:304 的"全谱最高速单一
+        //  基准" + ±2× 限幅），**实测无效**：速度跨度 0.14~58.67 被最高速抬爆，
+        //  纹理跳变率 18.7% → 18.5%。于是改成了上面那套 B+C+几何修补。
         //
-        //  试过的方案 A（照抄游戏 scrMisc.cs:304 的"全谱最高速单一基准"
-        //  + ±2× 限幅）**实测无效**：那张谱速度跨度 0.14~58.67，全谱最高
-        //  58.67 把基准抬得极高，±2× 限幅几乎不起作用，纹理跳变率
-        //  18.7% → 18.5%，基本没动。
+        //  为什么现在整条删掉（离线 A/B 实测，见 tools\abtest\bin\ab.exe）：
+        //   1. 一项两用：既改片长（速率决策）又改分片几何，绑在一个滑条上。
+        //   2. 滑条语义颠倒：设为 0 时死区反而取最大 0.50，设为 0.01 时几乎
+        //      为零 —— 用户根本没法关掉它。
+        //   3. 死区那一路近乎无效：lockedRate 被窗口基准与限幅单向拽住后，
+        //      相对变化天然极小，rel > deadZone 几乎恒成立，滑条调它没反应
+        //      （实测 v_deadonly 与本版在 tol>=0.02 时输出逐位相同）。
+        //      用户体感到的"必须开 0.5"其实来自几何修补那一路。
+        //   4. 几何修补触发过猛：tol 上限 0.5 时，接近半拍的空隙都被拉长，
+        //      连续变速谱上等于人为减少分片，片长与真实节奏越偏越远。
+        //   5. 离线对拍显示它把左右手分配大面积重排（变速谱上手失配 40%~58%、
+        //      键位失配 58%~80%），正是用户说的「有的手法会突然变成左撇子」
+        //      「手法都很诡异」。
+        //   6. 用户原话（2026-10-03）：「变速容差就是个祸害」。
         //
-        //  改为 B + C 组合（都零调参）：
-        //   C. 滑动窗口基准 —— 基准取**最近 Window 个音的最高速率**，而不是
-        //      全谱最高，局部慢的段落不会被远处的 58.67× 绑架；
-        //   B. 死区 —— 候选速率相对**锁定速率**的相对变化在 DeadZone 内时
-        //      直接无视，沿用锁定速率。人手不会为微小变化改指法。
-        //      DeadZone < 1 时复用已有的 SpeedChangeTolerance（0 = 关闭）。
-        //
-        //  两者都作用在 nowBpm（片长）上，是速率决策；原来的
-        //  speedChangeTolerance 只做"下一片稀疏时把 pLen 拉长"，那是几何
-        //  修补，不是速率容差，两回事。
-        const int    BaseWindow   = 32;    // 滑动窗口音数
-        const double BaseLimitMul = 2.0;   // 局部速率相对窗口基准的允许倍数
-        // 死区：候选速率相对 lockedRate 的变化在这个范围内直接无视。
-        // 用户实测：「必须要把变速容差开到最大的 0.5，不然手法都很诡异，
-        // 有的手法会突然变成左撇子」—— 所以默认取 0.5。
-        // （0.5 意味着小于 50% 的变速一律不改变片长；真正的段落转折通常
-        //   ≥50%，仍会被跟随。）
-        // 用户在设置里调 SpeedChangeTolerance 可覆盖；0 = 关闭死区。
-        double deadZone = (g_config.speedChangeTolerance > 0.0)
-                        ? g_config.speedChangeTolerance : 0.50;
-        if (deadZone < 0.0) deadZone = 0.0;
-        if (deadZone > 0.9) deadZone = 0.9;
-
-        // 锁定速率（speed 倍率），决定片长
-        double lockedRate = speed;
-        if (speedMuls && eventCount > 0 && speedMuls[0] > 1e-9) lockedRate = speedMuls[0];
-        nowBpm = GetAdviceBpm(bpm, lockedRate, lastSegLimit);
+        //  现在片长回到最朴素的模型：逐片跟随本片速度，无窗口、无限幅、
+        //  无死区、无几何修补 —— 与 2669a94（用户验证过的基线）行为一致。
+        nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
 
         double nowT = 0.0;
         int    nowD = 0;
@@ -306,50 +304,22 @@ static HitEvent* BuildTechniqueHitEventsImpl(
                 canMulti = 0;
                 needBack = false;
                 lastSegLimit = ec.bpmLimit;
-                // 段切换：锁定速率回到本段第一块地的速度（死区状态清零）
-                lockedRate = speed;
-                if (speedMuls && nowD < eventCount && speedMuls[nowD] > 1e-9)
-                    lockedRate = speedMuls[nowD];
-                nowBpm = GetAdviceBpm(bpm, lockedRate, lastSegLimit);
+                // 段切换：片长先回到本段基准速度
+                nowBpm = GetAdviceBpm(bpm, speed, lastSegLimit);
                 lastSegIdx = curSegIdx;
             }
 
-            // ── 速率容差：滑动窗口基准 + 死区 ──────────────────
-            // 段边界只处理"配置分段"，而 SetSpeed/BPM 变化不产生分段。
-            //
-            // 每片不再无条件跟随本片速度，而是：
-            //   1) C 滑动窗口基准：取最近 BaseWindow 个音的最高速率。
-            //      局部段落不会被远处的极高速绑架（方案 A 失败的原因）。
-            //   2) 限幅：局部速率夹在 [基准/2, 基准×2]。
-            //   3) B 死区：候选相对 lockedRate 的变化在 deadZone 内 → 无视，
-            //      沿用锁定速率。人手不会为微小变化改指法。
+            // ── 逐片跟随本片速度 ─────────────────────────────
+            // 段边界只处理"配置分段"，而 SetSpeed/变速不产生分段，所以每片
+            // 都要重新看本片所属地板的速度（这与 2669a94 基线一致）。
+            // 被删除的变速容差是在这一行的**外面**又套了一层：
+            // 滑动窗口基准(32 音取 max) + [基准/2, 基准×2] 限幅 + 死区 +
+            // lockedRate 保持。现在只剩这一行。
             if (speedMuls) {
                 int si = (nowD < eventCount) ? nowD : eventCount - 1;
                 if (si >= 0) {
-                    // 1) 滑动窗口基准
-                    double base = 0.0;
-                    int w0 = si - BaseWindow + 1; if (w0 < 0) w0 = 0;
-                    for (int w = w0; w <= si; w++) {
-                        if (speedMuls[w] > base) base = speedMuls[w];
-                    }
-                    if (base <= 1e-9) base = speedMuls[si];
-                    if (base <= 1e-9) base = speed;
-                    double lo = base / BaseLimitMul;
-                    double hi = base * BaseLimitMul;
-
                     double ls = speedMuls[si];
-                    if (ls > 1e-9) {
-                        // 2) 限幅
-                        if (ls < lo) ls = lo;
-                        if (ls > hi) ls = hi;
-                        // 3) 死区：变化太小就不动
-                        double rel = (lockedRate > 1e-9)
-                                   ? fabs(ls / lockedRate - 1.0) : 1.0;
-                        if (rel > deadZone) {
-                            lockedRate = ls;
-                        }
-                        nowBpm = GetAdviceBpm(bpm, lockedRate, lastSegLimit);
-                    }
+                    if (ls > 1e-9) nowBpm = GetAdviceBpm(bpm, ls, lastSegLimit);
                 }
             }
 
@@ -405,17 +375,25 @@ static HitEvent* BuildTechniqueHitEventsImpl(
             }
             */
 
-            // ── 自适应时间片延伸（仅在下一片更稀疏时合并）────
-            if (g_config.speedChangeTolerance > 0.0 && cnt > 0 && nowD + cnt < eventCount) {
-                double nextEvTime = evTime[nowD + cnt];
-                double diff = nextEvTime - (nowT + pLen);
-                if (diff > pLen * 0.001 && diff < pLen * g_config.speedChangeTolerance) {
-                    int nextCnt = CountEventsInRange(evTime, nowD + cnt, (nowT + pLen) + pLen * 0.995);
-                    if (nextCnt < cnt) {
-                        pLen = nextEvTime - nowT;
-                    }
-                }
-            }
+            /*
+            // ── 自适应时间片延伸（几何修补）──────────────────
+            // 【2026-10-03 整条删除】原代码：
+            //   if (g_config.speedChangeTolerance > 0.0 && cnt > 0 && nowD + cnt < eventCount) {
+            //       double nextEvTime = evTime[nowD + cnt];
+            //       double diff = nextEvTime - (nowT + pLen);
+            //       if (diff > pLen * 0.001 && diff < pLen * g_config.speedChangeTolerance) {
+            //           int nextCnt = CountEventsInRange(evTime, nowD + cnt, (nowT + pLen) + pLen * 0.995);
+            //           if (nextCnt < cnt) pLen = nextEvTime - nowT;
+            //       }
+            //   }
+            //  删除理由：tol 上限 0.5 时接近半拍的空隙都会被拉长，连续变速谱上
+            //  等于人为减少分片，片长与真实节奏越偏越远；而且它是用户体感到的
+            //  「必须开 0.5」的真正来源（速率死区那一路实测近乎无效），
+            //  却与速率决策共用一个设置项 —— 一项两用，无法单独关掉。
+            //  用户原话：「变速容差就是个祸害」。
+            //  与上方被注释掉的"非二进制分片检测"是同一类几何修补，
+            //  保持一并注释掉的状态，需要时可从这里翻出来对比。
+            */
 
             // 提交时间片
             memcpy(mCntPre, mCnt, sizeof(mCnt));

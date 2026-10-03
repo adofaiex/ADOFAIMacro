@@ -129,7 +129,7 @@ namespace ADOFAIMacro.Technique
             else
             {
                 for (int i = 0; i < output.Count; i++)
-                    _hitEventPool[i] = output[i];
+                _hitEventPool[i] = output[i];
                 _hitEvents = _hitEventPool.AsSpan(0, output.Count).ToArray();
             }
 
@@ -145,7 +145,7 @@ namespace ADOFAIMacro.Technique
             {
                 var seg = _currentSegments[i];
                 if (floorIdx >= seg.startFloor && floorIdx <= seg.endFloor)
-                    return i;
+                return i;
             }
             return -1;
         }
@@ -167,14 +167,11 @@ namespace ADOFAIMacro.Technique
             int  canMulti  = 0;
             bool needBack  = false;
 
-            // ── 速率容差：滑动窗口基准 + 死区（与原生 TechniqueSimulator.cpp 同步）──
-            const int    BaseWindow   = 32;    // 滑动窗口音数
-            const double BaseLimitMul = 2.0;   // 局部速率相对窗口基准的允许倍数
-            double deadZone = (Main.Settings.SpeedChangeTolerance > 0.0)
-                            ? Main.Settings.SpeedChangeTolerance : 0.50;
-            if (deadZone < 0.0) deadZone = 0.0;
-            if (deadZone > 0.9) deadZone = 0.9;
-
+            // ── 【2026-10-03 变速容差整条移除】─────────────────────
+            //  原来这里的 BaseWindow(32 音取 max 基准) + BaseLimitMul(±2× 限幅) +
+            //  deadZone + lockedRate 保持，以及底部的"自适应时间片延伸"
+            //  （几何修补），已随原生 TechniqueSimulator.cpp 一并删除。
+            //  理由与实测数据见 TechniqueSimulator.cpp 内同名注释块。
             double lockedRate = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 1.0;
             if (evSpeed != null && evSpeed.Count > 0 && evSpeed[0] > 1e-9) lockedRate = evSpeed[0];
 
@@ -197,43 +194,22 @@ namespace ADOFAIMacro.Technique
                     canMulti  = 0;
                     needBack  = false;
                     lastSegLimit = curSegLimit;
-                    // 段切换：锁定速率回到本段第一块地的速度（死区状态清零）
+                    // 段切换：片长先回到本段基准速度
                     lockedRate = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 1.0;
-                    if (evSpeed != null && curFloorIdx < evSpeed.Count && evSpeed[curFloorIdx] > 1e-9)
-                        lockedRate = evSpeed[curFloorIdx];
                     nowBpm       = GetAdviceBpm(lastSegLimit, lockedRate);
                     lastSegIdx   = curSegIdx;
                 }
 
-                // ── 逐片速率容差 ──────────────────────────────
-                // 与原生一致：滑动窗口基准 → ±BaseLimitMul 限幅 → 死区。
-                // 小于死区的变速不改变片长（人的手法有容差和忽略）。
+                // ── 逐片跟随本片速度 ──────────────────────────────
+                // 与原生 TechniqueSimulator.cpp 一致：每片重看本片所属地板的速度。
+                // 注意此处的索引语义：原生用事件索引 si=nowD 查 speedMuls，
+                // 而 evSpeed 是按**地板**下标建的，这里沿用 curFloorIdx 取值
+                // （C# 回退路径仅 DEBUG 可用，行为差异不在本次改动范围内）。
                 if (evSpeed != null && evSpeed.Count > 0)
                 {
-                    int si = (nowD < evSpeed.Count) ? nowD : evSpeed.Count - 1;
-                    if (si >= 0)
-                    {
-                        double baseRate = 0.0;
-                        int w0 = si - BaseWindow + 1; if (w0 < 0) w0 = 0;
-                        for (int w = w0; w <= si; w++)
-                            if (evSpeed[w] > baseRate) baseRate = evSpeed[w];
-                        if (baseRate <= 1e-9) baseRate = evSpeed[si];
-                        if (baseRate <= 1e-9) baseRate = lockedRate;
-
-                        double lo = baseRate / BaseLimitMul;
-                        double hi = baseRate * BaseLimitMul;
-
-                        double ls = evSpeed[si];
-                        if (ls > 1e-9)
-                        {
-                            if (ls < lo) ls = lo;
-                            if (ls > hi) ls = hi;
-                            double rel = (lockedRate > 1e-9)
-                                       ? Math.Abs(ls / lockedRate - 1.0) : 1.0;
-                            if (rel > deadZone) lockedRate = ls;
-                            nowBpm = GetAdviceBpm(lastSegLimit, lockedRate);
-                        }
-                    }
+                    if (curFloorIdx < evSpeed.Count && evSpeed[curFloorIdx] > 1e-9)
+                        lockedRate = evSpeed[curFloorIdx];
+                    nowBpm = GetAdviceBpm(lastSegLimit, lockedRate);
                 }
 
                 if (pieces.Count > total * 64) break;
@@ -273,22 +249,23 @@ namespace ADOFAIMacro.Technique
                     continue;
                 }
 
-                // ── 自适应时间片延伸（仅在下一片更稀疏时合并）────
-                float speedChangeTolerance = LevelTechniqueManager.GetCurrentLevelConfig()?.speedChangeTolerance
-                    ?? Main.Settings.SpeedChangeTolerance;
-                if (speedChangeTolerance > 0f && cnt > 0 && nowD + cnt < total)
-                {
-                    double nextEvTime = evTime[nowD + cnt];
-                    double diff = nextEvTime - (nowT + pLen);
-                    if (diff > pLen * 0.001 && diff < pLen * speedChangeTolerance)
-                    {
-                        int nextCnt = CountEventsInRange(evTime, nowD + cnt, (nowT + pLen) + pLen * 0.995);
-                        if (nextCnt < cnt)
-                        {
-                            pLen = nextEvTime - nowT;
-                        }
-                    }
-                }
+                /*
+                // ── 自适应时间片延伸（几何修补）──────────────────
+                // 【2026-10-03 整条删除】随变速容差一并移除。
+                // 原代码：
+                //   float speedChangeTolerance = LevelTechniqueManager.GetCurrentLevelConfig()?.speedChangeTolerance
+                //       ?? Main.Settings.SpeedChangeTolerance;
+                //   if (speedChangeTolerance > 0f && cnt > 0 && nowD + cnt < total) {
+                //       double nextEvTime = evTime[nowD + cnt];
+                //       double diff = nextEvTime - (nowT + pLen);
+                //       if (diff > pLen * 0.001 && diff < pLen * speedChangeTolerance) {
+                //           int nextCnt = CountEventsInRange(evTime, nowD + cnt, (nowT + pLen) + pLen * 0.995);
+                //           if (nextCnt < cnt) pLen = nextEvTime - nowT;
+                //       }
+                //   }
+                // 删除理由见 TechniqueSimulator.cpp 同名注释：tol 上限 0.5 时
+                // 接近半拍的空隙都被拉长，且与速率决策共用一个设置项（一项两用）。
+                */
 
                 Array.Copy(mCnt, mCntPre, 16);
                 pieces.Add(new PieceInfo(cnt, csH, pLen, nowT, nowT + pLen, nowD, mult));
@@ -306,7 +283,7 @@ namespace ADOFAIMacro.Technique
                 canMulti = 1;
 
                 if (nowD < total && Math.Abs(evTime[nowD] - nowT) < pLen * 0.01)
-                    nowT = evTime[nowD];
+                nowT = evTime[nowD];
             }
         }
 
@@ -393,20 +370,20 @@ namespace ADOFAIMacro.Technique
                     if (next.PieceLen > cur.PieceLen + 5e-6)
                     {
                         dur = (pStart + cur.PieceLen > cur.EndTime + 5e-6)
-                            ? (next.EndTime - t) * ratio / 2.0
-                            : (pStart + cur.PieceLen * 2.0 - t) * ratio / 2.0;
+                        ? (next.EndTime - t) * ratio / 2.0
+                        : (pStart + cur.PieceLen * 2.0 - t) * ratio / 2.0;
                     }
                     else
                     {
                         dur = (pStart + cur.PieceLen + 5e-6 < cur.EndTime)
-                            ? (pStart + cur.PieceLen + next.PieceLen - t) * ratio / 2.0
-                            : (next.EndTime - t) * ratio / 2.0;
+                        ? (pStart + cur.PieceLen + next.PieceLen - t) * ratio / 2.0
+                        : (next.EndTime - t) * ratio / 2.0;
                     }
 
                     double rel = t + dur;
 
                     if (next.Hand != cur.Hand || next.EvCount == 0)
-                        { if (rel >= next.EndTime) rel = next.EndTime - 1e-6; }
+                    { if (rel >= next.EndTime) rel = next.EndTime - 1e-6; }
                     else
                         { if (rel >= cur.EndTime)  rel = cur.EndTime  - 1e-6; }
 

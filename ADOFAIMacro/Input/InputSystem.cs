@@ -130,7 +130,7 @@ namespace ADOFAIMacro.Input
             try
             {
                 string modPath = Main.Mod?.Path
-                    ?? Path.GetDirectoryName(typeof(InputSystem).Assembly.Location);
+                ?? Path.GetDirectoryName(typeof(InputSystem).Assembly.Location);
                 string dllPath = Path.Combine(modPath, "InputSystem.dll");
 
                 if (!File.Exists(dllPath))
@@ -302,9 +302,9 @@ namespace ADOFAIMacro.Input
         public static unsafe int SendKeyCombination(byte[] keys, uint delayMs = 50)
         {
             if (!_isInitialized || SendKeyCombinationFunc == null
-                || keys == null || keys.Length == 0) return -1;
+            || keys == null || keys.Length == 0) return -1;
             fixed (byte* pKeys = keys)
-                return SendKeyCombinationFunc(pKeys, keys.Length, delayMs);
+            return SendKeyCombinationFunc(pKeys, keys.Length, delayMs);
         }
 
         public static int SendText(string text)

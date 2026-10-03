@@ -36,13 +36,13 @@ namespace ADOFAIMacro.UI
         public void OnEnable()
         {
             if (Main.Settings != null)
-                Main.Settings.OnMacroChanged += OnMacroChanged;
+            Main.Settings.OnMacroChanged += OnMacroChanged;
         }
 
         public void OnDisable()
         {
             if (Main.Settings != null)
-                Main.Settings.OnMacroChanged -= OnMacroChanged;
+            Main.Settings.OnMacroChanged -= OnMacroChanged;
         }
 
         private void OnMacroChanged(bool newValue)
@@ -61,9 +61,9 @@ namespace ADOFAIMacro.UI
             {
                 // 当前驱动路径角标：HIT=直接判定 / VIRT=虚拟异步键盘 / NT=NT注入 / SI=SendInput
                 string tag = !Main.Settings.SimulateKeyPress ? "HIT"
-                    : VirtualAsyncInput.Active ? "VIRT"
-                    : Main.Settings.SkyHookMode ? "NT/SI"
-                    : "SI";
+                : VirtualAsyncInput.Active ? "VIRT"
+                : Main.Settings.SkyHookMode ? "NT/SI"
+                : "SI";
                 string text = $"{LocalizationManager.Get("macro.enabled_text")} [{tag}]";
 
                 // 绘制阴影
@@ -75,7 +75,7 @@ namespace ADOFAIMacro.UI
 
                 // 虚拟异步键盘的内置按键显示（OS 层看不见，由模组自己渲染）
                 if (Main.Settings.SimulateKeyPress && Main.Settings.UseVirtualAsyncInput)
-                    DrawVirtualKeys();
+                DrawVirtualKeys();
             }
         }
 
@@ -91,7 +91,7 @@ namespace ADOFAIMacro.UI
             lock (VirtualAsyncInput.DisplayLock)
             {
                 foreach (var kv in VirtualAsyncInput.DisplayDown)
-                    _downSnapshot[kv.Key] = kv.Value;
+                _downSnapshot[kv.Key] = kv.Value;
                 for (int i = VirtualAsyncInput.DisplayUps.Count - 1; i >= 0; i--)
                 {
                     var up = VirtualAsyncInput.DisplayUps[i];

@@ -1,15 +1,15 @@
 /*
- * 本文件基于 [Iridium] 的代码修改
- * 原始项目: https://github.com/adofaiex/Iridium
- *           （旧地址 https://github.com/Xbodwf/Iridium 会重定向至此，同一个仓库）
- * 原始许可证: GNU LGPL v3 —— Copyright (C) 2025 Xbodwf
- *           许可全文: https://github.com/adofaiex/Iridium/blob/main/LICENSE
- * 修改说明: 新增更多键控支持；M3 风格控件的缓存与焦点处理等改动详见 git 历史
- *
- * ⚠️ 此处原先写的是「原始许可证: 无」，属错误信息（会把后续维护者误导成
- *    "上游无许可证、默认保留所有权利"）。上游实际采用 LGPL-3.0，与本项目的
- *    AGPL-3.0 兼容（LGPLv3 §3 可转 GPLv3；GPLv3 §13 可与 AGPLv3 组合）。
- */
+    * 本文件基于 [Iridium] 的代码修改
+    * 原始项目: https://github.com/adofaiex/Iridium
+    *           （旧地址 https://github.com/Xbodwf/Iridium 会重定向至此，同一个仓库）
+    * 原始许可证: GNU LGPL v3 —— Copyright (C) 2025 Xbodwf
+    *           许可全文: https://github.com/adofaiex/Iridium/blob/main/LICENSE
+    * 修改说明: 新增更多键控支持；M3 风格控件的缓存与焦点处理等改动详见 git 历史
+    *
+    * ⚠️ 此处原先写的是「原始许可证: 无」，属错误信息（会把后续维护者误导成
+    *    "上游无许可证、默认保留所有权利"）。上游实际采用 LGPL-3.0，与本项目的
+    *    AGPL-3.0 兼容（LGPLv3 §3 可转 GPLv3；GPLv3 §13 可与 AGPLv3 组合）。
+*/
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -153,9 +153,9 @@ namespace ADOFAIMacro.UI
             // （原先每个按钮每帧 new 一个 GUIStyle，页签栏一次 OnGUI 要分配 9+ 个）
             _selGridStyles = new GUIStyle[2, 2, 2];
             for (int s = 0; s < 2; s++)
-                for (int f = 0; f < 2; f++)
-                    for (int l = 0; l < 2; l++)
-                        _selGridStyles[s, f, l] = BuildSelGridStyle(s == 1, f == 1, l == 1);
+            for (int f = 0; f < 2; f++)
+            for (int l = 0; l < 2; l++)
+            _selGridStyles[s, f, l] = BuildSelGridStyle(s == 1, f == 1, l == 1);
         }
 
         // ─────────────────────────────────────────────
@@ -446,75 +446,75 @@ namespace ADOFAIMacro.UI
             {
                 case EventType.MouseDown:
                     if (sliderRect.Contains(currentEvent.mousePosition) || thumbRect.Contains(currentEvent.mousePosition))
-                    {
-                        GUIUtility.hotControl = controlID;
+                {
+                    GUIUtility.hotControl = controlID;
 
-                        // 直接跳转到点击位置
-                        float clickValue = (currentEvent.mousePosition.x - sliderRect.x) / sliderRect.width;
-                        value = leftValue + clickValue * (rightValue - leftValue);
-                        value = Mathf.Clamp(value, leftValue, rightValue);
+                    // 直接跳转到点击位置
+                    float clickValue = (currentEvent.mousePosition.x - sliderRect.x) / sliderRect.width;
+                    value = leftValue + clickValue * (rightValue - leftValue);
+                    value = Mathf.Clamp(value, leftValue, rightValue);
 
-                        currentEvent.Use();
-                    }
-                    break;
+                    currentEvent.Use();
+                }
+                break;
 
                 case EventType.MouseDrag:
                     if (GUIUtility.hotControl == controlID)
-                    {
-                        float dragValue = (currentEvent.mousePosition.x - sliderRect.x) / sliderRect.width;
-                        value = leftValue + dragValue * (rightValue - leftValue);
-                        value = Mathf.Clamp(value, leftValue, rightValue);
-                        currentEvent.Use();
-                    }
-                    break;
+                {
+                    float dragValue = (currentEvent.mousePosition.x - sliderRect.x) / sliderRect.width;
+                    value = leftValue + dragValue * (rightValue - leftValue);
+                    value = Mathf.Clamp(value, leftValue, rightValue);
+                    currentEvent.Use();
+                }
+                break;
 
                 case EventType.MouseUp:
                     if (GUIUtility.hotControl == controlID)
-                    {
-                        GUIUtility.hotControl = 0;
-                        currentEvent.Use();
-                    }
-                    break;
+                {
+                    GUIUtility.hotControl = 0;
+                    currentEvent.Use();
+                }
+                break;
 
                 case EventType.Repaint:
-                    // 在Repaint阶段绘制所有UI元素
+                // 在Repaint阶段绘制所有UI元素
 
-                    // 纹理宽度按 16px 档位量化：纹理本身会被拉伸绘制，
-                    // 不需要精确到像素宽度，避免拖动窗口大小时缓存无限增长
+                // 纹理宽度按 16px 档位量化：纹理本身会被拉伸绘制，
+                // 不需要精确到像素宽度，避免拖动窗口大小时缓存无限增长
                     const int radius = 12;
-                    int trackTexW = Math.Max(32, ((int)sliderRect.width + 15) & ~15);
+                int trackTexW = Math.Max(32, ((int)sliderRect.width + 15) & ~15);
 
-                    // 1. 先绘制轨道背景（最底层）
-                    GUI.color = trackColor;
-                    GUI.DrawTexture(sliderRect, GetCachedRoundedTex(trackTexW, 24, radius, Color.white));
+                // 1. 先绘制轨道背景（最底层）
+                GUI.color = trackColor;
+                GUI.DrawTexture(sliderRect, GetCachedRoundedTex(trackTexW, 24, radius, Color.white));
 
-                    // 2. 再绘制进度条（中间层）
-                    float progressWidth = sliderRect.width * normalizedValue;
-                    if (progressWidth > 2) // 至少显示一点进度
-                    {
-                        Rect progressRect = new(sliderRect.x, sliderRect.y, progressWidth, sliderRect.height);
-                        int progTexW = Math.Max(16, ((int)progressWidth + 15) & ~15);
-                        GUI.color = progressColor;
-                        GUI.DrawTexture(progressRect, GetCachedRoundedTex(progTexW, 24, radius, Color.white));
-                    }
+                // 2. 再绘制进度条（中间层）
+                float progressWidth = sliderRect.width * normalizedValue;
+                if (progressWidth > 2) // 至少显示一点进度
+                {
+                    Rect progressRect = new(sliderRect.x, sliderRect.y, progressWidth, sliderRect.height);
+                    int progTexW = Math.Max(16, ((int)progressWidth + 15) & ~15);
+                    GUI.color = progressColor;
+                    GUI.DrawTexture(progressRect, GetCachedRoundedTex(progTexW, 24, radius, Color.white));
+                }
 
-                    // 3. 最后绘制滑块（最上层）- 移到进度条上面
-                    GUI.color = isDragging || isHovering ? hoverThumbColor : thumbColor;
-                    float currentThumbSize = isDragging ? thumbSize + 2 : thumbSize; // 拖动时稍微放大
-                    float currentThumbX = sliderRect.x + (sliderRect.width * normalizedValue) - currentThumbSize / 2;
-                    float currentThumbY = sliderRect.y + (sliderRect.height - currentThumbSize) / 2;
-                    Rect currentThumbRect = new(currentThumbX, currentThumbY, currentThumbSize, currentThumbSize);
+                // 3. 最后绘制滑块（最上层）- 移到进度条上面
+                GUI.color = isDragging || isHovering ? hoverThumbColor : thumbColor;
+                float currentThumbSize = isDragging ? thumbSize + 2 : thumbSize; // 拖动时稍微放大
+                float currentThumbX = sliderRect.x + (sliderRect.width * normalizedValue) - currentThumbSize / 2;
+                float currentThumbY = sliderRect.y + (sliderRect.height - currentThumbSize) / 2;
+                Rect currentThumbRect = new(currentThumbX, currentThumbY, currentThumbSize, currentThumbSize);
 
-                    // 绘制滑块阴影（稍微偏移，制造立体感）
-                    GUI.color = new Color(0, 0, 0, 0.2f);
-                    Rect shadowRect = new(currentThumbRect.x + 1, currentThumbRect.y + 1, currentThumbRect.width, currentThumbRect.height);
-                    GUI.DrawTexture(shadowRect, GetCachedRoundedTex((int)currentThumbSize, (int)currentThumbSize, (int)(currentThumbSize / 2), Color.white));
+                // 绘制滑块阴影（稍微偏移，制造立体感）
+                GUI.color = new Color(0, 0, 0, 0.2f);
+                Rect shadowRect = new(currentThumbRect.x + 1, currentThumbRect.y + 1, currentThumbRect.width, currentThumbRect.height);
+                GUI.DrawTexture(shadowRect, GetCachedRoundedTex((int)currentThumbSize, (int)currentThumbSize, (int)(currentThumbSize / 2), Color.white));
 
-                    // 绘制滑块本体
-                    GUI.color = isDragging || isHovering ? hoverThumbColor : thumbColor;
-                    GUI.DrawTexture(currentThumbRect, GetCachedRoundedTex((int)currentThumbSize, (int)currentThumbSize, (int)(currentThumbSize / 2), Color.white));
+                // 绘制滑块本体
+                GUI.color = isDragging || isHovering ? hoverThumbColor : thumbColor;
+                GUI.DrawTexture(currentThumbRect, GetCachedRoundedTex((int)currentThumbSize, (int)currentThumbSize, (int)(currentThumbSize / 2), Color.white));
 
-                    break;
+                break;
             }
 
             GUILayout.EndHorizontal();
@@ -672,7 +672,7 @@ namespace ADOFAIMacro.UI
                     // 圆角只给整行/整表的首尾（单选行内不再单独修圆角，视觉与旧版一致）
                     GUIStyle buttonStyle = styles[selected == i ? 1 : 0, i == 0 ? 1 : 0, i == texts.Length - 1 ? 1 : 0];
                     if (GUILayout.Button(texts[i], buttonStyle, GUILayout.ExpandWidth(true)))
-                        newSelected = i;
+                    newSelected = i;
                 }
                 GUILayout.EndHorizontal();
             }

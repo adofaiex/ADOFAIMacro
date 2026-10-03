@@ -86,8 +86,6 @@
     "tech.right_hand": "Right",
     "tech.global_bpm_limit": "Global · Speed Threshold (BPM)",
     "tech.bpm_explanation": "Above this BPM, time slices are subdivided so one hand handles multiple events",
-    "tech.speed_change_tolerance": "Speed Change Tolerance",
-    "tech.speed_change_tolerance_desc": "Adjusts BPM to align pieces with event timing (0=off, 0.2=moderate, 0.5=aggressive). Helps with speed-change levels.",
     "tech.speed_segments": "Speed Segments",
     "tech.segment_inherit": "Empty key fields inherit the global configuration.",
     "tech.add_segment": "+ Add Segment",

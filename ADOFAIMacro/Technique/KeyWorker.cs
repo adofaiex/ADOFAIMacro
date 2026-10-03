@@ -89,7 +89,7 @@ namespace ADOFAIMacro.Technique
                     {
                         int ver = Volatile.Read(ref _resetVersion);
                         for (int s = 0; s < 50 && _workerRunning && Volatile.Read(ref _resetVersion) == ver; s++)
-                            Thread.Sleep(1);
+                        Thread.Sleep(1);
                         goto WriteBack;
                     }
 
@@ -114,7 +114,7 @@ namespace ADOFAIMacro.Technique
 
 #if DEBUG
                         if (i < 5 || Math.Abs(triggerAt - audioNow) > 0.5)
-                            Log($"[Macro-Worker] TICK i={i} audioNow={audioNow:F6} triggerAt={triggerAt:F6} diff={triggerAt - audioNow:F6} elapsed={elapsed:F6}");
+                        Log($"[Macro-Worker] TICK i={i} audioNow={audioNow:F6} triggerAt={triggerAt:F6} diff={triggerAt - audioNow:F6} elapsed={elapsed:F6}");
 #endif
 
                         if (triggerAt > audioNow)
@@ -149,8 +149,8 @@ namespace ADOFAIMacro.Technique
                             if (enableTechnique)
                             {
                                 byte keyToRelease = ev.IsHoldRelated
-                                    ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
-                                    : ev.ReleaseKeyCode;
+                                ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
+                                : ev.ReleaseKeyCode;
                                 SendKey(keyToRelease, false);
                                 if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
                                 LogVerbose($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={i} audioNow={audioNow:F6}");
@@ -196,7 +196,7 @@ namespace ADOFAIMacro.Technique
 
                         var fresh = Volatile.Read(ref _currentAnchor);
                         if (!ReferenceEquals(fresh, anchor) && fresh.valid
-                            && Volatile.Read(ref _resetVersion) == localResetVer)
+                        && Volatile.Read(ref _resetVersion) == localResetVer)
                         {
                             anchor = fresh;
                             events = anchor.hitEvents!;
@@ -218,11 +218,11 @@ namespace ADOFAIMacro.Technique
                         if (_isHoldDown) WorkerReleaseHoldKey();
                     }
 
-                WriteBack:
+                    WriteBack:
                     if (triggered && Volatile.Read(ref _resetVersion) == localResetVer)
-                        Volatile.Write(ref _workerLastTriggeredFloor, localLastFloor);
+                    Volatile.Write(ref _workerLastTriggeredFloor, localLastFloor);
                     if (hitCount > 0)
-                        Interlocked.Add(ref _workerNeedsHit, hitCount);
+                    Interlocked.Add(ref _workerNeedsHit, hitCount);
                     FlushFireStats();
                 }
             }
@@ -310,7 +310,7 @@ namespace ADOFAIMacro.Technique
             // 从而落入【按键过滤】的判定范围。若开了过滤，先登记放行配额，
             // 否则白名单模式下宏会把自己的键全部拦掉（详见 VirtualAsyncInput 注释）。
             if (Main.Settings.EnableKeyFilter)
-                VirtualAsyncInput.RegisterInjectedKey(keyCode, isDown);
+            VirtualAsyncInput.RegisterInjectedKey(keyCode, isDown);
 
             if (_cachedSkyHookMode)
             {
@@ -325,7 +325,7 @@ namespace ADOFAIMacro.Technique
                 _cachedInput.u.ki.wScan = scanCodeCache[keyCode];
                 _cachedInput.u.ki.dwFlags = isDown ? KEYEVENTF_KEYDOWN : KEYEVENTF_KEYUP;
                 fixed (SkyHookSystem.INPUT* ptr = &_cachedInput)
-                    SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
+                SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
                 LogVerbose($"[Macro-Worker] SendInput key=0x{keyCode:X2} down={isDown}");
             }
         }
@@ -339,10 +339,17 @@ namespace ADOFAIMacro.Technique
             levelMaker = scrLevelMaker.instance;
             if (levelMaker?.listFloors == null || levelMaker.listFloors.Count == 0) return;
 
+            // scrConductor.instance 在关卡尚未完全建立时会是 null。此前这里用的是
+            // `conductor!` 空宽容错，到下面第 354 行解引用时才炸 —— 而 Initialize()
+            // 是从 Harmony 前缀（每帧）调进来的，异常会直接抛进游戏的
+            // scrController.PlayerControl_Update，Player.log 每帧刷一条。
+            // 提早判空并安静返回：initialized 仍是 false，Update 下一帧会重试。
+            conductor = scrConductor.instance;
+            if (conductor == null) return;
+
             cachedFloors = [.. levelMaker.listFloors];
             floorCount = cachedFloors.Length;
             _initializedLevelPath = SafeLevelPath();
-            conductor = scrConductor.instance;
 
             ParseKeyCodes();
             BuildHitEvents();
@@ -351,7 +358,7 @@ namespace ADOFAIMacro.Technique
             _staticAnchorVersion++;
 
             // 方案6：锚点每帧由判定公式/采样直接给出，无需播种状态
-            double startPos = conductor!.songposition_minusi;
+            double startPos = conductor.songposition_minusi;
             int syncFloor = SyncFloor(startPos);
             Volatile.Write(ref _workerLastTriggeredFloor, syncFloor);
             // 事件表与入场索引都已就绪，允许工作线程取用（与上面两句构成握手）

@@ -86,8 +86,6 @@
     "tech.right_hand": "右手",
     "tech.global_bpm_limit": "全局·速度阈值 (BPM)",
     "tech.bpm_explanation": "超过此BPM时自动细分时间片，允许同一只手连续承担多个事件",
-    "tech.speed_change_tolerance": "变速容差",
-    "tech.speed_change_tolerance_desc": "自动调整BPM使时间片对齐事件时序（0=关闭, 0.2=适中, 0.5=激进）。应对连续微变速谱面。",
     "tech.speed_segments": "变速分段设置",
     "tech.segment_inherit": "留空的按键字段将继承全局配置。",
     "tech.add_segment": "+ 添加分段",

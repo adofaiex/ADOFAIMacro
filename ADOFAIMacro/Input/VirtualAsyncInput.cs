@@ -62,7 +62,7 @@ namespace ADOFAIMacro.Input
         {
             _layoutOk = SelfTest();
             if (!_layoutOk)
-                Main.Log("[VirtualAsyncInput] SkyHookEvent 布局自检失败，直喂模式禁用（回退系统注入）");
+            Main.Log("[VirtualAsyncInput] SkyHookEvent 布局自检失败，直喂模式禁用（回退系统注入）");
             else
                 Main.Log("[VirtualAsyncInput] 布局自检通过，虚拟异步键盘就绪");
             return _layoutOk;
@@ -75,12 +75,12 @@ namespace ADOFAIMacro.Input
             try
             {
                 active = _layoutOk
-                         && Main.Settings.UseVirtualAsyncInput
-                         && Main.Settings.SkyHookMode
-                         && Main.Settings.SimulateKeyPress
-                         && global::AsyncInputManager.isActive
-                         && RDInput.asyncKeyboard != null
-                         && RDInput.asyncKeyboard.isActive;
+                && Main.Settings.UseVirtualAsyncInput
+                && Main.Settings.SkyHookMode
+                && Main.Settings.SimulateKeyPress
+                && global::AsyncInputManager.isActive
+                && RDInput.asyncKeyboard != null
+                && RDInput.asyncKeyboard.isActive;
             }
             catch
             {
@@ -103,7 +103,7 @@ namespace ADOFAIMacro.Input
             {
                 KeyLabel label = SkyHookKeyMapper.NativeKeyCodeToKeyLabel(keyCode);
                 if (label == KeyLabel.Unknown)
-                    return false; // 无 KeyLabel 的键走掩码相等性会互相合并，必须回退注入路径
+                return false; // 无 KeyLabel 的键走掩码相等性会互相合并，必须回退注入路径
 
                 PreciseNow.SplitLocalUnix(PreciseNow.LocalTicks(), out long sec, out uint nano);
 
@@ -121,7 +121,7 @@ namespace ADOFAIMacro.Input
                 {
                     int nowMs = Environment.TickCount;
                     if (isDown)
-                        DisplayDown[keyCode] = nowMs;
+                    DisplayDown[keyCode] = nowMs;
                     else
                     {
                         DisplayDown.Remove(keyCode);
@@ -139,7 +139,7 @@ namespace ADOFAIMacro.Input
                               $"settings#{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Main.Settings)}");
                 }
                 if (Main.Settings.MirrorVirtualKeys)
-                    SendMirror(keyCode, isDown);
+                SendMirror(keyCode, isDown);
 
                 return true;
             }
@@ -210,7 +210,7 @@ namespace ADOFAIMacro.Input
             System.Threading.Interlocked.Increment(ref _mirrorStatSends);
             int result = AsyncInputManager.DirectPushKey(keyCode, isDown);
             if (result != 0)
-                System.Threading.Interlocked.Increment(ref _mirrorStatFail);
+            System.Threading.Interlocked.Increment(ref _mirrorStatFail);
 
             FlushMirrorStats();
         }
@@ -220,7 +220,7 @@ namespace ADOFAIMacro.Input
             int now = Environment.TickCount;
             int last = _mirrorStatLastFlush;
             if (now - last < 3000 || System.Threading.Interlocked.CompareExchange(ref _mirrorStatLastFlush, now, last) != last)
-                return;
+            return;
 
             long sends = System.Threading.Interlocked.Read(ref _mirrorStatSends);
             long fails = System.Threading.Interlocked.Read(ref _mirrorStatFail);
@@ -231,7 +231,7 @@ namespace ADOFAIMacro.Input
             System.Threading.Interlocked.Add(ref _mirrorStatEcho, -echoes);
             System.Threading.Interlocked.Add(ref _mirrorStatUnfocused, -unfocused);
             if (sends > 0 || echoes > 0 || unfocused > 0)
-                Main.Log($"[Macro-Mirror] 注入 {sends} 次(失败 {fails}) | 回声已丢 {echoes} | 失焦跳过 {unfocused}");
+            Main.Log($"[Macro-Mirror] 注入 {sends} 次(失败 {fails}) | 回声已丢 {echoes} | 失焦跳过 {unfocused}");
         }
 
         // ─────────────────────────────────────────────────────────
@@ -364,11 +364,11 @@ namespace ADOFAIMacro.Input
 
                 long expectedTicks = testSec * 10_000_000L + testNano / 100 + 621355968000000000L;
                 return evt.TimeSec == testSec
-                       && evt.TimeSubsecNano == testNano
-                       && evt.Type == type
-                       && evt.Label == label
-                       && evt.Key == testKey
-                       && evt.GetTimeInTicks() == expectedTicks;
+                && evt.TimeSubsecNano == testNano
+                && evt.Type == type
+                && evt.Label == label
+                && evt.Key == testKey
+                && evt.GetTimeInTicks() == expectedTicks;
             }
             catch
             {

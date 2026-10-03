@@ -84,6 +84,11 @@ namespace ADOFAIMacro.Input
             {
                 MacroEngine.Log($"[InputSystem] 启动失败: {ex.Message}");
                 _isInitialized = false;
+                // 必须把 GCLatencyMode 一并还原：上面已把它设成 SustainedLowLatency，
+                // 而 Stop() 开头的 `if (!_isInitialized) return;` 会在这个状态下直接返回，
+                // 导致进程永久停在抑制 Gen2 阻塞式 GC 的模式上（内存只涨不回收）。
+                System.Runtime.GCSettings.LatencyMode =
+                    System.Runtime.GCLatencyMode.Interactive;
                 timeEndPeriod(1);
             }
         }
@@ -95,14 +100,27 @@ namespace ADOFAIMacro.Input
         {
             if (!_isInitialized) return;
 
-            InputSystem.EmergencyStop();
-            InputSystem.StopProcessing();
+            // 收尾用 try/finally：EmergencyStop / StopProcessing 是裸 P/Invoke 调用，
+            // 原生侧一旦抛异常就会跳过后面三行 —— 时钟精度恢复不了、GC 模式回不去、
+            // _isInitialized 卡在 true 导致下次 Start 直接走「已在运行中」分支。
+            // 这些都是进程级全局状态，无论原生层成败都必须还原。
+            try
+            {
+                InputSystem.EmergencyStop();
+                InputSystem.StopProcessing();
+            }
+            catch (Exception ex)
+            {
+                MacroEngine.Log($"[InputSystem] 停止时原生层异常: {ex.Message}");
+            }
+            finally
+            {
+                System.Runtime.GCSettings.LatencyMode =
+                    System.Runtime.GCLatencyMode.Interactive;
+                timeEndPeriod(1);
+                _isInitialized = false;
+            }
 
-            System.Runtime.GCSettings.LatencyMode =
-                System.Runtime.GCLatencyMode.Interactive;
-            timeEndPeriod(1);
-
-            _isInitialized = false;
             MacroEngine.Log($"[InputSystem] 已停止 | 处理: {_totalProcessed} | 丢弃: {Interlocked.Read(ref _totalDropped)}");
         }
 
@@ -124,18 +142,18 @@ namespace ADOFAIMacro.Input
 
             // 首选同步直发（调用线程立即注入，零中转）
             int result = InputSystem.HasSendKeyDirect
-                ? InputSystem.SendKeyDirect(keyCode, isDown)
-                : -1;
+            ? InputSystem.SendKeyDirect(keyCode, isDown)
+            : -1;
 
             // 兜底：旧版原生 DLL 没有 SendKeyDirect 导出时走入队路径，
             // 绝不能静默丢键（否则宏会"整个失效"）
             if (result != 0)
-                result = InputSystem.PushKeyEvent(keyCode, isDown, 0);
+            result = InputSystem.PushKeyEvent(keyCode, isDown, 0);
 
             // 统计（非热路径分支，result!=0 极少发生）
             if (result == 0)
-                // 仅调用方线程写 _totalProcessed，无竞争，直接 ++
-                _totalProcessed++;
+            // 仅调用方线程写 _totalProcessed，无竞争，直接 ++
+            _totalProcessed++;
             else
                 Interlocked.Increment(ref _totalDropped);
 
@@ -153,7 +171,7 @@ namespace ADOFAIMacro.Input
 
             // 清空 C++ 层内部队列
             if (_isInitialized)
-                InputSystem.ClearQueue();
+            InputSystem.ClearQueue();
 
             MacroEngine.Log("[InputSystem] 队列已清空");
         }

@@ -67,7 +67,7 @@ namespace ADOFAIMacro.Core
             Localization.LocalizationManager.Initialize(modEntry.Path);
             // 根据 Settings.UseChinese 加载对应语言
             if (Settings.UseChinese)
-                Localization.LocalizationManager.LoadLanguage("zh-CN");
+            Localization.LocalizationManager.LoadLanguage("zh-CN");
             else
                 Localization.LocalizationManager.LoadLanguage("en-US");
 
@@ -134,7 +134,7 @@ namespace ADOFAIMacro.Core
             Assembly assembly = Assembly.GetExecutingAssembly();
             var attribute = assembly.GetCustomAttribute<DebuggableAttribute>();
             if (attribute == null)
-                return false;
+            return false;
             return attribute.IsJITOptimizerDisabled;
         }
 
@@ -146,18 +146,27 @@ namespace ADOFAIMacro.Core
                 // None
 
 #else
-                if (modEntry.Info.Version != "1.3.0" || modEntry.Info.Id != "ADOFAIMacro" || modEntry.Info.DisplayName != "ADOFAI Macro" || modEntry.Info.Author != "HitMargin" || modEntry.Info.AssemblyName != "ADOFAIMacro.dll" || modEntry.Info.EntryMethod != "ADOFAIMacro.Core.Main.Load")
+                // 逐项比对 Info.json。任何一项对不上就判定文件被改过。
+                // EntryMethod 必须是 ADOFAIMacro.Core.Main.Load —— 命名空间与目录
+                // 对齐后 Main 在 ADOFAIMacro.Core 下，改这里必须同步改 Info.json，
+                // 否则 mod 会拒绝加载自己（表现为「双击闪退」）。
+                if (modEntry.Info.Version != "1.3.0" ||
+                    modEntry.Info.Id != "ADOFAIMacro" ||
+                    modEntry.Info.DisplayName != "ADOFAI Macro" ||
+                    modEntry.Info.Author != "HitMargin" ||
+                    modEntry.Info.AssemblyName != "ADOFAIMacro.dll" ||
+                    modEntry.Info.EntryMethod != "ADOFAIMacro.Core.Main.Load")
                 {
                     Mod?.Logger.Error("Modifying the Info.json file is NOT allowed!");
                     Application.Quit();
                 }
                 /*
-                var creplayMod = UnityModManager.modEntries.FirstOrDefault(m => m.Info.Id.Equals("CreplayMod", StringComparison.OrdinalIgnoreCase));
-                if (creplayMod != null && creplayMod.Enabled)  // 若使用旧版 UnityModManager，可能是 .Enabled
-                {
+                    var creplayMod = UnityModManager.modEntries.FirstOrDefault(m => m.Info.Id.Equals("CreplayMod", StringComparison.OrdinalIgnoreCase));
+                    if (creplayMod != null && creplayMod.Enabled)  // 若使用旧版 UnityModManager，可能是 .Enabled
+                    {
                     Mod?.Logger.Error("Detected CreplayMod, which is incompatible. Exiting...");
                     Application.Quit();
-                }
+                    }
                 */
 #endif
                 if (UnityModManager.modEntries.FirstOrDefault(m => m.Info.Id.Equals("BaseMacro", StringComparison.OrdinalIgnoreCase)) != null)
@@ -172,7 +181,7 @@ namespace ADOFAIMacro.Core
                 // 用户却看到"Info.json 被修改"的误报。
                 // Beta / 调试后缀只在 UI 展示层拼接（见 Settings.UiVersionText）。
                 if (IsDebugAssembly() && Mod?.Info.DisplayName?.Contains("(Debug)") == false)
-                    Mod?.Info.DisplayName += " <color=grey>(Debug)</color>";
+                Mod?.Info.DisplayName += " <color=grey>(Debug)</color>";
 
                 IsEnabled = true;
                 Harmony?.PatchAll(Assembly.GetExecutingAssembly());
@@ -181,7 +190,7 @@ namespace ADOFAIMacro.Core
                 // 重载，否则手法模拟在本次游戏会话内永久失效（IsDllLoaded() 恒 false，
                 // Release 面板还会据此强制关闭"启用手法模拟"）。
                 if (!TechniqueSimulator.IsDllLoaded() && !TechniqueSimulator.LoadTechniqueDll())
-                    Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
+                Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
                 if (_uiObject == null)
                 {
                     _uiObject = new GameObject("MacroText");

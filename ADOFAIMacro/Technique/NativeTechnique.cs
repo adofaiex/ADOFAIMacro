@@ -153,14 +153,14 @@ namespace ADOFAIMacro.Technique
                 sbT.AppendLine($"floors.Length={floors.Length}  事件数={total}  谱尾索引={last}");
                 int emitted = 0;
                 for (int k = 0; k < evTime.Count; k++)
-                    if (evPress[k] != -1) emitted++;
+                if (evPress[k] != -1) emitted++;
                 sbT.AppendLine($"按下事件={emitted}");
                 for (int k = Math.Max(0, last - 5); k < floors.Length; k++)
                 {
                     var fk = floors[k];
                     bool got = false;
                     for (int q = 0; q < evFloor.Count; q++)
-                        if (evFloor[q] == k) { got = true; break; }
+                    if (evFloor[q] == k) { got = true; break; }
                     sbT.AppendLine(
                         $"  i={k} seqID={fk?.seqID} entryTime={fk?.entryTime:F3} hold={fk?.holdLength} " +
                         $"midSpin={fk?.midSpin} auto={fk?.auto} freeroam={fk?.freeroam} " +
@@ -197,15 +197,13 @@ namespace ADOFAIMacro.Technique
                         handPref = Main.Settings.TechniqueHandPreference;
                     }
 
-                    double speedChangeTolerance = levelConfig?.speedChangeTolerance
-                        ?? Main.Settings.SpeedChangeTolerance;
+                    // 【2026-10-03】speedChangeTolerance 随变速容差整条移除，不再传给原生
                     TechniqueSimulator.UpdateConfig(
                         _techLeftKeys, _techRightKeys,
                         _techKeyOrders[0], _techKeyOrders[1],
                         _techPressDur[0], _techPressDur[1],
                         Main.Settings.TechniqueBpmLimit,
                         handPref,
-                        speedChangeTolerance,
                         segments);
 
                     if (TechniqueSimulator.BuildHitEvents(

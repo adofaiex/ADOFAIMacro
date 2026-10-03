@@ -15,7 +15,7 @@ namespace ADOFAIMacro.Technique
         // 两个时间戳之间的真实流逝秒（按当前时间源的刻度换算）
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static double ElapsedSec(long from, long to)
-            => (double)(to - from) * (_cachedHighPrecision ? 1e-7 : perfFreqInv);
+        => (double)(to - from) * (_cachedHighPrecision ? 1e-7 : perfFreqInv);
 
         // 切换时间源委托（根据 HighPrecision 设置）
         private static void UpdateTicksDelegate()

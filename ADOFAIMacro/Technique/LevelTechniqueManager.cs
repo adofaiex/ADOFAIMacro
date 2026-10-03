@@ -128,7 +128,6 @@ namespace ADOFAIMacro.Technique
             settings.TechLeftHandPressTimes = config.leftHandPressTimes;
             settings.TechRightHandPressTimes = config.rightHandPressTimes;
             settings.TechniqueHandPreference = config.handPreference;
-            settings.SpeedChangeTolerance = config.speedChangeTolerance;
 
             // 应用到当前配置列表
             if (settings.TechniqueProfiles.Count == 0)
@@ -143,7 +142,6 @@ namespace ADOFAIMacro.Technique
                     leftHandPressTimes = config.leftHandPressTimes,
                     rightHandPressTimes = config.rightHandPressTimes,
                     handPreference = config.handPreference,
-                    speedChangeTolerance = config.speedChangeTolerance,
                     techniqueSegments = CloneTechniqueSegments(config.techniqueSegments)
                 });
                 settings.SelectedTechniqueProfileIndex = 0;
@@ -160,7 +158,6 @@ namespace ADOFAIMacro.Technique
                 current.leftHandPressTimes = config.leftHandPressTimes;
                 current.rightHandPressTimes = config.rightHandPressTimes;
                 current.handPreference = config.handPreference;
-                current.speedChangeTolerance = config.speedChangeTolerance;
 
                 // 如果配置文件有分段，则覆盖当前分段（包括空列表表示清除）
                 if (config.techniqueSegments != null)
@@ -239,7 +236,6 @@ namespace ADOFAIMacro.Technique
                     leftHandPressTimes = currentProfile.leftHandPressTimes,
                     rightHandPressTimes = currentProfile.rightHandPressTimes,
                     handPreference = currentProfile.handPreference,
-                    speedChangeTolerance = currentProfile.speedChangeTolerance,
                     techniqueSegments = CloneTechniqueSegments(currentProfile.techniqueSegments)
                 };
 
@@ -341,7 +337,7 @@ namespace ADOFAIMacro.Technique
 
             // 手动加载也应用到 Settings，让用户能在 UI 中看到配置项
             if (_loadedConfigs.TryGetValue(levelPath!, out var config) && config != null)
-                ApplyConfigToSettings(config);
+            ApplyConfigToSettings(config);
         }
 
         /// <summary>

@@ -114,7 +114,7 @@ namespace ADOFAIMacro.Technique
             var profiles = s.TechniqueProfiles;
             if (profiles != null && profiles.Count > 0 &&
                 s.SelectedTechniqueProfileIndex >= 0 && s.SelectedTechniqueProfileIndex < profiles.Count)
-                _currentSegments = profiles[s.SelectedTechniqueProfileIndex].techniqueSegments;
+            _currentSegments = profiles[s.SelectedTechniqueProfileIndex].techniqueSegments;
             else
                 _currentSegments = new List<Settings.TechniqueSegment>();
         }
@@ -133,8 +133,8 @@ namespace ADOFAIMacro.Technique
                 string group = n < groups.Length ? groups[n] : groups[groups.Length - 1];
                 var indices = new List<int>();
                 foreach (var p in group.Split([','], StringSplitOptions.RemoveEmptyEntries))
-                    if (int.TryParse(p.Trim(), out int idx))
-                        indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
+                if (int.TryParse(p.Trim(), out int idx))
+                indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
                 if (indices.Count > 0) result[n] = [.. indices];
             }
             return result;
@@ -148,10 +148,10 @@ namespace ADOFAIMacro.Technique
             if (string.IsNullOrWhiteSpace(input)) return result;
             var parts = input!.Split([','], StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < Math.Min(parts.Length, result.Length); i++)
-                if (double.TryParse(parts[i].Trim(),
+            if (double.TryParse(parts[i].Trim(),
                         System.Globalization.NumberStyles.Any,
                         System.Globalization.CultureInfo.InvariantCulture, out double v))
-                    result[i] = v;
+            result[i] = v;
             return result;
         }
 
@@ -193,9 +193,9 @@ namespace ADOFAIMacro.Technique
         private static float GetSegmentBpmLimit(int floorIdx)
         {
             if (_currentSegments != null)
-                foreach (var seg in _currentSegments)
-                    if (floorIdx >= seg.startFloor && floorIdx <= seg.endFloor)
-                        return seg.bpmLimit;
+            foreach (var seg in _currentSegments)
+            if (floorIdx >= seg.startFloor && floorIdx <= seg.endFloor)
+            return seg.bpmLimit;
             return Main.Settings.TechniqueBpmLimit;
         }
 
@@ -231,25 +231,25 @@ namespace ADOFAIMacro.Technique
                     if (!seg.HasKeyOverride) break; // BPM only — keys fall through to global
 
                     byte[] lk = string.IsNullOrWhiteSpace(seg.leftHandKeys)
-                        ? _techLeftKeys
-                        : ParseTechKeyList(seg.leftHandKeys);
+                    ? _techLeftKeys
+                    : ParseTechKeyList(seg.leftHandKeys);
                     byte[] rk = string.IsNullOrWhiteSpace(seg.rightHandKeys)
-                        ? _techRightKeys
-                        : ParseTechKeyList(seg.rightHandKeys);
+                    ? _techRightKeys
+                    : ParseTechKeyList(seg.rightHandKeys);
 
                     int[][] lo = string.IsNullOrWhiteSpace(seg.leftHandOrders)
-                        ? _techKeyOrders[0]
-                        : ParseTechOrders(seg.leftHandOrders, lk.Length);
+                    ? _techKeyOrders[0]
+                    : ParseTechOrders(seg.leftHandOrders, lk.Length);
                     int[][] ro = string.IsNullOrWhiteSpace(seg.rightHandOrders)
-                        ? _techKeyOrders[1]
-                        : ParseTechOrders(seg.rightHandOrders, rk.Length);
+                    ? _techKeyOrders[1]
+                    : ParseTechOrders(seg.rightHandOrders, rk.Length);
 
                     double[] lp = string.IsNullOrWhiteSpace(seg.leftHandPressTimes)
-                        ? _techPressDur[0]
-                        : ParseTechPressTimes(seg.leftHandPressTimes, lk.Length);
+                    ? _techPressDur[0]
+                    : ParseTechPressTimes(seg.leftHandPressTimes, lk.Length);
                     double[] rp = string.IsNullOrWhiteSpace(seg.rightHandPressTimes)
-                        ? _techPressDur[1]
-                        : ParseTechPressTimes(seg.rightHandPressTimes, rk.Length);
+                    ? _techPressDur[1]
+                    : ParseTechPressTimes(seg.rightHandPressTimes, rk.Length);
 
                     return new EffectiveTechConfig(lk, rk, lo, ro, lp, rp);
                 }

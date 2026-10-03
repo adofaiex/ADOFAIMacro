@@ -38,7 +38,8 @@ namespace ADOFAIMacro.Settings
         public string leftHandPressTimes = "0.8,0.8";
         public string rightHandPressTimes = "0.8,0.8";
         public int handPreference = 1; // 0=左手优先, 1=右手优先
-        public float speedChangeTolerance = 0f;
+        // 【2026-10-03】speedChangeTolerance 字段随变速容差整条移除。
+        // 旧的关卡 JSON 里若仍有该键，Json.NET 默认忽略未知成员，不会报错。
         public List<TechniqueSegment> techniqueSegments = [];
 
         public TechniqueProfile() { }
@@ -55,7 +56,6 @@ namespace ADOFAIMacro.Settings
                 leftHandPressTimes = this.leftHandPressTimes,
                 rightHandPressTimes = this.rightHandPressTimes,
                 handPreference = this.handPreference,
-                speedChangeTolerance = this.speedChangeTolerance,
                 techniqueSegments = [.. this.techniqueSegments.Select(s => new TechniqueSegment {
                     startFloor          = s.startFloor,
                     endFloor            = s.endFloor,
@@ -154,13 +154,13 @@ namespace ADOFAIMacro.Settings
                 if (!ADOFAIMacro.Localization.LocalizationManager.IsInitialized) return;
 
                 if (Main.LoggingEnabled)
-                    Main.Log($"[Settings] 切换语言 → UseChinese={value}");
+                Main.Log($"[Settings] 切换语言 → UseChinese={value}");
                 bool success = value
-                    ? ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("zh-CN")
-                    : ADOFAIMacro.Localization.LocalizationManager.LoadLanguage("en-US");
+                ? LocalizationManager.LoadLanguage("zh-CN")
+                : LocalizationManager.LoadLanguage("en-US");
                 if (Main.LoggingEnabled)
-                    Main.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
-                             $"{ADOFAIMacro.Localization.LocalizationManager.CurrentLanguage}");
+                Main.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
+                             $"{LocalizationManager.CurrentLanguage}");
             }
         }
 
@@ -262,7 +262,7 @@ namespace ADOFAIMacro.Settings
                 // 模组或重启游戏才生效。其余同类开关（高精度时间/高级输入/虚拟键盘）
                 // 都是实时的，这里明确告知，避免用户把"切换了没反应"当成功能损坏。
                 if (Main.IsEnabled && Main.LoggingEnabled)
-                    Main.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
+                Main.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
                         "该特性在模组启用时改写游戏方法，需重新启用模组（或重启游戏）后生效");
             }
         }
@@ -295,7 +295,7 @@ namespace ADOFAIMacro.Settings
                 if (_inputMode == value) return;
                 _inputMode = value;
                 if (InputSystem.IsInitialized)
-                    InputSystem.SetInputMode((InputMode)value);
+                InputSystem.SetInputMode((InputMode)value);
             }
         }
 
@@ -412,14 +412,8 @@ namespace ADOFAIMacro.Settings
         }
 
         // ── 手法输入框状态 ────────────────────────────
-        private float _speedChangeTolerance = 0f;
-        public float SpeedChangeTolerance
-        {
-            get => _speedChangeTolerance;
-            set => _speedChangeTolerance = Mathf.Clamp(value, 0f, 0.5f);
-        }
-
-        private (string input, bool focused) _speedChangeToleranceState = (string.Empty, false);
+        // 【2026-10-03】SpeedChangeTolerance 属性与其输入框状态已随变速容差
+        // 整条移除。
 
         /// <summary>
         /// 日志总开关。关闭后 mod 不再往 Player.log 写任何日志。
@@ -484,7 +478,6 @@ namespace ADOFAIMacro.Settings
             _techRightOrdersState = (string.Empty, false);
             _techLeftPressTimesState = (string.Empty, false);
             _techRightPressTimesState = (string.Empty, false);
-            _speedChangeToleranceState = (string.Empty, false);
         }
 
         /// <summary>
@@ -513,7 +506,6 @@ namespace ADOFAIMacro.Settings
             TechLeftHandPressTimes = p.leftHandPressTimes;
             TechRightHandPressTimes = p.rightHandPressTimes;
             TechniqueHandPreference = p.handPreference;
-            SpeedChangeTolerance = p.speedChangeTolerance;
         }
 
         private void SaveCurrentToProfile(int index)
@@ -527,7 +519,6 @@ namespace ADOFAIMacro.Settings
             p.leftHandPressTimes = TechLeftHandPressTimes;
             p.rightHandPressTimes = TechRightHandPressTimes;
             p.handPreference = TechniqueHandPreference;
-            p.speedChangeTolerance = SpeedChangeTolerance;
 
             // 保存分段配置：深拷贝当前分段列表
             var currentSegments = p.techniqueSegments;
@@ -598,8 +589,8 @@ namespace ADOFAIMacro.Settings
         {
             if (string.IsNullOrEmpty(keyString)) return null;
             if (keyString.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                if (int.TryParse(keyString.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hex))
-                    return hex;
+            if (int.TryParse(keyString.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hex))
+            return hex;
             if (KeyCodeMap.TryGetValue(keyString, out int code)) return code;
             return null;
         }
@@ -638,14 +629,14 @@ namespace ADOFAIMacro.Settings
                 AddTab(Localization.LocalizationManager.Get("tab.other_settings"), DrawOtherSettingsCard);
 
                 if (SimulateKeyPress)
-                    AddTab(Localization.LocalizationManager.Get("tab.technique_simulation"), DrawTechniqueSimCard);
+                AddTab(Localization.LocalizationManager.Get("tab.technique_simulation"), DrawTechniqueSimCard);
             }
 
             AddTab(Localization.LocalizationManager.Get("tab.update_log"), DrawUpdateLogCard);
             AddTab(Localization.LocalizationManager.Get("tab.author"), DrawAuthorCard);
 
             if (IsBeta)
-                AddTab(Localization.LocalizationManager.Get("tab.beta"), DrawBetaCard);
+            AddTab(Localization.LocalizationManager.Get("tab.beta"), DrawBetaCard);
 
             if (selectedCardIndex >= _tabCount) selectedCardIndex = 0;
             if (_tabNames.Length != _tabCount)
@@ -668,7 +659,7 @@ namespace ADOFAIMacro.Settings
             catch (Exception ex)
             {
                 if (Main.LoggingEnabled)
-                    UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
+                UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
                 try
                 {
                     GUILayout.BeginVertical(UIUtils.CardStyle);
@@ -697,7 +688,7 @@ namespace ADOFAIMacro.Settings
             if (newSel != sel)
             {
                 if (Main.LoggingEnabled)
-                    UnityEngine.Debug.Log($"[DrawLanguageCard] Switching: UseChinese = {newSel == 0}");
+                UnityEngine.Debug.Log($"[DrawLanguageCard] Switching: UseChinese = {newSel == 0}");
                 UseChinese = newSel == 0;
             }
             GUILayout.EndHorizontal();
@@ -864,9 +855,9 @@ namespace ADOFAIMacro.Settings
                         };
                         string lbl = Localization.LocalizationManager.Get(modeKey);
                         if (!available)
-                            lbl += Localization.LocalizationManager.Get("key_mode_not_supported");
+                        lbl += Localization.LocalizationManager.Get("key_mode_not_supported");
                         if (GUILayout.Button(lbl, UIUtils.ButtonStyle, GUILayout.Height(24)) && available && InputMode != i)
-                            InputMode = i;
+                        InputMode = i;
                     }
                     GUILayout.EndHorizontal();
 
@@ -927,8 +918,8 @@ namespace ADOFAIMacro.Settings
                 GUILayout.Space(8);
                 GUIStyle descStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.8f, 11, wordWrap: true);
                 string desc = FilterMode == 0
-                    ? Localization.LocalizationManager.Get("filter.blacklist_desc")
-                    : Localization.LocalizationManager.Get("filter.whitelist_desc");
+                ? Localization.LocalizationManager.Get("filter.blacklist_desc")
+                : Localization.LocalizationManager.Get("filter.whitelist_desc");
                 GUILayout.Label(desc, descStyle);
                 GUILayout.Space(8);
 
@@ -965,7 +956,9 @@ namespace ADOFAIMacro.Settings
                 void QuickSet(string k) { FilteredKeys = k; if (SkyHookMode) FilteredAsyncKeys = k; }
 
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button(Localization.LocalizationManager.Get("common.f1") + "," + Localization.LocalizationManager.Get("common.f2") + ",F3,F4", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F1,F2,F3,F4");
+                string fKeyRow = LocalizationManager.Get("common.f1") + "," +
+                                 LocalizationManager.Get("common.f2") + ",F3,F4";
+                if (GUILayout.Button(fKeyRow, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F1,F2,F3,F4");
                 if (GUILayout.Button("F5,F6,F7,F8", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F5,F6,F7,F8");
                 if (GUILayout.Button("F9,F10,F11,F12", UIUtils.ButtonStyle, GUILayout.ExpandWidth(true))) QuickSet("F9,F10,F11,F12");
                 GUILayout.EndHorizontal();
@@ -1032,8 +1025,8 @@ namespace ADOFAIMacro.Settings
                 GUILayout.Space(4);
                 GUILayout.BeginHorizontal();
                 foreach (string k in _deathKeyQuickSet)
-                    if (GUILayout.Button(k, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
-                        DeathKeyInput = k;
+                if (GUILayout.Button(k, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
+                DeathKeyInput = k;
                 GUILayout.EndHorizontal();
 
                 GUILayout.Space(2);
@@ -1154,8 +1147,8 @@ namespace ADOFAIMacro.Settings
             GUILayout.BeginHorizontal();
             GUIStyle verStyle = UIUtils.LabelStyleVariant(0.3f, 0.6f, 1f, 0.8f);
             string debugStatus = dllLoaded
-                ? LocalizationManager.Get("tech.dll_available")
-                : LocalizationManager.Get("tech.dll_unavailable");
+            ? LocalizationManager.Get("tech.dll_available")
+            : LocalizationManager.Get("tech.dll_unavailable");
             GUILayout.Label(string.Format(LocalizationManager.Get("tech.debug_mode"), debugStatus), verStyle);
             GUILayout.EndHorizontal();
 
@@ -1182,12 +1175,12 @@ namespace ADOFAIMacro.Settings
             GUILayout.EndVertical();
 #else
             string dllStatus = dllLoaded
-                ? LocalizationManager.Get("tech.dll_available")
-                : LocalizationManager.Get("tech.dll_unavailable");
+            ? LocalizationManager.Get("tech.dll_available")
+            : LocalizationManager.Get("tech.dll_unavailable");
             if (!dllLoaded) Main.Settings.EnableTechniqueSimulation = false;
             GUIStyle statusStyle = dllLoaded
-                ? UIUtils.LabelStyleVariant(0.3f, 0.8f, 0.3f, 1f)
-                : UIUtils.LabelStyleVariant(0.8f, 0.3f, 0.3f, 1f);
+            ? UIUtils.LabelStyleVariant(0.3f, 0.8f, 0.3f, 1f)
+            : UIUtils.LabelStyleVariant(0.8f, 0.3f, 0.3f, 1f);
             GUILayout.Label(dllStatus, statusStyle);
 #endif
             GUILayout.EndHorizontal();
@@ -1265,10 +1258,10 @@ namespace ADOFAIMacro.Settings
 
 #if !DEBUG
             if (dllLoaded && newEnable != EnableTechniqueSimulation)
-                EnableTechniqueSimulation = newEnable;
+            EnableTechniqueSimulation = newEnable;
 #else
             if (newEnable != EnableTechniqueSimulation)
-                EnableTechniqueSimulation = newEnable;
+            EnableTechniqueSimulation = newEnable;
 #endif
 
 #if !DEBUG
@@ -1302,7 +1295,7 @@ namespace ADOFAIMacro.Settings
             string profileName = GUILayout.TextField(_techniqueProfiles[SelectedTechniqueProfileIndex].name,
                 UIUtils.TextFieldStyle, GUILayout.ExpandWidth(true));
             if (profileName != _techniqueProfiles[SelectedTechniqueProfileIndex].name)
-                _techniqueProfiles[SelectedTechniqueProfileIndex].name = profileName;
+            _techniqueProfiles[SelectedTechniqueProfileIndex].name = profileName;
 
             if (GUILayout.Button(LocalizationManager.Get("tech.new"), UIUtils.ButtonStyle, GUILayout.Width(60)))
             {
@@ -1327,9 +1320,9 @@ namespace ADOFAIMacro.Settings
             GUILayout.BeginHorizontal();
             GUILayout.Label(LocalizationManager.Get("tech.select_profile"), UIUtils.LabelStyle, GUILayout.Width(100));
             if (_profileNameCache.Length != _techniqueProfiles.Count)
-                _profileNameCache = new string[_techniqueProfiles.Count];
+            _profileNameCache = new string[_techniqueProfiles.Count];
             for (int i = 0; i < _profileNameCache.Length; i++)
-                _profileNameCache[i] = _techniqueProfiles[i].name;
+            _profileNameCache[i] = _techniqueProfiles[i].name;
             int newIdx = UIUtils.M3SelectionGrid(SelectedTechniqueProfileIndex, _profileNameCache,
                 Mathf.Min(_profileNameCache.Length, 4), GUILayout.ExpandWidth(true));
             if (newIdx != SelectedTechniqueProfileIndex) SelectedTechniqueProfileIndex = newIdx;
@@ -1362,24 +1355,8 @@ namespace ADOFAIMacro.Settings
             GUIStyle tipStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.8f, 10, wordWrap: true);
             GUILayout.Label(LocalizationManager.Get("tech.bpm_explanation"), tipStyle);
 
-            GUILayout.Space(4);
-            GUILayout.BeginHorizontal();
-            float newSct = UIUtils.M3HorizontalSliderWithLabelAndInput(
-                LocalizationManager.Get("tech.speed_change_tolerance"),
-                SpeedChangeTolerance, 0f, 0.5f,
-                ref _speedChangeToleranceState.input, ref _speedChangeToleranceState.focused,
-                "F2", 200, 240, 60);
-            if (newSct != SpeedChangeTolerance)
-            {
-                // 与"起始手"同理：滑条改动必须同步写回当前配置。旧实现只写全局字段，
-                // 切换配置时 LoadTechniqueProfileToFields 会把旧值灌回来（改动被静默还原），
-                // 而 SaveCurrentToProfile 又会用新值覆盖，两处状态不一致。
-                SpeedChangeTolerance = newSct;
-                _techniqueProfiles[SelectedTechniqueProfileIndex].speedChangeTolerance = newSct;
-            }
-            GUILayout.EndHorizontal();
-            GUILayout.Space(2);
-            GUILayout.Label(LocalizationManager.Get("tech.speed_change_tolerance_desc"), tipStyle);
+            // 【2026-10-03】"变速容差"滑条整条移除。片长现在只由逐片速度决定，
+            // 没有窗口/限幅/死区/几何修补可调。详见 TechniqueSimulator.cpp 同名注释。
 
             // ── 变速分段 ─────────────────────────────────────
             DrawTechniqueSegments();
@@ -1496,7 +1473,7 @@ namespace ADOFAIMacro.Settings
                     arrow, i + 1, seg.startFloor, seg.endFloor, seg.bpmLimit, overrideMk);
 
                 if (GUILayout.Button(segLabel, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
-                    _segmentExpanded[i] = !_segmentExpanded[i];
+                _segmentExpanded[i] = !_segmentExpanded[i];
 
                 if (GUILayout.Button("✕", UIUtils.ButtonStyle, GUILayout.Width(36)))
                 {
@@ -1593,7 +1570,7 @@ namespace ADOFAIMacro.Settings
 
             GUILayout.Space(2);
             if (GUILayout.Button(LocalizationManager.Get("tech.add_segment"), UIUtils.ButtonStyle))
-                segments.Add(new TechniqueSegment { bpmLimit = Main.Settings.TechniqueBpmLimit });
+            segments.Add(new TechniqueSegment { bpmLimit = Main.Settings.TechniqueBpmLimit });
         }
 
         // ─────────────────────────────────────────────
@@ -1640,7 +1617,7 @@ namespace ADOFAIMacro.Settings
         private string GetLevelConfigStatusText()
         {
             if (_levelStatusVersion == LevelTechniqueManager.CacheVersion)
-                return _levelStatusTextCache;
+            return _levelStatusTextCache;
             _levelStatusVersion = LevelTechniqueManager.CacheVersion;
             _levelStatusTextCache = BuildLevelConfigStatusText();
             return _levelStatusTextCache;

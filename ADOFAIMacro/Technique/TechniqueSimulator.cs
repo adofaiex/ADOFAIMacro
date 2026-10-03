@@ -36,7 +36,6 @@ namespace ADOFAIMacro.Technique
         private static double[]? _cachedRightPressTimes;
         private static int _cachedBpmLimit;
         private static int _cachedHandPreference;
-        private static double _cachedSpeedChangeTolerance;
         private static Settings.TechniqueSegment[]? _cachedSegments;
 
         // ─────────────────────────────────────────────
@@ -118,7 +117,10 @@ namespace ADOFAIMacro.Technique
             public IntPtr Segments;
             public int SegmentCount;
             // 4 bytes padding
-            public double SpeedChangeTolerance;
+            // 【2026-10-03】原 public double SpeedChangeTolerance 已删除
+            // （变速容差整条移除）。必须与 TechniqueSimulator.h 的
+            // TechniqueConfig 保持一致；该字段被结构体末尾的 padding 吸收，
+            // sizeof 不变，ABI 无变化。
         }
 
         // ─────────────────────────────────────────────
@@ -173,7 +175,6 @@ namespace ADOFAIMacro.Technique
             double[] leftPressTimes, double[] rightPressTimes,
             double bpmLimit,
             int handPreference,
-            double speedChangeTolerance,
             Settings.TechniqueSegment[] segments)
         {
             _cachedLeftKeys = leftKeys;
@@ -184,7 +185,6 @@ namespace ADOFAIMacro.Technique
             _cachedRightPressTimes = rightPressTimes;
             _cachedBpmLimit = (int)bpmLimit;
             _cachedHandPreference = handPreference;
-            _cachedSpeedChangeTolerance = speedChangeTolerance;
             _cachedSegments = segments;
         }
 
@@ -198,7 +198,7 @@ namespace ADOFAIMacro.Technique
             try
             {
                 string modPath = Main.Mod?.Path
-                    ?? Path.GetDirectoryName(typeof(InputSystem).Assembly.Location);
+                ?? Path.GetDirectoryName(typeof(InputSystem).Assembly.Location);
                 string dllPath = Path.Combine(modPath, "TechniqueSimulator.dll");
 
                 if (!File.Exists(dllPath))
@@ -233,13 +233,13 @@ namespace ADOFAIMacro.Technique
                 _setTechConfig = Marshal.GetDelegateForFunctionPointer<DelegateSetTechConfig>(setPtr);
                 _buildTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEvents>(buildPtr);
                 _buildTechEventsEx = buildExPtr != IntPtr.Zero
-                    ? Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEventsEx>(buildExPtr)
-                    : null;
+                ? Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEventsEx>(buildExPtr)
+                : null;
                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
 
                 Main.Log(buildExPtr != IntPtr.Zero
-                    ? "[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度）"
-                    : "[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度）");
+                ? "[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度）"
+                : "[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度）");
                 return true;
             }
             catch (Exception ex)
@@ -258,7 +258,7 @@ namespace ADOFAIMacro.Technique
             int eventCount,
             double bpm, double speed,
             out MacroEngine.HitEvent[]? hitEvents)
-            => BuildHitEvents(entryTimes, pressTypes, floorIndices, null, eventCount, bpm, speed, out hitEvents);
+        => BuildHitEvents(entryTimes, pressTypes, floorIndices, null, eventCount, bpm, speed, out hitEvents);
 
         /// <summary>构建手法模拟事件（逐地板速度倍率；变速谱面按局部速率切片）</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -348,7 +348,7 @@ namespace ADOFAIMacro.Technique
             {
                 FreeNativeConfig(ref config);
                 if (nativeEvents != IntPtr.Zero)
-                    _freeTechEvents!(nativeEvents);
+                _freeTechEvents!(nativeEvents);
             }
         }
 
@@ -370,14 +370,13 @@ namespace ADOFAIMacro.Technique
         private static NativeTechniqueConfig PrepareNativeConfig()
         {
             if (_cachedLeftKeys == null || _cachedRightKeys == null)
-                throw new InvalidOperationException("请先调用 UpdateConfig");
+            throw new InvalidOperationException("请先调用 UpdateConfig");
 
             var config = new NativeTechniqueConfig
             {
                 BpmLimit = _cachedBpmLimit,
                 HandPreference = _cachedHandPreference,
-                SegmentCount = _cachedSegments?.Length ?? 0,
-                SpeedChangeTolerance = _cachedSpeedChangeTolerance
+                SegmentCount = _cachedSegments?.Length ?? 0
             };
 
             try
@@ -391,17 +390,17 @@ namespace ADOFAIMacro.Technique
 
                 // ── 全局按键顺序 ───────────────────────────────────
                 if (_cachedLeftKeyOrders != null)
-                    AllocOrderData(_cachedLeftKeyOrders, ref config.LeftKeyOrders,
+                AllocOrderData(_cachedLeftKeyOrders, ref config.LeftKeyOrders,
                                    ref config.LeftOrderLengths, ref config.LeftOrderCounts);
                 if (_cachedRightKeyOrders != null)
-                    AllocOrderData(_cachedRightKeyOrders, ref config.RightKeyOrders,
+                AllocOrderData(_cachedRightKeyOrders, ref config.RightKeyOrders,
                                    ref config.RightOrderLengths, ref config.RightOrderCounts);
 
                 // ── 全局按键时长 ───────────────────────────────────
                 if (_cachedLeftPressTimes != null)
-                    config.LeftPressTimes = AllocDoubles(_cachedLeftPressTimes);
+                config.LeftPressTimes = AllocDoubles(_cachedLeftPressTimes);
                 if (_cachedRightPressTimes != null)
-                    config.RightPressTimes = AllocDoubles(_cachedRightPressTimes);
+                config.RightPressTimes = AllocDoubles(_cachedRightPressTimes);
 
                 // ── 分段数组（含可选按键覆盖）─────────────────────
                 if (_cachedSegments != null && _cachedSegments.Length > 0)
@@ -609,17 +608,17 @@ namespace ADOFAIMacro.Technique
         private static double[] ParsePressTimes(string? input, int keyCount, double[]? fallback)
         {
             if (string.IsNullOrWhiteSpace(input))
-                return fallback ?? [.. Enumerable.Repeat(0.8, keyCount)];
+            return fallback ?? [.. Enumerable.Repeat(0.8, keyCount)];
 
             var result = new double[keyCount];
             for (int i = 0; i < result.Length; i++) result[i] = 0.8;
 
             var parts = input!.Split([','], StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < Math.Min(parts.Length, result.Length); i++)
-                if (double.TryParse(parts[i].Trim(),
+            if (double.TryParse(parts[i].Trim(),
                         System.Globalization.NumberStyles.Any,
                         System.Globalization.CultureInfo.InvariantCulture, out double v))
-                    result[i] = v;
+            result[i] = v;
 
             return result;
         }
@@ -644,8 +643,8 @@ namespace ADOFAIMacro.Technique
                 string group = n < groups.Length ? groups[n] : groups[groups.Length - 1];
                 var indices = new List<int>();
                 foreach (var p in group.Split([','], StringSplitOptions.RemoveEmptyEntries))
-                    if (int.TryParse(p.Trim(), out int idx))
-                        indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
+                if (int.TryParse(p.Trim(), out int idx))
+                indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
                 if (indices.Count > 0) result[n] = [.. indices];
             }
 

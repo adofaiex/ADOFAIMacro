@@ -101,7 +101,7 @@ namespace ADOFAIMacro.Technique
 
             // 有界等待：worker 最多在 Sleep(1) 循环里待约 50ms 就会看到 _workerRunning=false
             if (_workerThread != null && !_workerThread.Join(500))
-                Log("[Macro-Main] 工作线程 500ms 内未退出，交由下一次 EnsureWorkerRunning 回收");
+            Log("[Macro-Main] 工作线程 500ms 内未退出，交由下一次 EnsureWorkerRunning 回收");
             CloseWaitTimerIfWorkerStopped();
 
             if (skyHookInitialized)
