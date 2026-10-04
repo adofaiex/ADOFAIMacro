@@ -350,6 +350,27 @@ namespace ADOFAIMacro.Settings
         }
 
         private float _techniqueBpmLimit = 500f;
+        /// <summary>
+        /// 角度感知片长（opt-in）。
+        /// 开启后片长按该砖真实扫过的角度换算：拍数 = dt × 建议bpm / 60，
+        /// 15°=0.25拍、30°=0.5拍、180°=1拍。用于含短砖的谱面（如雪花 /
+        /// genuine 循环）与「BPM 层级 640/660/700 被解析成三连音」的情况。
+        /// 关闭时使用固定半拍片长——这是参考实现的原始语义，与之逐位一致。
+        /// </summary>
+        private bool _techniqueAngleAware = false;
+        public bool TechniqueAngleAware
+        {
+            get => _techniqueAngleAware;
+            set
+            {
+                _techniqueAngleAware = value;
+                // 角度感知开关经环境变量传给 TechniqueSimulator.dll（避免改 ABI）。
+                // DLL 每次建表时读一次（ReadAngleAwareFlag），改完立刻生效，
+                // 不需要重启游戏或重载 DLL。
+                Environment.SetEnvironmentVariable("ADOFAI_ANGLE_AWARE", value ? "1" : "0");
+            }
+        }
+
         public float TechniqueBpmLimit
         {
             get => _techniqueBpmLimit;
@@ -1383,7 +1404,14 @@ namespace ADOFAIMacro.Settings
             GUIStyle tipStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.8f, 10, wordWrap: true);
             GUILayout.Label(LocalizationManager.Get("tech.bpm_explanation"), tipStyle);
 
-            // ── 轨迹播放器 ─────────────────────────────────────
+            // ── 角度感知片长 ─────────────────────────────────
+            GUILayout.BeginHorizontal();
+            bool newAngleAware = GUILayout.Toggle(TechniqueAngleAware,
+                LocalizationManager.Get("tech.angle_aware"), UIUtils.LabelStyle, GUILayout.Width(140));
+            if (newAngleAware != TechniqueAngleAware)
+                TechniqueAngleAware = newAngleAware;
+            GUILayout.EndHorizontal();
+            GUILayout.Label(LocalizationManager.Get("tech.angle_aware_explanation"), tipStyle);
             GUILayout.Space(10);
             GUILayout.Label(LocalizationManager.Get("tech.player_title"), UIUtils.LabelStyle);
             GUILayout.Space(2);
