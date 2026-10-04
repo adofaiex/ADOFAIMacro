@@ -162,8 +162,8 @@ namespace ADOFAIMacro.Technique
             int    cHand   = (_levelTechHandPref == 0) ? -1 : 1;
             int    mult    = 0;
 
-            var mCnt    = new long[16];
-            var mCntPre = new long[16];
+            var mCnt    = new long[64];   // 64 级：无上限倍乘（与 cpp 同步扩容）
+            var mCntPre = new long[64];
             int  canMulti  = 0;
             bool needBack  = false;
 
@@ -227,11 +227,13 @@ namespace ADOFAIMacro.Technique
                 int  mainHand  = (_levelTechHandPref == 0) ? -1 : 1;
                 bool isOffHand = (cHand != mainHand);
 
+                // 无上限倍乘 —— 与原版手法拟真 potato() 语义一致（cpp 已同步）
                 if (cnt > maxK)
                 {
                     if (canMulti == 1 && isOffHand) needBack = true;
-                    if (mult < 7) { mult++; mCnt[mult] = 0; continue; }
-                    else           cnt = maxK;
+                    mult++;
+                    mCnt[mult] = 0;
+                    continue;
                 }
 
                 if (needBack && pieces.Count > 0)
@@ -241,9 +243,8 @@ namespace ADOFAIMacro.Technique
                     var prev = pieces[pieces.Count - 1];
                     nowT = prev.StartTime;
                     nowD = prev.EvStart;
-                    Array.Copy(mCntPre, mCnt, 16);
-                    mult = prev.Multiplier + 1;
-                    if (mult > 7) mult = 7;
+                    Array.Copy(mCntPre, mCnt, 64);
+                    mult = prev.Multiplier + 1;   // 无上限：回溯后倍乘必须严格高于上一片（与 cpp 同步）
                     pieces.RemoveAt(pieces.Count - 1);
                     canMulti = 0;
                     continue;
@@ -267,10 +268,11 @@ namespace ADOFAIMacro.Technique
                 // 接近半拍的空隙都被拉长，且与速率决策共用一个设置项（一项两用）。
                 */
 
-                Array.Copy(mCnt, mCntPre, 16);
+                Array.Copy(mCnt, mCntPre, 64);
                 pieces.Add(new PieceInfo(cnt, csH, pLen, nowT, nowT + pLen, nowD, mult));
 
-                for (int c = mult; c > 0; c--)
+                // mult 可能超过 16：16-(mult-c) 为负时 Pow 截断为 0，高级位不进账（与原版一致）
+                for (int c = mult; c > 0 && c > mult - 32; c--)
                 {
                     mCnt[c] += (long)Math.Pow(2, 16 - (mult - c));
                     mCnt[c] %= (1L << 18);

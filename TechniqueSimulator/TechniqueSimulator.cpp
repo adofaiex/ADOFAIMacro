@@ -280,8 +280,8 @@ static HitEvent* BuildTechniqueHitEventsImpl(
         int    nowD = 0;
         int    hand = (g_config.handPreference == 0) ? -1 : 1; // -1=左主, 1=右主
         int    mult = 0;
-        long long mCnt[16] = {};
-        long long mCntPre[16] = {};
+        long long mCnt[64] = {};   // 64 级：无上限倍乘下 mult 理论可超 16（原版 [16] 靠实测谱面不越界）
+        long long mCntPre[64] = {};
         int  canMulti = 0;
         bool needBack = false;
 
@@ -335,11 +335,13 @@ static HitEvent* BuildTechniqueHitEventsImpl(
             int mainHand = (g_config.handPreference == 0) ? -1 : 1;
             bool isOffHand = (hand != mainHand);
 
-            // 按键数超限：提升倍乘
+            // 按键数超限：提升倍乘（无上限 —— 原版手法拟真 potato() 语义：
+            // 倍乘无顶格、片长单调缩短、cnt 必然收敛，结构上不可能振荡）
             if (cnt > maxK) {
                 if (canMulti == 1 && isOffHand) needBack = true;
-                if (mult < 7) { mult++; mCnt[mult] = 0; continue; }
-                else           cnt = maxK;
+                mult++;
+                mCnt[mult] = 0;
+                continue;
             }
 
             // 回溯到上一片（由主手重新处理）
@@ -350,8 +352,7 @@ static HitEvent* BuildTechniqueHitEventsImpl(
                 nowT = prev.startTime;
                 nowD = prev.evStart;
                 memcpy(mCnt, mCntPre, sizeof(mCnt));
-                mult = prev.multiplier + 1;
-                if (mult > 7) mult = 7;
+                mult = prev.multiplier + 1;   // 无上限：回溯后倍乘必须严格高于上一片，否则零进展振荡
                 pieces.pop_back();
                 canMulti = 0;
                 continue;
@@ -399,8 +400,9 @@ static HitEvent* BuildTechniqueHitEventsImpl(
             memcpy(mCntPre, mCnt, sizeof(mCnt));
             pieces.emplace_back(cnt, csH, pLen, nowT, nowT + pLen, nowD, mult);
 
-            // 更新级联倍乘计数器
-            for (int c = mult; c > 0; c--) {
+            // 更新级联倍乘计数器（mult 可能超过 16：16-(mult-c) 为负时 pow 截断为 0，
+            // 高级位不进账 —— 与原版手法拟真的 long 截断行为一致；只回看 32 级防负偏移）
+            for (int c = mult; c > 0 && c > mult - 32; c--) {
                 mCnt[c] += (long long)pow(2, 16 - (mult - c));
                 mCnt[c] %= (1LL << 18);
             }
