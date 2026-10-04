@@ -375,3 +375,19 @@ build_cpp.out
 piecelen.txt
 
 tools/freezetest/*.dmp
+
+
+# ── 原版手法模拟对拍工装（tools/potatoab）────────────────────────
+# 保留 harness 源码（PotatoAB.cs / DualDrv.cs / ref_main.cpp），
+# 其余为原版数据副本、编译产物与对拍中间文件，都不入库。
+tools/potatoab/*.exe
+tools/potatoab/*.obj
+tools/potatoab/*.txt
+tools/potatoab/*.log
+tools/potatoab/*.crpl
+tools/potatoab/*.timedata
+tools/potatoab/*.speeddata
+tools/potatoab/options.txt
+tools/potatoab/ref.crpl
+tools/freezetest/_new_core.txt
+tools/rollback_*/

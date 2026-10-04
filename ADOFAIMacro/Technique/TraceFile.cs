@@ -20,7 +20,11 @@ namespace ADOFAIMacro.Technique
     internal static class TraceFile
     {
         private const uint Magic = 0x314D4146;   // 'FAM1'
-        private const int FormatVersion = 1;
+        // v2：2026-10-04 手法模拟整体换成原版 手法拟真\main.cpp 的 potato() 忠实移植
+        //     （含变速点 restart 机制），分区结果与旧实现不同，旧 .adotr 缓存必须失效。
+        //     指纹 = levelPath + floorCount + techHash + FormatVersion，
+        //     版本号一改，旧的缓存文件在读取时会被判为不匹配而整体重算。
+        private const int FormatVersion = 2;
         //  文件头 = 4(魔数)+4(版本)+4(条数)+16(4 个 int)+16(方差+总代价)+24(3 个代价)+4(节点) = 72
         private const int HeaderSize = 72;
         /// <summary>单事件落盘字节数：8(double)+4(float)+1+1+1+1(pad)+4(int)</summary>

@@ -43,7 +43,6 @@ namespace ADOFAIMacro.Technique
             // 终点砖（最后一块）也要按键 —— 通关条件是
             // GCS.checkpointNum >= listFloors.Count（scrConductor.cs:411）。
             for (int i = 0; i < floors.Length; i++)
-            {
                 var fl = floors[i];
                 if (fl == null) continue;
                 if (fl.auto) continue;
@@ -166,6 +165,8 @@ namespace ADOFAIMacro.Technique
             var mCntPre = new long[64];
             int  canMulti  = 0;
             bool needBack  = false;
+            // 槽位手号表：与 pieces 同索引，回溯时**不弹出**（原版行为，见 maxK 处注释）
+            var slotHand = new List<int>();
 
             // ── 【2026-10-03 变速容差整条移除】─────────────────────
             //  原来这里的 BaseWindow(32 音取 max 基准) + BaseLimitMul(±2× 限幅) +
@@ -181,6 +182,7 @@ namespace ADOFAIMacro.Technique
 
             while (nowD < total)
             {
+                int psize = pieces.Count;   // 原版 main.cpp:220 的同名局部变量
                 int   curFloorIdx = evFloor[nowD];
                 int   curSegIdx   = FindSegmentIndex(curFloorIdx);
                 float curSegLimit = GetSegmentBpmLimit(curFloorIdx);
@@ -215,6 +217,9 @@ namespace ADOFAIMacro.Technique
                 if (pieces.Count > total * 64) break;
 
                 double pLen = 60.0 / (nowBpm * Math.Pow(2, mult)) / 2.0;
+                // 与 cpp 的 kMaxMult=60 对齐：原版 mult 无上限，而 mCnt 是
+                // long[16]，越界即 UB；60 级已远超任何真实谱面。
+                if (mult > 60) mult = 60;
                 if (pLen < 1e-9) pLen = 1e-9;
 
                 int cnt   = CountEventsInRange(evTime, nowD, nowT + pLen * 0.995);
@@ -222,8 +227,12 @@ namespace ADOFAIMacro.Technique
 
                 // 使用分段有效配置来确定当前手的最大按键数
                 var   ec   = GetEffectiveConfig(curFloorIdx);
-                int   maxK = (csH == 0) ? ec.LeftKeys.Length : ec.RightKeys.Length;
-
+                // 复刻原版怪癖：原版 :277 读 piece[psize][1] 时该槽尚未写入
+                // （写入发生在 :308 提交之后），因此恒为**左手**键数；只有
+                // 回溯复用的槽才带旧手号。slotHand 与 pieces 同索引，
+                // 回溯时只弹 pieces、**不弹 slotHand**，以此精确保留该行为。
+                int   slotH = slotHand.Count > psize ? slotHand[psize] : 0;
+                int   maxK  = (slotH == 0) ? ec.LeftKeys.Length : ec.RightKeys.Length;
                 int  mainHand  = (_levelTechHandPref == 0) ? -1 : 1;
                 bool isOffHand = (cHand != mainHand);
 
@@ -246,6 +255,8 @@ namespace ADOFAIMacro.Technique
                     Array.Copy(mCntPre, mCnt, 64);
                     mult = prev.Multiplier + 1;   // 无上限：回溯后倍乘必须严格高于上一片（与 cpp 同步）
                     pieces.RemoveAt(pieces.Count - 1);
+                    // 原版只回退 psize，slotHand（piece[][1] 的槽）**保留旧手号**，
+                    // 下一轮重新提交时该槽会被新手号覆盖 —— 故这里也不弹 slotHand。
                     canMulti = 0;
                     continue;
                 }
@@ -268,11 +279,19 @@ namespace ADOFAIMacro.Technique
                 // 接近半拍的空隙都被拉长，且与速率决策共用一个设置项（一项两用）。
                 */
 
-                Array.Copy(mCnt, mCntPre, 64);
-                pieces.Add(new PieceInfo(cnt, csH, pLen, nowT, nowT + pLen, nowD, mult));
+                // 【2026-10-04 全抄对拍】原版 piece[psize][2]=piece_time 存进
+                // **long** → 截断到整数微秒。startTime/endTime 用未截断的
+                // nowT/pLen（原版 now_time 也是 double，窗口判定必须精确），
+                // 故只有 PieceLen 截断。三者全截断 / 全不截断都会让对拍分叉
+                //（实测首个差异分别落在 #139 / #269 片）。
+                double pLenStored = (double)(long long)(pLen * 1e6) / 1e6;
+                pieces.Add(new PieceInfo(cnt, csH, pLenStored, nowT, nowT + pLen, nowD, mult));
+                // 手号写进槽位（原版 :308）。maxK 处读的是本片提交**前**的槽值，
+                // 故 Add 的顺序不影响当轮判定。
+                slotHand.Add(csH);
 
-                // mult 可能超过 16：16-(mult-c) 为负时 Pow 截断为 0，高级位不进账（与原版一致）
-                for (int c = mult; c > 0 && c > mult - 32; c--)
+                // 全层级（原版 long[16] 数组被 for(c=0;c<32) 越界写，属 UB；cpp 已修成全 64 级）
+                for (int c = mult; c > 0; c--)
                 {
                     mCnt[c] += (long)Math.Pow(2, 16 - (mult - c));
                     mCnt[c] %= (1L << 18);
@@ -390,6 +409,11 @@ namespace ADOFAIMacro.Technique
                         { if (rel >= cur.EndTime)  rel = cur.EndTime  - 1e-6; }
 
                     if (rel <= t) rel = t + (next.EndTime - t) * 0.4;
+                    // 【2026-10-04 全抄对拍】原版 out_event[][0] 是 long（整数微秒），
+                    // :377/:381 的夹取也在整数上算 → 补最后一次截断。
+                    // 不截断会出现 43.434117019 这类亚微秒值，与原版的
+                    // 43.434116000 不同，进而影响同刻事件的先后判定。
+                    rel = (double)(long long)(rel * 1e6) / 1e6;
 
                     output.Add(new HitEvent(rel, 0, true, false, releaseKeyCode: kc));
                 }
@@ -408,7 +432,15 @@ namespace ADOFAIMacro.Technique
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void FixSameKeyOverlaps(List<HitEvent> events)
         {
-            events.Sort((a, b) => a.TriggerTime.CompareTo(b.TriggerTime));
+            // 【2026-10-04 全抄对拍】同刻 tie-break：按下在前、松键在后。
+            // 原版 check() 的强行弹起写的是 time1[R][0]-1（减 1 微秒），存进
+            // long 后与下一音的按下时刻**恰好相等**，于是落在同一微秒 ——
+            // 观测原版 main.crpl：t=10.492295 处「k=51 按下」在前、
+            // 「k=187 松开」在后。List.Sort 不稳定，故显式写死 tie-break。
+            events.Sort((a, b) => {
+                if (a.TriggerTime != b.TriggerTime) return a.TriggerTime.CompareTo(b.TriggerTime);
+                return a.ReleaseOnly.CompareTo(b.ReleaseOnly);
+            });
 
             int n = events.Count;
             var pending = new Dictionary<byte, int>(8);
@@ -450,7 +482,15 @@ namespace ADOFAIMacro.Technique
                 }
             }
 
-            events.Sort((a, b) => a.TriggerTime.CompareTo(b.TriggerTime));
+            // 【2026-10-04 全抄对拍】同刻 tie-break：按下在前、松键在后。
+            // 原版 check() 的强行弹起写的是 time1[R][0]-1（减 1 微秒），存进
+            // long 后与下一音的按下时刻**恰好相等**，于是落在同一微秒 ——
+            // 观测原版 main.crpl：t=10.492295 处「k=51 按下」在前、
+            // 「k=187 松开」在后。List.Sort 不稳定，故显式写死 tie-break。
+            events.Sort((a, b) => {
+                if (a.TriggerTime != b.TriggerTime) return a.TriggerTime.CompareTo(b.TriggerTime);
+                return a.ReleaseOnly.CompareTo(b.ReleaseOnly);
+            });
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
