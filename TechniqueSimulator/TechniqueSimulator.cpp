@@ -302,21 +302,29 @@ static void BuildRestartMarks(const vector<double>& evTime,
     marks.push_back(RestartMark{ 0, 1, mainHand });
     markAt[0] = 0;
 
-    for (int i = 1; i + 1 < n; i++)
+    // ── 变速点判定 ────────────────────────────────────────────────
+    // 【2026-10-04】原版口径：speeddata **每行就是一个变速点**（main.cpp:160-172
+    // 逐行 getline，行号 i 直接索引），tile 列只用于 `while(timedata[i][2]<data_cnt)`
+    // 映射到事件下标。也就是说：变速点数量 = speeddata 行数，位置由 tile 决定，
+    // **不是**由 bpm 是否变化推断出来的。
+    //
+    // DLL 侧没有 speeddata 列表，但 speedMuls[i] 是逐事件的 scrFloor.speed，
+    //原版 timedata生成 正是拿逐砖 speed 算出建议 bpm 后，**在建议 bpm 变化处**
+    // 写一行 speeddata。所以 adviceBpm 的变化点集合 == speeddata 的行位置集合，
+    // 用它作为判据与原版等价。
+    //
+    // 【曾经的错误】旧实现用 fmod(rawBpm[i], rawBpm[i-1]) 判整除 + fmod(相邻
+    // 间隔) 判时间等分，两个条件在真实谱面里几乎对每个事件都成立，实测 196 个
+    // 变速点全部落在 nowData=0,1,2,3… 的连续头部 —— 每次 restart 都 mult=0
+    // 重置并把 nowTime 拉回头部，起手左右手被反复打断（实测左手 0 次、全右手）。
+    for (int i = 1; i < n; i++)
     {
-        double a = rawBpm[i], b = rawBpm[i - 1];
-        if (a <= 0.0 || b <= 0.0) continue;
-        if (fmod(a, b) <= 0.0001 || fmod(b, a) <= 0.0001) continue;
-
-        double d0 = (evTime[i] - evTime[i - 1]) * 1e6;      // 微秒
-        double d1 = (evTime[i + 1] - evTime[i]) * 1e6;
-        if (d0 <= 0.0 || d1 <= 0.0) continue;   // 除零保护：原版此处是 NaN，!NaN 恒真
-        if (fmod(d0, d1) < 5.0 || fmod(d1, d0) < 5.0) continue;
-
-        // speeddata 的 tile 序号 → 第一个 floor 更大的事件下标
-        // （原版 bpm_in:169-172 的 while(timedata[i][2]<data_cnt) 是"向前找"；
-//  这里数据已是事件序列，直接取该点自身下标）
-        marks.push_back(RestartMark{ i, 2, 1 });            // "*1" = 手性不变
+        if (fabs(adviceBpm[i] - adviceBpm[i - 1]) <= 1e-9) continue;   // 建议 bpm 未变
+        // 原版 bpm_in:189-194：restart[i][1] 存绝对 bpm（"=" 时），
+        // restart[i][0] 存**手性乘数**（"=" → 1；"*k" → k）。
+        // 所以 main.speeddata 第三列的 "*1" ⇒ restart[][0]=1 ⇒ hand*=1 ⇒ 手性不变。
+        // （曾误按 "*1" 的字面 1 反推成 -1，导致左右手整体对调、diff 涨到 4643。）
+        marks.push_back(RestartMark{ i, 2, 1 });
         markAt[i] = (int)marks.size() - 1;
     }
 }
@@ -459,7 +467,6 @@ static bool PotatoPartition(const vector<double>& evTime,
         // ── 提交时间片（原版 main.cpp:304-334）─────────────────────
         {
             const int csH = (hand == 1) ? 1 : 0;
-            // ── 【2026-10-04 全抄对拍：microsecond 取整】───────────────
             // 原版 piece[] 声明为 long，赋值即**截断到整数微秒**：
             //   main.cpp:326  piece[psize][2]=piece_time   → 片长截断
             //   main.cpp:327  piece[psize][3]=now_time      → 终止时刻截断
