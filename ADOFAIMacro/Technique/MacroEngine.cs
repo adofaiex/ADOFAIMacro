@@ -179,6 +179,8 @@ namespace ADOFAIMacro.Technique
         private static readonly int[][][] _techKeyOrders = [[], []];
         private static readonly double[][] _techPressDur = [[], []];
         private static List<Settings.TechniqueSegment>? _currentSegments;
+        // 手法配置指纹（FNV-1a）：轨迹缓存键的一半，见 ConfigParser.ComputeTechniqueFingerprint。
+        private static int _techniqueFingerprint;
 
         [ThreadStatic]
         private static SkyHookSystem.INPUT _cachedInput;
@@ -321,6 +323,12 @@ namespace ADOFAIMacro.Technique
                 Initialize();
                 if (!initialized) return;
             }
+
+            // 角度驱动：主线程每帧比对行星在当前砖上已扫过的角度并发键。
+            // 必须排在下面的命中计数收割之前 —— FireTraceEvent 走的是
+            // Interlocked.Increment(_workerNeedsHit)，晚一帧收割等于白等一帧。
+            // 时间驱动下 _angleDriverActive 为 false，这一句是零开销分支。
+            if (_angleDriverActive) AngleDriverTick(controller);
 
             // 先无条件取走积压计数：失焦时命中不能留在计数器里。
             // 工作线程在 SimulateKeyPress=false 路径不做焦点判断，失焦期间会持续累加，

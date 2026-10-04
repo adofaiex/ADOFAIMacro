@@ -1,0 +1,2344 @@
+diff --git a/.dsh-meow/memory.db b/.dsh-meow/memory.db
+index 09e9a88..9053129 100644
+Binary files a/.dsh-meow/memory.db and b/.dsh-meow/memory.db differ
+diff --git a/.dsh-meow/memory.db-shm b/.dsh-meow/memory.db-shm
+index 4003efd..e44c3dc 100644
+Binary files a/.dsh-meow/memory.db-shm and b/.dsh-meow/memory.db-shm differ
+diff --git a/.dsh-meow/memory.db-wal b/.dsh-meow/memory.db-wal
+index 696042d..c17dae6 100644
+Binary files a/.dsh-meow/memory.db-wal and b/.dsh-meow/memory.db-wal differ
+diff --git a/.dsh-meow/sessions/session-31058726-b555-4ac3-baf1-3a4d8d8a6081.json b/.dsh-meow/sessions/session-31058726-b555-4ac3-baf1-3a4d8d8a6081.json
+index 03971e5..1bc381c 100644
+--- a/.dsh-meow/sessions/session-31058726-b555-4ac3-baf1-3a4d8d8a6081.json
++++ b/.dsh-meow/sessions/session-31058726-b555-4ac3-baf1-3a4d8d8a6081.json
+@@ -1 +1 @@
+-{"injected":[],"searched":[],"accessed":["__welcomeGuide__","0murfhw0j-7a90e8b2b6b84c90abe74bbcf1","0murfhw0u-8b954c0f251f4683a7887f1d09","0murfg40c-274841f55a004f44af4852c2fe","0murfiu1w-803be05607eb40ce821cce4677","0murfhw11-c5e8322d2b6c4267b886a88953"],"written":["0murqsqum-fa91f4a82405426ab29841f0a0","0murr9kvr-6a8f41d186b147c4915ed1227f","0murr9kwf-11d14a21602644e887d7b9dcaa","0murr9u7l-e1400af12e9e4300a816d3924d","0murrxh9k-5429744aab4342959a2b8b9bdb","0murrxh9s-eda54f5bb61e49ffba5e76ee8b","0murrxha0-9fd520759f84444d99eb1536ad","0murrxha9-fa69dbc551514e69a059206785","0murfhw0u-8b954c0f251f4683a7887f1d09","0murqjb3b-5616036273a34cf6bc1d352fca","0murrxson-cdff06ce7788468195bd2cb8e0","0murrxsox-b2e6ee58301a4052be90089bf7","0murfg40c-274841f55a004f44af4852c2fe","0murfiu1w-803be05607eb40ce821cce4677","0murry39p-56aedbd0c5634dcc9549b0df32","0murr9kvy-347cbfb7d548464cb033b36833","0murry98w-aef7d62cfe2f4971ae0e16ccca","0murr9kw8-691fd87eb9cb4bbc968f449a47","0murvfvl8-614fc02e16fe44599e95c0b189","0murvfvlh-b05780d637084a71aa8f4902bd"],"projectsQueried":["ADOFAIMacro"],"reinjectPending":true,"currentProject":"ADOFAIMacro"}
+\ No newline at end of file
++{"injected":[],"searched":[],"accessed":["__welcomeGuide__","0murfhw0j-7a90e8b2b6b84c90abe74bbcf1","0murfhw0u-8b954c0f251f4683a7887f1d09","0murfg40c-274841f55a004f44af4852c2fe","0murfiu1w-803be05607eb40ce821cce4677","0murfhw11-c5e8322d2b6c4267b886a88953","0mus5s3rl-a4f667b81f2c48749f4182f580","0murr9kvr-6a8f41d186b147c4915ed1227f","0murqsqum-fa91f4a82405426ab29841f0a0","0mus7hu22-95472e4a64ea40a68adafe3cdc","0mus7iorz-2c23c37b2a8646f3a8c7c09b7c","0musax165-e6918bc71d6748b8a44a56ae71"],"written":["0murrxh9k-5429744aab4342959a2b8b9bdb","0murrxsox-b2e6ee58301a4052be90089bf7","0murvfvl8-614fc02e16fe44599e95c0b189","0murfhw11-c5e8322d2b6c4267b886a88953","0mus47zqb-6287ef0b8d034c399466f6370c","0murqsqum-fa91f4a82405426ab29841f0a0","0murbzze8-8b8a6b554ad04cc5afa17d202b","0mus80tg7-a6f1d4a311214a9eb65b7cd1fb","0mus82vry-f234fc6c67f148acb83721c0dd","0mus82vs7-575203214d454aeab8cdffff4d","0mus95r8r-0f836ae439e64a1fbd57fcf27c","0musax165-e6918bc71d6748b8a44a56ae71","0musdkgrt-1151b820711e4e6ab04984c726","0musdkozd-0df7e920d49d44f5b561063514","0musdijuz-1e6d8dbdbdf04415984e0e0488","0musgbkyp-15f8e5eb17ae4688bf9452ffde","0musgbtip-43b1f6852adb4da8bd68def496","0musgkfo5-1d9a8b269c4e48c9b0875ff392","0mus7hu22-95472e4a64ea40a68adafe3cdc","0murfiu1w-803be05607eb40ce821cce4677"],"projectsQueried":["ADOFAIMacro"],"reinjectPending":false,"currentProject":"ADOFAIMacro"}
+\ No newline at end of file
+diff --git a/ADOFAIMacro/ADOFAIMacro-Dev.csproj b/ADOFAIMacro/ADOFAIMacro-Dev.csproj
+index 171787a..e260353 100644
+--- a/ADOFAIMacro/ADOFAIMacro-Dev.csproj
++++ b/ADOFAIMacro/ADOFAIMacro-Dev.csproj
+@@ -63,6 +63,7 @@
+   <ItemGroup Label="Core 入口与补丁">
+     <Compile Include="Core\Main.cs" />
+     <Compile Include="Core\Patches.cs" />
++    <Compile Include="Core\GameNotifier.cs" />
+   </ItemGroup>
+ 
+   <ItemGroup Label="Technique 手法模拟">
+@@ -77,6 +78,8 @@
+     <Compile Include="Technique\Clock.cs" />
+     <Compile Include="Technique\Lifecycle.cs" />
+     <Compile Include="Technique\TechniqueSimulator.cs" />
++    <Compile Include="Technique\TraceFile.cs" />
++    <Compile Include="Technique\TracePlayer.cs" />
+     <Compile Include="Technique\LevelTechniqueManager.cs" />
+   </ItemGroup>
+ 
+@@ -184,6 +187,9 @@
+     <Reference Include="Unity.TextMeshPro">
+       <HintPath>$(GameManaged)\Unity.TextMeshPro.dll</HintPath>
+     </Reference>
++    <Reference Include="UnityFileDialog">
++      <HintPath>$(GameManaged)\UnityFileDialog.dll</HintPath>
++    </Reference>
+   </ItemGroup>
+ 
+   <ItemGroup Label="UnityModManager">
+diff --git a/ADOFAIMacro/Core/Patches.cs b/ADOFAIMacro/Core/Patches.cs
+index a94be1c..bc03ebd 100644
+--- a/ADOFAIMacro/Core/Patches.cs
++++ b/ADOFAIMacro/Core/Patches.cs
+@@ -116,6 +116,50 @@ namespace ADOFAIMacro.Core
+             }
+         }
+ 
++        // ——— scrPlayer.UpdateHoldKeys 越界防护 ———————————————————
++        // 游戏自身潜伏 bug（Spectre 同款 Finalizer，Patch_Playback.cs:33-43）：
++        // 命中 midspin 时 Hit() 尾部会向 keyTimes 自补一个待处理按键，方法末段
++        // midspin 分支的第二次 RemoveAt(0) 假定这个补充一定还在。若中途那次
++        // Hit() 提前返回 false（无响应窗口、忽略输入特效等），既不推进地板也不
++        // 补条目，第二次 RemoveAt(0) 就在空表上抛 ArgumentOutOfRangeException。
++        // 正常游玩几乎凑不齐触发条件；宏按量化时间注入按键（且 v3 角度驱动的
++        // 精确时间戳会挪动响应窗口边界），概率显著上升。
++        // 抛出只会中断当帧的输入模拟——宏的状态每帧由事件表驱动重算，吞掉
++        // 不影响后续帧，吞掉比让游戏崩溃安全。仅在宏播放中吞，人工游玩不拦。
++        [HarmonyPatch(typeof(scrPlayer), "UpdateHoldKeys")]
++        public static class Patch_UpdateHoldKeys_CrashGuard
++        {
++            [HarmonyFinalizer]
++            public static Exception Finalizer(Exception __exception)
++            {
++                if (__exception == null || !(__exception is ArgumentOutOfRangeException))
++                    return __exception;
++                bool macroActive = false;
++                try
++                {
++                    macroActive = Main.Settings != null
++                        && Main.Settings.SimulateKeyPress
++                        && Main.Settings.EnableTechniqueSimulation;
++                }
++                catch
++                {
++                    // 设置不可用时保守起见不吞
++                    return __exception;
++                }
++                if (!macroActive)
++                    return __exception;
++                try
++                {
++                    Main.Log("[Macro] 回放命中游戏 UpdateHoldKeys midspin keyTimes 越界（已知游戏 bug），已拦截");
++                }
++                catch
++                {
++                    // 日志失败不影响吞异常
++                }
++                return null; // 吞掉，中断的只是当帧输入模拟
++            }
++        }
++
+         [HarmonyPatch(typeof(scrController), nameof(scrController.Awake_Rewind))]
+         public static class Patch_Awake_Rewind
+         {
+@@ -161,11 +205,24 @@ namespace ADOFAIMacro.Core
+             [HarmonyPostfix]
+             public static void Postfix(bool __result, string levelPath)
+             {
+-                if (__result && Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
++                if (!__result) return;
++
++                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
+                 {
+                     LevelTechniqueManager.ResetCheckState();
+                     LevelTechniqueManager.CheckAndLoadLevelConfig();
+                 }
++
++                // 轨迹播放器：加载期预热。
++                // 此刻（scnGame.LoadAndPlayLevel 尾部）整首谱的地板与每块砖的
++                // entryTime 都已经算好（MakeLevel → ApplyEventsToFloors →
++                // CalculateFloorEntryTimes），而 conductor 尚未 Start()。
++                // 所以这里就能把最优轨迹求解出来并落盘 —— 进关按下开始之前
++                // 就已就绪，不必"先玩一次"。
++                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation)
++                {
++                    Guarded("TracePrewarm", () => MacroEngine.PrewarmTrace());
++                }
+             }
+         }
+ 
+@@ -233,6 +290,16 @@ namespace ADOFAIMacro.Core
+                     if (Main.Settings.ChangeNoFaillInPlay)
+                     __instance.buttonNoFail.interactable = true;
+                 }
++
++                // 轨迹播放器预热（编辑器试玩路径）。
++                // 编辑器试玩不走 scnGame.LoadAndPlayLevel，所以上面那个补丁挂不上。
++                // 但 scnEditor.Play() 内部会跑 customLevel.Play(num) →
++                // FinishCustomLevelLoading() → ApplyEventsToFloors()（试玩时 remakeFloors=true），
++                // 返回到这里时地板与 entryTime 已就绪，同样是"按下开始之前"。
++                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation)
++                {
++                    Guarded("TracePrewarmEditor", () => MacroEngine.PrewarmTrace());
++                }
+             }
+         }
+ 
+diff --git a/ADOFAIMacro/Input/VirtualAsyncInput.cs b/ADOFAIMacro/Input/VirtualAsyncInput.cs
+index 676c92c..1288a4d 100644
+--- a/ADOFAIMacro/Input/VirtualAsyncInput.cs
++++ b/ADOFAIMacro/Input/VirtualAsyncInput.cs
+@@ -92,10 +92,32 @@ namespace ADOFAIMacro.Input
+         }
+ 
+         /// <summary>
+-        /// 合成并直喂一个按键事件。返回 false 表示本次未发送（调用方应回退到系统注入路径）。
+-        /// 仅由宏工作线程调用；keyQueue 是 ConcurrentQueue，跨线程入队即钩子线程的同款用法。
++        /// 合成并直喂一个按键事件（打当下时刻戳）。返回 false 表示本次未发送
++        /// （调用方应回退到系统注入路径）。宏工作线程与角度驱动主线程都会调用；
++        /// keyQueue 是 ConcurrentQueue，跨线程入队即钩子线程的同款用法。
+         /// </summary>
+         public static bool Send(byte keyCode, bool isDown)
++        {
++            if (!_active) return false;
++            PreciseNow.SplitLocalUnix(PreciseNow.LocalTicks(), out long sec, out uint nano);
++            return SendAt(keyCode, isDown, sec, nano);
++        }
++
++        /// <summary>SendAt 的 ticks 直通版：调用方已持有 PreciseNow.LocalTicks() 坐标系的时间戳。</summary>
++        public static bool SendAtTicks(byte keyCode, bool isDown, long localTicks)
++        {
++            if (!_active) return false;
++            PreciseNow.SplitLocalUnix(localTicks, out long sec, out uint nano);
++            return SendAt(keyCode, isDown, sec, nano);
++        }
++
++        /// <summary>
++        /// 带事件时间戳的直喂：事件携带指定的时刻（而非调用时刻）进入 keyQueue，
++        /// 游戏 scrController.UpdateInput 按 GetTimeInTicks() 排序并分组后
++        /// ProcessKeyInputs(事件tick) —— 判定用这个过去时刻，亚帧精度由此保留。
++        /// 角度驱动的插值回填（TracePlayer.AngleDriverTick）用过去时刻消除帧量化延迟。
++        /// </summary>
++        public static bool SendAt(byte keyCode, bool isDown, long eventSec, uint eventSubsecNano)
+         {
+             if (!_active) return false;
+ 
+@@ -105,9 +127,7 @@ namespace ADOFAIMacro.Input
+                 if (label == KeyLabel.Unknown)
+                 return false; // 无 KeyLabel 的键走掩码相等性会互相合并，必须回退注入路径
+ 
+-                PreciseNow.SplitLocalUnix(PreciseNow.LocalTicks(), out long sec, out uint nano);
+-
+-                SkyHookEvent evt = BuildEvent(sec, nano,
++                SkyHookEvent evt = BuildEvent(eventSec, eventSubsecNano,
+                     isDown ? EventType.KeyPressed : EventType.KeyReleased,
+                     label, keyCode);
+ 
+@@ -169,7 +189,10 @@ namespace ADOFAIMacro.Input
+         private static readonly int[] _mirrorEchoDown = new int[256];   // 每键待消耗回声（按下）
+         private static readonly int[] _mirrorEchoUp = new int[256];     // 每键待消耗回声（松开）
+         private static readonly int[] _mirrorEchoExpire = new int[256]; // Environment.TickCount
+-        private const int MirrorEchoTimeoutMs = 120;
++        // 800ms：SendInput 注入后 LL 钩子回流正常 0.05-2ms，但主线程 GC 停顿/帧尖峰
++        // 可让 HookCallback 处理延迟几十 ms——配额过短会漏吃回声 = 同一击打判两次 = 死。
++        // 配额过长仅影响真实按键的延迟（配额期内的同键真实按下会被误吞 1 次），800ms 折中。
++        private const int MirrorEchoTimeoutMs = 800;
+ 
+         // 快路径指示：存在任何未过期配额时才进锁检查（HookCallback 每个真实按键都过一遍）
+         private static volatile int _mirrorQuotaActive;
+diff --git a/ADOFAIMacro/Localization/LocalizationManager.cs b/ADOFAIMacro/Localization/LocalizationManager.cs
+index a18959c..81a6e96 100644
+--- a/ADOFAIMacro/Localization/LocalizationManager.cs
++++ b/ADOFAIMacro/Localization/LocalizationManager.cs
+@@ -119,6 +119,21 @@ namespace ADOFAIMacro.Localization
+             ["tech.right_hand"] = "右手",
+             ["tech.global_bpm_limit"] = "全局·速度阈值 (BPM)",
+             ["tech.bpm_explanation"] = "超过此BPM时自动细分时间片，允许同一只手连续承担多个事件",
++            ["tech.player_title"] = "轨迹播放器",
++            ["tech.player_driver"] = "驱动方式",
++            ["tech.player_driver_time"] = "时间驱动",
++            ["tech.player_driver_angle"] = "角度驱动",
++            ["tech.player_driver_hint"] = "时间驱动走原有时间锚点链路；角度驱动按行星在当前砖已扫过的角度触发，不受时钟抖动影响。",
++            ["tech.player_angle_lead"] = "角度提前量(ms)",
++            ["tech.player_angle_lead_hint"] = "角度驱动的触发被帧率量化，最坏晚一帧；觉得偏晚就往上调。",
++            ["tech.player_clear_cache"] = "清除轨迹缓存",
++            ["tech.player_status"] = "轨迹状态",
++            ["tech.player_prewarm_hint"] = "轨迹在关卡加载完成时就会求解并缓存，按开始前已就绪；下次进同一张谱直接读缓存，零计算。",
++            ["tech.player_solve_now"] = "离线计算",
++            ["tech.player_solve_now_hint"] = "立刻对当前关卡求解并缓存（等同于加载期自动求解，随时可手动触发）。",
++            ["tech.player_export"] = "导出轨迹",
++            ["tech.player_import"] = "导入轨迹",
++            ["tech.player_io_hint"] = "导出当前谱的 .adofaitrace 轨迹文件，可分享给别人；导入时必须是同一张谱 + 同一套手法配置（指纹校验），成功后重进关卡生效。",
+             ["tech.speed_segments"] = "变速分段设置",
+             ["tech.segment_inherit"] = "留空的按键字段将继承全局配置。",
+             ["tech.add_segment"] = "+ 添加分段",
+diff --git a/ADOFAIMacro/Localization/en-US.json b/ADOFAIMacro/Localization/en-US.json
+index 96b2d1a..c331cda 100644
+--- a/ADOFAIMacro/Localization/en-US.json
++++ b/ADOFAIMacro/Localization/en-US.json
+@@ -86,6 +86,21 @@
+     "tech.right_hand": "Right",
+     "tech.global_bpm_limit": "Global · Speed Threshold (BPM)",
+     "tech.bpm_explanation": "Above this BPM, time slices are subdivided so one hand handles multiple events",
++    "tech.player_title": "Trace Player",
++    "tech.player_driver": "Driver",
++    "tech.player_driver_time": "Time",
++    "tech.player_driver_angle": "Angle",
++    "tech.player_driver_hint": "Time driver uses the existing time-anchor pipeline; the angle driver triggers on how far the planet has swept the current floor, immune to clock jitter.",
++    "tech.player_angle_lead": "Angle lead (ms)",
++    "tech.player_angle_lead_hint": "Angle-driver triggers are quantized to the frame rate, so they can land up to one frame late; raise this if it feels late.",
++    "tech.player_clear_cache": "Clear trace cache",
++    "tech.player_status": "Trace status",
++    "tech.player_prewarm_hint": "The trace is solved and cached when the level finishes loading, so it is ready before you press start. Replaying the same level just reads the cache - zero compute.",
++    "tech.player_solve_now": "Solve offline now",
++    "tech.player_solve_now_hint": "Solve and cache the current level immediately (same as the automatic solve at level load, triggerable on demand).",
++    "tech.player_export": "Export trace",
++    "tech.player_import": "Import trace",
++    "tech.player_io_hint": "Export the current level's .adofaitrace file to share; importing requires the same level + same technique config (fingerprint check). Takes effect on next level entry.",
+     "tech.speed_segments": "Speed Segments",
+     "tech.segment_inherit": "Empty key fields inherit the global configuration.",
+     "tech.add_segment": "+ Add Segment",
+diff --git a/ADOFAIMacro/Localization/zh-CN.json b/ADOFAIMacro/Localization/zh-CN.json
+index 86346c9..3e4241b 100644
+--- a/ADOFAIMacro/Localization/zh-CN.json
++++ b/ADOFAIMacro/Localization/zh-CN.json
+@@ -86,6 +86,21 @@
+     "tech.right_hand": "右手",
+     "tech.global_bpm_limit": "全局·速度阈值 (BPM)",
+     "tech.bpm_explanation": "超过此BPM时自动细分时间片，允许同一只手连续承担多个事件",
++    "tech.player_title": "轨迹播放器",
++    "tech.player_driver": "驱动方式",
++    "tech.player_driver_time": "时间驱动",
++    "tech.player_driver_angle": "角度驱动",
++    "tech.player_driver_hint": "时间驱动走原有时间锚点链路；角度驱动按行星在当前砖已扫过的角度触发，不受时钟抖动影响。",
++    "tech.player_angle_lead": "角度提前量(ms)",
++    "tech.player_angle_lead_hint": "角度驱动的触发被帧率量化，最坏晚一帧；觉得偏晚就往上调。",
++    "tech.player_clear_cache": "清除轨迹缓存",
++    "tech.player_status": "轨迹状态",
++    "tech.player_prewarm_hint": "轨迹在关卡加载完成时就会求解并缓存，按开始前已就绪；下次进同一张谱直接读缓存，零计算。",
++    "tech.player_solve_now": "离线计算",
++    "tech.player_solve_now_hint": "立刻对当前关卡求解并缓存（等同于加载期自动求解，随时可手动触发）。",
++    "tech.player_export": "导出轨迹",
++    "tech.player_import": "导入轨迹",
++    "tech.player_io_hint": "导出当前谱的 .adofaitrace 轨迹文件，可分享给别人；导入时必须是同一张谱 + 同一套手法配置（指纹校验），成功后重进关卡生效。",
+     "tech.speed_segments": "变速分段设置",
+     "tech.segment_inherit": "留空的按键字段将继承全局配置。",
+     "tech.add_segment": "+ 添加分段",
+diff --git a/ADOFAIMacro/Settings/Settings.cs b/ADOFAIMacro/Settings/Settings.cs
+index 076be75..4c2a1fd 100644
+--- a/ADOFAIMacro/Settings/Settings.cs
++++ b/ADOFAIMacro/Settings/Settings.cs
+@@ -356,6 +356,29 @@ namespace ADOFAIMacro.Settings
+             set => _techniqueBpmLimit = Mathf.Clamp(value, 50f, 2000f);
+         }
+ 
++        /// <summary>
++        /// 轨迹播放器的驱动方式。
++        /// 0 = 时间驱动：离线解算好的事件表走原有的时间锚点链路（与改造前同一条路径）。
++        /// 1 = 角度驱动：主线程每帧比对行星在当前砖上已扫过的角度，不看时钟。
++        /// </summary>
++        private int _techniquePlaybackDriver = 0;
++        public int techniquePlaybackDriver
++        {
++            get => _techniquePlaybackDriver;
++            set => _techniquePlaybackDriver = value == 1 ? 1 : 0;
++        }
++
++        /// <summary>
++        /// 角度驱动的提前量（毫秒）。触发精度被帧率量化，最坏会晚一帧；
++        /// 觉得角度驱动偏晚就往上调。默认 0 = 不补偿。
++        /// </summary>
++        private float _techniqueAngleLeadMs = 0f;
++        public float techniqueAngleLeadMs
++        {
++            get => _techniqueAngleLeadMs;
++            set => _techniqueAngleLeadMs = Mathf.Clamp(value, -200f, 400f);
++        }
++
+         public string TechLeftHandKeys = "D,F";
+         public string TechRightHandKeys = "J,K";
+         public string TechLeftHandOrders = "";
+@@ -364,6 +387,11 @@ namespace ADOFAIMacro.Settings
+         public string TechRightHandPressTimes = "0.8,0.8";
+ 
+         private (string input, bool focused) _techBpmState = (string.Empty, false);
++        private (string input, bool focused) _techAngleLeadState = (string.Empty, false);
++        private readonly string[] _playerDriverCache = new string[2];
++        private string _traceCacheClearMsg = string.Empty;
++        private string _traceSolveMsg = string.Empty;
++        private string _traceIoMsg = string.Empty;
+         private (string input, bool focused) _deathKeyDelayState = (string.Empty, false);
+ 
+         // ── 按键过滤 ──────────────────────────────────
+@@ -1355,6 +1383,82 @@ namespace ADOFAIMacro.Settings
+             GUIStyle tipStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.8f, 10, wordWrap: true);
+             GUILayout.Label(LocalizationManager.Get("tech.bpm_explanation"), tipStyle);
+ 
++            // ── 轨迹播放器 ─────────────────────────────────────
++            GUILayout.Space(10);
++            GUILayout.Label(LocalizationManager.Get("tech.player_title"), UIUtils.LabelStyle);
++            GUILayout.Space(2);
++
++            GUILayout.BeginHorizontal();
++            GUILayout.Label(LocalizationManager.Get("tech.player_driver"), UIUtils.LabelStyle, GUILayout.Width(140));
++            _playerDriverCache[0] = LocalizationManager.Get("tech.player_driver_time");
++            _playerDriverCache[1] = LocalizationManager.Get("tech.player_driver_angle");
++            int newDriver = UIUtils.M3SelectionGrid(techniquePlaybackDriver, _playerDriverCache, 2, GUILayout.Width(200));
++            if (newDriver != techniquePlaybackDriver)
++            {
++                techniquePlaybackDriver = newDriver;
++                MacroEngine.TechniquePlaybackDriverChanged();
++            }
++            GUILayout.EndHorizontal();
++            GUILayout.Label(LocalizationManager.Get("tech.player_driver_hint"), tipStyle);
++
++            GUILayout.BeginHorizontal();
++            GUILayout.Label(LocalizationManager.Get("tech.player_status"), UIUtils.LabelStyle, GUILayout.Width(140));
++            GUILayout.Label(MacroEngine.PlaybackInfo.Length > 0 ? MacroEngine.PlaybackInfo : "-", tipStyle, GUILayout.ExpandWidth(true));
++            GUILayout.EndHorizontal();
++
++            GUILayout.Label(LocalizationManager.Get("tech.player_prewarm_hint"), tipStyle);
++
++            // 「离线计算」：由用户决定何时算，而不是被动等加载期/进关时算。
++            GUILayout.BeginHorizontal();
++            if (GUILayout.Button(LocalizationManager.Get("tech.player_solve_now"), UIUtils.ButtonStyle, GUILayout.Width(160)))
++            {
++                MacroEngine.SolveNow();
++                _traceSolveMsg = MacroEngine.PlaybackInfo;
++            }
++            if (_traceSolveMsg.Length > 0) GUILayout.Label(_traceSolveMsg, tipStyle);
++            GUILayout.EndHorizontal();
++                        GUILayout.Label(LocalizationManager.Get("tech.player_solve_now_hint"), tipStyle);
++
++            // 导出 / 导入轨迹文件（Spectre 式可携带回放）
++            GUILayout.BeginHorizontal();
++            if (GUILayout.Button(LocalizationManager.Get("tech.player_export"), UIUtils.ButtonStyle, GUILayout.Width(160)))
++            {
++                MacroEngine.ExportTrace();
++                _traceIoMsg = MacroEngine.PlaybackInfo;
++            }
++            if (GUILayout.Button(LocalizationManager.Get("tech.player_import"), UIUtils.ButtonStyle, GUILayout.Width(160)))
++            {
++                MacroEngine.ImportTrace();
++                _traceIoMsg = MacroEngine.PlaybackInfo;
++            }
++            GUILayout.EndHorizontal();
++            if (_traceIoMsg.Length > 0) GUILayout.Label(_traceIoMsg, tipStyle);
++            GUILayout.Label(LocalizationManager.Get("tech.player_io_hint"), tipStyle);
++
++            if (techniquePlaybackDriver == 1)
++            {
++                GUILayout.BeginHorizontal();
++                techniqueAngleLeadMs = UIUtils.M3HorizontalSliderWithLabelAndInput(
++                    LocalizationManager.Get("tech.player_angle_lead"),
++                    techniqueAngleLeadMs, -200f, 400f,
++                    ref _techAngleLeadState.input, ref _techAngleLeadState.focused,
++                    "F0", 140, 220, 70);
++                GUILayout.EndHorizontal();
++                GUILayout.Label(LocalizationManager.Get("tech.player_angle_lead_hint"), tipStyle);
++            }
++
++            GUILayout.BeginHorizontal();
++            if (GUILayout.Button(LocalizationManager.Get("tech.player_clear_cache"), UIUtils.ButtonStyle, GUILayout.Width(160)))
++            {
++                int removed = MacroEngine.ClearTraceCache();
++                _traceCacheClearMsg = removed > 0
++                    ? $"已清除 {removed} 个轨迹缓存"
++                    : "没有可清除的轨迹缓存";
++            }
++            if (_traceCacheClearMsg.Length > 0) GUILayout.Label(_traceCacheClearMsg, tipStyle);
++            GUILayout.EndHorizontal();
++            GUILayout.Space(8);
++
+             // 【2026-10-03】"变速容差"滑条整条移除。片长现在只由逐片速度决定，
+             // 没有窗口/限幅/死区/几何修补可调。详见 TechniqueSimulator.cpp 同名注释。
+ 
+diff --git a/ADOFAIMacro/Technique/ConfigParser.cs b/ADOFAIMacro/Technique/ConfigParser.cs
+index b98074e..e599ad1 100644
+--- a/ADOFAIMacro/Technique/ConfigParser.cs
++++ b/ADOFAIMacro/Technique/ConfigParser.cs
+@@ -90,6 +90,7 @@ namespace ADOFAIMacro.Technique
+         private static void ParseTechniqueConfig()
+         {
+             // 优先使用关卡特定配置（不会覆盖 Settings 中的用户设置）
++            var s = Main.Settings;
+             var levelConfig = LevelTechniqueManager.GetCurrentLevelConfig();
+             if (levelConfig != null)
+             {
+@@ -100,10 +101,10 @@ namespace ADOFAIMacro.Technique
+                 _techPressDur[0] = ParseTechPressTimes(levelConfig.leftHandPressTimes, _techLeftKeys.Length);
+                 _techPressDur[1] = ParseTechPressTimes(levelConfig.rightHandPressTimes, _techRightKeys.Length);
+                 _currentSegments = levelConfig.techniqueSegments ?? new List<Settings.TechniqueSegment>();
++                ComputeTechniqueFingerprint(s.TechniqueBpmLimit, levelConfig.handPreference);
+                 return;
+             }
+ 
+-            var s = Main.Settings;
+             _techLeftKeys = ParseTechKeyList(s.TechLeftHandKeys);
+             _techRightKeys = ParseTechKeyList(s.TechRightHandKeys);
+             _techKeyOrders[0] = ParseTechOrders(s.TechLeftHandOrders, _techLeftKeys.Length);
+@@ -117,6 +118,69 @@ namespace ADOFAIMacro.Technique
+             _currentSegments = profiles[s.SelectedTechniqueProfileIndex].techniqueSegments;
+             else
+                 _currentSegments = new List<Settings.TechniqueSegment>();
++
++            ComputeTechniqueFingerprint(s.TechniqueBpmLimit, s.TechniqueHandPreference);
++        }
++
++        /// <summary>
++        /// 手法配置指纹（FNV-1a 32bit）。轨迹缓存键的一半：手法设置、按键表、
++        /// 分段、bpm 上限、手性偏好任意一项变化，缓存立刻失效重算 ——
++        /// 否则会拿"旧手法配置下算的最优轨迹"去打新配置，静默劣化且无法察觉。
++        /// </summary>
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private static void ComputeTechniqueFingerprint(float bpmLimit, int handPrefFallback)
++        {
++            unchecked
++            {
++                uint h = 2166136261;
++                void Mix(int v)
++                {
++                    h ^= (uint)v; h *= 16777619;
++                }
++                void MixD(double v) => Mix((int)Math.Round(v * 1e6));
++                // .NET Framework 的 string.GetHashCode() 每进程随机加盐 →
++                // 指纹在两次运行之间不稳定，缓存永远 miss。用稳定的逐字节 FNV。
++                void MixString(string? s)
++                {
++                    if (string.IsNullOrEmpty(s)) { Mix(0); return; }
++                    foreach (char c in s!) { h ^= c; h *= 16777619; }
++                    Mix(0xFF);
++                }
++
++                Mix((int)Math.Round(bpmLimit));
++                Mix(handPrefFallback);
++
++                foreach (byte k in _techLeftKeys) Mix(k);
++                Mix(-1);
++                foreach (byte k in _techRightKeys) Mix(k);
++                Mix(-2);
++
++                foreach (var side in _techKeyOrders)
++                    foreach (var order in side)
++                    {
++                        foreach (int idx in order) Mix(idx);
++                        Mix(-3);
++                    }
++
++                foreach (var side in _techPressDur)
++                    foreach (double d in side) MixD(d);
++
++                if (_currentSegments != null)
++                    foreach (var seg in _currentSegments)
++                    {
++                        Mix(seg.startFloor);
++                        Mix(seg.endFloor);
++                        MixD(seg.bpmLimit);
++                        MixString(seg.leftHandKeys);
++                        MixString(seg.rightHandKeys);
++                        MixString(seg.leftHandOrders);
++                        MixString(seg.rightHandOrders);
++                        MixString(seg.leftHandPressTimes);
++                        MixString(seg.rightHandPressTimes);
++                    }
++
++                _techniqueFingerprint = (int)h;
++            }
+         }
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+diff --git a/ADOFAIMacro/Technique/KeyWorker.cs b/ADOFAIMacro/Technique/KeyWorker.cs
+index d0f3ea8..46a4bca 100644
+--- a/ADOFAIMacro/Technique/KeyWorker.cs
++++ b/ADOFAIMacro/Technique/KeyWorker.cs
+@@ -289,7 +289,7 @@ namespace ADOFAIMacro.Technique
+         private static bool _keyPathProbeDone;
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+-        private static unsafe void SendKey(byte keyCode, bool isDown)
++        private static unsafe void SendKey(byte keyCode, bool isDown, long eventTicks = 0)
+         {
+             // 一次性路径探针：定位镜像链路断点（每次会话首键输出）
+             // 注意用 UMM Logger 直调——MacroEngine.Log 是 [Conditional("DEBUG")]，Release 会整体剥除
+@@ -303,8 +303,17 @@ namespace ADOFAIMacro.Technique
+ 
+             if (Main.Settings.BlockInputWhenUnfocused && !IsGameWindowFocused()) return;
+ 
+-            // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）
+-            if (VirtualAsyncInput.Active && VirtualAsyncInput.Send(keyCode, isDown)) return;
++            // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）。
++            // eventTicks != 0 时事件携带指定时刻（角度驱动插值回填的跨越时刻 t*），
++            // 游戏按事件时间戳判定 → 帧量化延迟被消除；注入路径（SkyHook/SendInput）
++            // 无法携带时间戳（系统打当下戳），自然退化为旧行为。
++            if (VirtualAsyncInput.Active)
++            {
++                bool sent = eventTicks != 0
++                    ? VirtualAsyncInput.SendAtTicks(keyCode, isDown, eventTicks)
++                    : VirtualAsyncInput.Send(keyCode, isDown);
++                if (sent) return;
++            }
+ 
+             // 直喂未接管 → 这次按键会经系统注入回流到游戏的 HookCallback，
+             // 从而落入【按键过滤】的判定范围。若开了过滤，先登记放行配额，
+@@ -354,6 +363,11 @@ namespace ADOFAIMacro.Technique
+             ParseKeyCodes();
+             BuildHitEvents();
+ 
++            // 离线求解出的轨迹（若有）：时间驱动下顶替 _hitEvents，角度驱动下改由
++            // 主线程 AngleDriverTick 发键。失败一律安静回落 —— BuildHitEvents 的表还在。
++            BuildFloorIndexMap();
++            PrepareTrace();
++
+             initialized = true;
+             _staticAnchorVersion++;
+ 
+diff --git a/ADOFAIMacro/Technique/Lifecycle.cs b/ADOFAIMacro/Technique/Lifecycle.cs
+index e9ee197..7abc49a 100644
+--- a/ADOFAIMacro/Technique/Lifecycle.cs
++++ b/ADOFAIMacro/Technique/Lifecycle.cs
+@@ -32,6 +32,9 @@ namespace ADOFAIMacro.Technique
+             conductor = null;
+             _initializedLevelPath = null;
+ 
++            // 轨迹播放器：清状态并让它回到「在线贪心」这条兜底路上
++            ResetTraceState();
++
+             Volatile.Write(ref _workerLastTriggeredFloor, -1);
+             Interlocked.Exchange(ref _workerNeedsHit, 0);
+             // 该 -1 是"重建中"的中间态，必须先宣告未就绪，工作线程才不会把它当作
+diff --git a/ADOFAIMacro/Technique/MacroEngine.cs b/ADOFAIMacro/Technique/MacroEngine.cs
+index ca2c0f7..a98e808 100644
+--- a/ADOFAIMacro/Technique/MacroEngine.cs
++++ b/ADOFAIMacro/Technique/MacroEngine.cs
+@@ -179,6 +179,8 @@ namespace ADOFAIMacro.Technique
+         private static readonly int[][][] _techKeyOrders = [[], []];
+         private static readonly double[][] _techPressDur = [[], []];
+         private static List<Settings.TechniqueSegment>? _currentSegments;
++        // 手法配置指纹（FNV-1a）：轨迹缓存键的一半，见 ConfigParser.ComputeTechniqueFingerprint。
++        private static int _techniqueFingerprint;
+ 
+         [ThreadStatic]
+         private static SkyHookSystem.INPUT _cachedInput;
+@@ -322,10 +324,24 @@ namespace ADOFAIMacro.Technique
+                 if (!initialized) return;
+             }
+ 
++            // 角度驱动：主线程每帧比对行星在当前砖上已扫过的角度并发键。
++            // 必须排在下面的命中计数收割之前 —— FireTraceEvent 走的是
++            // Interlocked.Increment(_workerNeedsHit)，晚一帧收割等于白等一帧。
++            // 时间驱动下 _angleDriverActive 为 false，这一句是零开销分支。
++            if (_angleDriverActive) AngleDriverTick(controller);
++
+             // 先无条件取走积压计数：失焦时命中不能留在计数器里。
+             // 工作线程在 SimulateKeyPress=false 路径不做焦点判断，失焦期间会持续累加，
+             // 回到前台时旧实现会在单帧内把数百次 Hit() 一次性灌进游戏（洪峰）。
+             int pendingHits = Interlocked.Exchange(ref _workerNeedsHit, 0);
++            // 【2026-10-04 超速直判】灌入也分帧：超高速谱（The Sun 全谱 floor.speed=1024）下
++            // 直判计数每帧可达数百，Hit(null) 虽便宜但数百次/帧的判定链仍会拖垮帧时间。
++            // 每帧最多灌 _directHitFrameBudget 次，剩余计数留到下一帧（Add 回计数器）。
++            if (pendingHits > _directHitFrameBudget)
++            {
++                Interlocked.Add(ref _workerNeedsHit, pendingHits - _directHitFrameBudget);
++                pendingHits = _directHitFrameBudget;
++            }
+             if (!Main.Settings.BlockInputWhenUnfocused || IsGameWindowFocused())
+             {
+                 scrPlanet? hitPlanet = controller.chosenPlanet;
+diff --git a/ADOFAIMacro/Technique/NativeTechnique.cs b/ADOFAIMacro/Technique/NativeTechnique.cs
+index b4f001d..f38e16f 100644
+--- a/ADOFAIMacro/Technique/NativeTechnique.cs
++++ b/ADOFAIMacro/Technique/NativeTechnique.cs
+@@ -18,8 +18,104 @@ namespace ADOFAIMacro.Technique
+     /// </summary>
+     internal static partial class MacroEngine
+     {
++        /// <summary>
++        /// 事件表构建入口（在线贪心路径）。等价于旧版：地板取舍 → 交给原生分片。
++        /// </summary>
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+         private static void BuildTechniqueHitEvents()
++        {
++            BuildTechniqueFloorInputs();
++
++            int total = _evTimeRecycle.Count;
++            if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
++
++            var evSpeed = _evSpeedRecycle;
++
++#if DEBUG
++            bool useCppVersion = Main.Settings.UseCppTechniqueInDebug;
++#else
++            bool useCppVersion = true;
++#endif
++            if (useCppVersion)
++            {
++                try
++                {
++                    PushTechniqueConfigToNative();
++
++                    if (TechniqueSimulator.BuildHitEvents(
++                            [.. _evTimeRecycle], [.. _evPressRecycle], [.. _evFloorRecycle], [.. _evSpeedRecycle],
++                            total,
++                            conductor!.bpm, ADOBase.controller.playerOne.planetarySystem.speed,
++                            out var nativeEvents))
++                    {
++                        _hitEvents = nativeEvents;
++                        _hitEventCount = nativeEvents!.Length;
++                        Log($"[Macro-Main] C++ 手法模拟（原生分段）完成：{_hitEventCount} 事件");
++                        LogTechniqueTableSummary(nativeEvents!, evSpeed);
++                        return;
++                    }
++                }
++                catch (Exception ex) { Log($"[Macro-Main] C++ 手法模拟异常: {ex.Message}，回退 C# 版本"); }
++            }
++
++#if DEBUG
++            // Debug 构建保留 C# 复刻实现作为回退
++            BuildCSHarpTechniqueHitEvents();
++#else
++            // Release 没有 C# 回退：原生路径失败时必须显式清空事件表。
++            // 否则 _hitEvents 仍是上一张谱面的数组，而 Initialize() 依旧会置
++            // initialized=true 并发布锚点 → 工作线程按旧谱时间戳乱按键。
++            _hitEvents = [];
++            _hitEventCount = 0;
++            Main.Log("[Macro-Main] C++ 手法模拟未产出事件，事件表已清空（Release 无 C# 回退）");
++#endif
++        }
++
++        /// <summary>
++        /// 把当前手法配置（按键表 / 倍速上限 / 手性 / 分段）推给原生 DLL。
++        /// 在线贪心与离线求解两条路径都必须先调它，否则原生会用上一次的配置。
++        /// </summary>
++        private static void PushTechniqueConfigToNative()
++        {
++            var levelConfig = LevelTechniqueManager.GetCurrentLevelConfig();
++            Settings.TechniqueSegment[] segments;
++            int handPref;
++            if (levelConfig != null)
++            {
++                segments = levelConfig.techniqueSegments?.ToArray() ?? [];
++                handPref = levelConfig.handPreference;
++            }
++            else
++            {
++                var currentProfile = Main.Settings.CurrentTechniqueProfile;
++                segments = currentProfile?.techniqueSegments?.ToArray() ?? [];
++                handPref = Main.Settings.TechniqueHandPreference;
++            }
++
++            // 【2026-10-03】speedChangeTolerance 随变速容差整条移除，不再传给原生
++            TechniqueSimulator.UpdateConfig(
++                _techLeftKeys, _techRightKeys,
++                _techKeyOrders[0], _techKeyOrders[1],
++                _techPressDur[0], _techPressDur[1],
++                Main.Settings.TechniqueBpmLimit,
++                handPref,
++                segments);
++        }
++
++        /// <summary>
++        /// 地板取舍循环 —— 把整张谱压成「每块要判定的砖一个输入事件」。
++        ///
++        /// 抽成独立方法是为了让离线求解器复用同一份取舍逻辑：
++        /// 求解器与在线贪心必须喂**逐字节相同**的输入，否则「离线算的解」
++        /// 和「在线本该弹出的东西」就不是同一个问题，缓存也就没有意义。
++        ///
++        /// 输出填入四个复用的 List（_evTimeRecycle/_evPressRecycle/
++        /// _evFloorRecycle/_evSpeedRecycle），press 语义：
++        ///   1 = 普通按下 / 终点砖
++        ///   2 = 长按头
++        ///  -1 = 长按尾（只松键不按）
++        /// </summary>
++        private static void BuildTechniqueFloorInputs()
+         {
+             ParseTechniqueConfig();
+ 
+@@ -65,7 +161,7 @@ namespace ADOFAIMacro.Technique
+                     if (cf == null) { ni++; continue; }
+                     if (cf.midSpin)
+                     {
+-                        // 中旋自己带长按 → 它就是要按的那一块，停下
++                        // 中旋自己带长按 → 它就是该按的那一块，停下
+                         if (cf.holdLength > -1) break;
+                         ni++; continue;                  // 纯中旋，跳过
+                     }
+@@ -137,30 +233,38 @@ namespace ADOFAIMacro.Technique
+                 evSpeed.Add(fl.speed);
+             }
+ 
+-            int total = evTime.Count;
+-            if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
++            LogFloorInputDiagnostics(floors);
++        }
+ 
+-            // ── 谱尾诊断（临时，可由日志总开关关闭）──────────────
+-            // 用户报「最后一格子还是没有按键」「10个地板只判定9个」。
+-            // 终点砖的判定时刻用 fl.entryTime，但如果它同时是 midSpin / auto /
+-            // hold，就会被前面的 continue 分支吃掉。落盘谱尾 6 块砖的真实状态，
+-            // 以及每块砖是否生成了事件。
+-            if (Main.LoggingEnabled)
++        /// <summary>
++        /// 谱尾诊断（临时，可由日志总开关关闭）。
++        /// 用户报「最后一格子还是没有按键」「10个地板只判定9个」。
++        /// 终点砖的判定时刻用 fl.entryTime，但如果它同时是 midSpin / auto /
++        /// hold，就会被前面的 continue 分支吃掉。落盘谱尾 6 块砖的真实状态，
++        /// 以及每块砖是否生成了事件。
++        /// </summary>
++        private static void LogFloorInputDiagnostics(scrFloor[] floors)
++        {
++            var evTime = _evTimeRecycle;
++            var evPress = _evPressRecycle;
++            var evFloor = _evFloorRecycle;
++
++            if (!Main.LoggingEnabled) return;
+             try
+             {
+                 var sbT = new System.Text.StringBuilder();
+                 int last = floors.Length - 1;
+-                sbT.AppendLine($"floors.Length={floors.Length}  事件数={total}  谱尾索引={last}");
++                sbT.AppendLine($"floors.Length={floors.Length}  事件数={evTime.Count}  谱尾索引={last}");
+                 int emitted = 0;
+                 for (int k = 0; k < evTime.Count; k++)
+-                if (evPress[k] != -1) emitted++;
++                    if (evPress[k] != -1) emitted++;
+                 sbT.AppendLine($"按下事件={emitted}");
+                 for (int k = Math.Max(0, last - 5); k < floors.Length; k++)
+                 {
+                     var fk = floors[k];
+                     bool got = false;
+                     for (int q = 0; q < evFloor.Count; q++)
+-                    if (evFloor[q] == k) { got = true; break; }
++                        if (evFloor[q] == k) { got = true; break; }
+                     sbT.AppendLine(
+                         $"  i={k} seqID={fk?.seqID} entryTime={fk?.entryTime:F3} hold={fk?.holdLength} " +
+                         $"midSpin={fk?.midSpin} auto={fk?.auto} freeroam={fk?.freeroam} " +
+@@ -172,67 +276,6 @@ namespace ADOFAIMacro.Technique
+                     sbT.ToString());
+             }
+             catch { }
+-
+-#if DEBUG
+-            bool useCppVersion = Main.Settings.UseCppTechniqueInDebug;
+-#else
+-            bool useCppVersion = true;
+-#endif
+-            if (useCppVersion)
+-            {
+-                try
+-                {
+-                    var levelConfig = LevelTechniqueManager.GetCurrentLevelConfig();
+-                    Settings.TechniqueSegment[] segments;
+-                    int handPref;
+-                    if (levelConfig != null)
+-                    {
+-                        segments = levelConfig.techniqueSegments?.ToArray() ?? [];
+-                        handPref = levelConfig.handPreference;
+-                    }
+-                    else
+-                    {
+-                        var currentProfile = Main.Settings.CurrentTechniqueProfile;
+-                        segments = currentProfile?.techniqueSegments?.ToArray() ?? [];
+-                        handPref = Main.Settings.TechniqueHandPreference;
+-                    }
+-
+-                    // 【2026-10-03】speedChangeTolerance 随变速容差整条移除，不再传给原生
+-                    TechniqueSimulator.UpdateConfig(
+-                        _techLeftKeys, _techRightKeys,
+-                        _techKeyOrders[0], _techKeyOrders[1],
+-                        _techPressDur[0], _techPressDur[1],
+-                        Main.Settings.TechniqueBpmLimit,
+-                        handPref,
+-                        segments);
+-
+-                    if (TechniqueSimulator.BuildHitEvents(
+-                            [.. evTime], [.. evPress], [.. evFloor], [.. evSpeed],
+-                            total,
+-                            conductor!.bpm, ADOBase.controller.playerOne.planetarySystem.speed,
+-                            out var nativeEvents))
+-                    {
+-                        _hitEvents = nativeEvents;
+-                        _hitEventCount = nativeEvents!.Length;
+-                        Log($"[Macro-Main] C++ 手法模拟（原生分段）完成：{_hitEventCount} 事件");
+-                        LogTechniqueTableSummary(nativeEvents!, evSpeed);
+-                        return;
+-                    }
+-                }
+-                catch (Exception ex) { Log($"[Macro-Main] C++ 手法模拟异常: {ex.Message}，回退 C# 版本"); }
+-            }
+-
+-#if DEBUG
+-            // Debug 构建保留 C# 复刻实现作为回退
+-            BuildCSHarpTechniqueHitEvents();
+-#else
+-            // Release 没有 C# 回退：原生路径失败时必须显式清空事件表。
+-            // 否则 _hitEvents 仍是上一张谱面的数组，而 Initialize() 依旧会置
+-            // initialized=true 并发布锚点 → 工作线程按旧谱时间戳乱按键。
+-            _hitEvents = [];
+-            _hitEventCount = 0;
+-            Main.Log("[Macro-Main] C++ 手法模拟未产出事件，事件表已清空（Release 无 C# 回退）");
+-#endif
+         }
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/ADOFAIMacro/Technique/PieceBuilder.cs b/ADOFAIMacro/Technique/PieceBuilder.cs
+index 45b9968..0a73131 100644
+--- a/ADOFAIMacro/Technique/PieceBuilder.cs
++++ b/ADOFAIMacro/Technique/PieceBuilder.cs
+@@ -166,6 +166,7 @@ namespace ADOFAIMacro.Technique
+             var mCntPre = new long[16];
+             int  canMulti  = 0;
+             bool needBack  = false;
++            long backCount = 0;   // 【2026-10-04 死循环修复】回溯总次数（硬上限见下方回溯分支）
+ 
+             // ── 【2026-10-03 变速容差整条移除】─────────────────────
+             //  原来这里的 BaseWindow(32 音取 max 基准) + BaseLimitMul(±2× 限幅) +
+@@ -229,24 +230,38 @@ namespace ADOFAIMacro.Technique
+ 
+                 if (cnt > maxK)
+                 {
+-                    if (canMulti == 1 && isOffHand) needBack = true;
++                    // 【2026-10-04 死循环修复】与 TechniqueSimulator.cpp 同步：
++                    // mult 已顶格 7 时回溯是零进展操作（主手重做只会原样重演），
++                    // 置位 needBack 会造成"提交→回溯→重做→再触发"的无限振荡。
++                    // 详见 TechniqueSimulator.cpp 主循环内注释块。
++                    if (canMulti == 1 && isOffHand && mult < 7) needBack = true;
+                     if (mult < 7) { mult++; mCnt[mult] = 0; continue; }
+                     else           cnt = maxK;
+                 }
+ 
++                // 【2026-10-04 死循环修复】兜底保险：回溯总次数硬上限（平均每事件
++                // 最多 4 次），超限后放弃回溯、以当前片截断推进。与原生 C++ 同步。
+                 if (needBack && pieces.Count > 0)
+                 {
+-                    needBack = false;
+-                    cHand    = mainHand;
+-                    var prev = pieces[pieces.Count - 1];
+-                    nowT = prev.StartTime;
+-                    nowD = prev.EvStart;
+-                    Array.Copy(mCntPre, mCnt, 16);
+-                    mult = prev.Multiplier + 1;
+-                    if (mult > 7) mult = 7;
+-                    pieces.RemoveAt(pieces.Count - 1);
+-                    canMulti = 0;
+-                    continue;
++                    if (backCount >= (long)total * 4)
++                    {
++                        needBack = false;   // 超限：放弃回溯，截断推进保命
++                    }
++                    else
++                    {
++                        backCount++;
++                        needBack = false;
++                        cHand    = mainHand;
++                        var prev = pieces[pieces.Count - 1];
++                        nowT = prev.StartTime;
++                        nowD = prev.EvStart;
++                        Array.Copy(mCntPre, mCnt, 16);
++                        mult = prev.Multiplier + 1;
++                        if (mult > 7) mult = 7;
++                        pieces.RemoveAt(pieces.Count - 1);
++                        canMulti = 0;
++                        continue;
++                    }
+                 }
+ 
+                 /*
+diff --git a/ADOFAIMacro/Technique/TechniqueSimulator.cs b/ADOFAIMacro/Technique/TechniqueSimulator.cs
+index bb0979c..5c8d113 100644
+--- a/ADOFAIMacro/Technique/TechniqueSimulator.cs
++++ b/ADOFAIMacro/Technique/TechniqueSimulator.cs
+@@ -23,6 +23,12 @@ namespace ADOFAIMacro.Technique
+         private static DelegateBuildTechEvents? _buildTechEvents;
+         private static DelegateBuildTechEventsEx? _buildTechEventsEx;
+         private static DelegateFreeTechEvents? _freeTechEvents;
++        // ── 离线求解器（播放器用；老 DLL 没有这些导出时全部为 null）──
++        private static DelegateSolveTrace? _solveTrace;
++        private static DelegateGetTraceStats? _getTraceStats;
++        private static DelegateFreeTraceEvents? _freeTraceEvents;
++        private static bool _solverLoadAttempted = false;
++        private static bool _solverAvailable = false;
+         private static bool _dllLoadAttempted = false;
+ 
+         // ─────────────────────────────────────────────
+@@ -152,6 +158,85 @@ namespace ADOFAIMacro.Technique
+         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+         private delegate void DelegateFreeTechEvents(IntPtr events);
+ 
++        // ─────────────────────────────────────────────
++        //  离线求解器 ABI（TechniqueSimulator.h，Pack=8）
++        //
++        //  struct TraceEvent（24 字节）
++        //    0  double  TriggerTime
++        //    8  float   AngleFrac
++        //   12  byte    KeyCode
++        //   13  byte    Flags        (0x01=RELEASE_ONLY, 0x02=HOLD_RELATED)
++        //   14  byte    ReleaseKeyCode
++        //   15  byte    pad
++        //   16  int     FloorIndex
++        //  struct SolveOptions
++        //    0  int  beamWidth / 4 int maxMultiplier
++        //    8  double fragPenalty / 16 double runPenalty
++        //   24  double roughPenalty / 32 double dropPenalty
++        //  struct TraceStats（48 字节）
++        //    0 int fragmentCount / 4 int longestSameHand / 8 int droppedNotes
++        //   12 int pieceCount / 16 double pieceLenVariance / 24 double totalCost
++        //   32 double fragCost / 40 double runCost → 实为
++        //   32 fragCost / 40 runCost / 48 roughCost / 56 solverNodes → 见下方
++        // ─────────────────────────────────────────────
++        [StructLayout(LayoutKind.Sequential, Pack = 8)]
++        internal struct NativeTraceEvent
++        {
++            public double TriggerTime;   // 0
++            public float AngleFrac;      // 8
++            public byte KeyCode;         // 12
++            public byte Flags;           // 13
++            public byte ReleaseKeyCode;  // 14
++            public byte _pad0;           // 15
++            public int FloorIndex;       // 16
++        }
++
++        [StructLayout(LayoutKind.Sequential, Pack = 8)]
++        internal struct NativeSolveOptions
++        {
++            public int BeamWidth;      // 0
++            public int MaxMultiplier;  // 4
++            public double FragPenalty; // 8
++            public double RunPenalty;  // 16
++            public double RoughPenalty;// 24
++            public double DropPenalty; // 32
++        }
++
++        [StructLayout(LayoutKind.Sequential, Pack = 8)]
++        internal struct NativeTraceStats
++        {
++            public int FragmentCount;      // 0
++            public int LongestSameHand;    // 4
++            public int DroppedNotes;       // 8
++            public int PieceCount;         // 12
++            public double PieceLenVariance;// 16
++            public double TotalCost;       // 24
++            public double FragCost;        // 32
++            public double RunCost;         // 40
++            public double RoughCost;       // 48
++            public int SolverNodes;        // 56
++        }
++
++        internal const byte TRACE_FLAG_RELEASE_ONLY = 0x01;
++        internal const byte TRACE_FLAG_HOLD_RELATED = 0x02;
++
++        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
++        private delegate IntPtr DelegateSolveTrace(
++            [In] double[] entryTimes,
++            [In] int[] pressTypes,
++            [In] int[] floorIndices,
++            [In] double[]? speedMuls,
++            int eventCount,
++            double bpm, double speed,
++            IntPtr options,
++            out int outEventCount);
++
++        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
++        private delegate IntPtr DelegateGetTraceStats();
++
++        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
++        private delegate void DelegateFreeTraceEvents(IntPtr events);
++
+         // ─────────────────────────────────────────────
+         //  Kernel32
+         // ─────────────────────────────────────────────
+@@ -164,6 +249,19 @@ namespace ADOFAIMacro.Technique
+         [DllImport("kernel32.dll", SetLastError = true)]
+         private static extern bool FreeLibrary(IntPtr hModule);
+ 
++        [DllImport("kernel32.dll")]
++        private static extern IntPtr GetCurrentProcess();
++
++        [DllImport("kernel32.dll", SetLastError = true)]
++        private static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress,
++            byte[] lpBuffer, int nSize, out IntPtr lpNumberOfBytesRead);
++
++        [DllImport("ole32.dll")]
++        private static extern IntPtr CoTaskMemAlloc(int cb);
++
++        [DllImport("ole32.dll")]
++        private static extern void CoTaskMemFree(IntPtr pv);
++
+         // ─────────────────────────────────────────────
+         //  公开 API
+         // ─────────────────────────────────────────────
+@@ -237,9 +335,23 @@ namespace ADOFAIMacro.Technique
+                 : null;
+                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
+ 
++                // 离线求解器（播放器）：缺失不影响原有 4 个导出，缺失时 Trace 走贪心兜底
++                IntPtr solvePtr = GetProcAddress(_techDllHandle, "SolveTechniqueTrace");
++                IntPtr statsPtr = GetProcAddress(_techDllHandle, "GetLastTraceStats");
++                IntPtr freeTracePtr = GetProcAddress(_techDllHandle, "FreeTraceEvents");
++                _solverAvailable = solvePtr != IntPtr.Zero
++                    && statsPtr != IntPtr.Zero
++                    && freeTracePtr != IntPtr.Zero;
++                if (_solverAvailable)
++                {
++                    _solveTrace = Marshal.GetDelegateForFunctionPointer<DelegateSolveTrace>(solvePtr);
++                    _getTraceStats = Marshal.GetDelegateForFunctionPointer<DelegateGetTraceStats>(statsPtr);
++                    _freeTraceEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTraceEvents>(freeTracePtr);
++                }
++
+                 Main.Log(buildExPtr != IntPtr.Zero
+-                ? "[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度）"
+-                : "[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度）");
++                    ? $"[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度, 离线求解器: {(_solverAvailable ? "有" : "无")}）"
++                    : $"[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度, 离线求解器: {(_solverAvailable ? "有" : "无")}）");
+                 return true;
+             }
+             catch (Exception ex)
+@@ -249,6 +361,155 @@ namespace ADOFAIMacro.Technique
+             }
+         }
+ 
++        /// <summary>DLL 是否带离线求解器（老 DLL 没有 → 轨迹走贪心兜底）</summary>
++        public static bool SolverAvailable => _solverAvailable;
++
++        private static int _nativeDllTimestamp;
++
++        /// <summary>
++        /// 原生 DLL 的 PE 头 TimeDateStamp（构建时刻，UTC 秒）；解析失败为 0。
++        /// 进轨迹缓存指纹用：求解器一换版，旧 .adotr 全部自动失效。
++        /// 【2026-10-04 教训】指纹原来只含谱面+手法配置，求解器修完部署后旧缓存
++        /// 照样命中，用户实测「完全没有任何区别」——静默回退比崩溃更难查。
++        /// </summary>
++        public static int NativeDllTimestamp
++        {
++            get
++            {
++                if (_nativeDllTimestamp == 0 && _techDllHandle != IntPtr.Zero)
++                {
++                    try
++                    {
++                        // dos header 64B 内含 e_lfanew(0x3C)；PE 签名(4)+COFF(20)，
++                        // TimeDateStamp 在 PE 头偏移 8。
++                        var dos = new byte[64];
++                        if (ReadProcessMemory(GetCurrentProcess(), _techDllHandle, dos, dos.Length, out _))
++                        {
++                            int eLfanew = BitConverter.ToInt32(dos, 0x3C);
++                            if (eLfanew > 0 && eLfanew < 0x400)
++                            {
++                                var pe = new byte[24];
++                                if (ReadProcessMemory(GetCurrentProcess(), _techDllHandle + eLfanew, pe, pe.Length, out _)
++                                    && BitConverter.ToUInt32(pe, 0) == 0x00004550) // 'PE\0\0'
++                                {
++                                    _nativeDllTimestamp = BitConverter.ToInt32(pe, 8);
++                                }
++                            }
++                        }
++                    }
++                    catch { /* 探测失败不致命：指纹少一个维度而已 */ }
++                }
++                return _nativeDllTimestamp;
++            }
++        }
++
++        /// <summary>
++        /// 离线求解：返回最优轨迹。
++        /// 老 DLL / 无求解器 → 直接回落到贪心 BuildHitEvents（保证功能不挂）。
++        /// </summary>
++        public static bool SolveTrace(
++            double[] entryTimes,
++            int[] pressTypes,
++            int[] floorIndices,
++            double[]? speedMuls,
++            int eventCount,
++            double bpm, double speed,
++            out MacroEngine.HitEvent[]? hitEvents,
++            out TraceFile.TraceEvent[]? traceEvents,
++            out TraceFile.TraceStats? stats)
++        {
++            hitEvents = null;
++            traceEvents = null;
++            stats = null;
++
++            if (!_solverAvailable)
++            {
++                return BuildHitEvents(entryTimes, pressTypes, floorIndices, speedMuls,
++                    eventCount, bpm, speed, out hitEvents);
++            }
++
++            NativeTechniqueConfig config = default;
++            IntPtr nativeEvents = IntPtr.Zero;
++            IntPtr optsPtr = IntPtr.Zero;
++
++            try
++            {
++                config = PrepareNativeConfig();
++                _setTechConfig!(ref config);
++
++                NativeSolveOptions opt = new NativeSolveOptions
++                {
++                    BeamWidth = 4,       // 实测 beam=4 已达 frag=0，且 9 谱例仅 185ms
++                    MaxMultiplier = 7,
++                    FragPenalty = 1.0,
++                    RunPenalty = 0.6,
++                    RoughPenalty = 0.25,
++                    DropPenalty = 10000.0,
++                };
++
++                int optsSize = Marshal.SizeOf<NativeSolveOptions>();
++                optsPtr = CoTaskMemAlloc(optsSize);
++                Marshal.StructureToPtr(opt, optsPtr, false);
++
++                int outCount;
++                nativeEvents = _solveTrace!(
++                    entryTimes, pressTypes, floorIndices, speedMuls,
++                    eventCount, bpm, speed,
++                    optsPtr,
++                    out outCount);
++
++                if (nativeEvents == IntPtr.Zero || outCount <= 0)
++                    return false;
++
++                int size = Marshal.SizeOf<NativeTraceEvent>();
++                var raw = new TraceFile.TraceEvent[outCount];
++                unsafe
++                {
++                    byte* src = (byte*)nativeEvents;
++                    for (int i = 0; i < outCount; i++)
++                    {
++                        raw[i] = new TraceFile.TraceEvent(
++                            *(double*)(src + i * size + 0),
++                            *(float*)(src + i * size + 8),
++                            *(byte*)(src + i * size + 12),
++                            *(byte*)(src + i * size + 13),
++                            *(byte*)(src + i * size + 14),
++                            *(int*)(src + i * size + 16));
++                    }
++                }
++
++                IntPtr statsPtr = _getTraceStats!();
++                if (statsPtr != IntPtr.Zero)
++                {
++                    var s = Marshal.PtrToStructure<NativeTraceStats>(statsPtr);
++                    stats = new TraceFile.TraceStats(
++                        s.FragmentCount, s.LongestSameHand, s.DroppedNotes, s.PieceCount,
++                        s.PieceLenVariance, s.TotalCost, s.FragCost, s.RunCost,
++                        s.RoughCost, s.SolverNodes);
++                    CoTaskMemFree(statsPtr);
++                }
++
++                traceEvents = raw;
++                return true;
++            }
++            catch (Exception ex)
++            {
++                MacroEngine.Log($"[Macro] 离线求解异常: {ex.Message}");
++                return false;
++            }
++            finally
++            {
++                if (nativeEvents != IntPtr.Zero && _freeTraceEvents != null)
++                    _freeTraceEvents(nativeEvents);
++                if (optsPtr != IntPtr.Zero)
++                {
++                    Marshal.DestroyStructure<NativeSolveOptions>(optsPtr);
++                    CoTaskMemFree(optsPtr);
++                }
++                FreeNativeConfig(ref config);
++            }
++        }
++
+         /// <summary>构建手法模拟事件（旧接口：全图单一速度）</summary>
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+         public static bool BuildHitEvents(
+diff --git a/ADOFAIMacro/UI/ShowText.cs b/ADOFAIMacro/UI/ShowText.cs
+index 29cdd43..2e21900 100644
+--- a/ADOFAIMacro/UI/ShowText.cs
++++ b/ADOFAIMacro/UI/ShowText.cs
+@@ -155,5 +155,6 @@ namespace ADOFAIMacro.UI
+                 _shadowStyle = null;
+             }
+         }
++
+     }
+ }
+\ No newline at end of file
+diff --git a/TechniqueSimulator/TechniqueSimulator.cpp b/TechniqueSimulator/TechniqueSimulator.cpp
+index 1ef5645..26bde3c 100644
+--- a/TechniqueSimulator/TechniqueSimulator.cpp
++++ b/TechniqueSimulator/TechniqueSimulator.cpp
+@@ -284,6 +284,7 @@ static HitEvent* BuildTechniqueHitEventsImpl(
+         long long mCntPre[16] = {};
+         int  canMulti = 0;
+         bool needBack = false;
++        long long backCount = 0;   // 【2026-10-04 死循环修复】回溯总次数（硬上限见下方回溯分支）
+ 
+         vector<PieceInfo> pieces;
+         pieces.reserve(static_cast<std::vector<PieceInfo, std::allocator<PieceInfo>>::size_type>(eventCount / 4) + 4);
+@@ -337,24 +338,57 @@ static HitEvent* BuildTechniqueHitEventsImpl(
+ 
+             // 按键数超限：提升倍乘
+             if (cnt > maxK) {
+-                if (canMulti == 1 && isOffHand) needBack = true;
++                // 【2026-10-04 死循环修复】needBack 只在主手重做还有倍乘空间时才有
++                // 意义。mult 已顶格 7 时，回溯让主手以 prev.multiplier+1（8→钳到 7）
++                // 重做同一片：cnt 依旧超限、依旧只能截断 —— 回溯是零进展操作；而
++                // 这里若照旧置位 needBack，本片截断提交后立刻触发下方回溯，把
++                // nowT/nowD 重置回上一片起点，形成"提交→回溯→重做→再触发"的
++                // 无限振荡（pieces 大小恒定，哨兵 pieces.size()>eventCount*64 永不
++                // 触发，无任何单调量累积）。fc80dab3（38651 地板、极端变速谱）首次
++                // 进关即 100% 卡死：Player.log 在"预热 加载期就绪"后整局静默、游戏
++                // 冻结，2026-10-03 21:46 与 10-04 02:56 两次复现均为此处（预热走束
++                // 搜索不经过本循环，故预热能成功、进关才卡）。加 mult<7 条件后：
++                // 顶格时不再回溯，直接截断推进 —— 宁可手法局部次优，不可卡死。
++                if (canMulti == 1 && isOffHand && mult < 7) needBack = true;
+                 if (mult < 7) { mult++; mCnt[mult] = 0; continue; }
+-                else { cnt = maxK; }
++                else {
++                    cnt = maxK;
++                    // 【2026-10-04 片长真实化】mult 顶格截断 = 本片真实密度远超拍长假设
++                    // （pLen 由 BPM 折叠值推导，隐含"每砖 180°=半拍"；非 180° 砖 / 超高速
++                    // 段（Qyoh floor.speed=2048、The Sun=1024）下片长比真实跨度大百倍，
++                    // 片内塞上千真实事件 → 每片 cnt 截断成 maxK 单键平铺 = 手法表爆炸
++                    // （用户原话「两个键玩 1900BPM 根本不合理」）。砖的真实时长由【角度
++                    // 跨度】决定，已体现在 evTime 真实判定时刻里 —— 能直接量就别推导：
++                    // 片长改为覆盖恰好 maxK 个事件的真实时刻差，每片回到 maxK 键、
++                    // 时间轴对齐、换手序列恢复正常。普通谱 cnt≤maxK 不进此分支，零变化。
++                    int lastIdx = min(nowD + maxK, eventCount) - 1;
++                    double realSpan = evTime[lastIdx] - nowT;
++                    if (realSpan > 1e-9 && realSpan < pLen) pLen = realSpan;
++                }
+             }
+ 
+             // 回溯到上一片（由主手重新处理）
++            // 【2026-10-04 死循环修复】兜底保险：无论状态机将来出现何种未预见的
++            // 振荡路径，回溯总次数加硬上限（平均每事件最多 4 次），超限后放弃
++            // 回溯、以当前片截断推进。正常谱面回溯次数远低于该上限，行为不变。
+             if (needBack && !pieces.empty()) {
+-                needBack = false;
+-                hand = mainHand;
+-                auto& prev = pieces.back();
+-                nowT = prev.startTime;
+-                nowD = prev.evStart;
+-                memcpy(mCnt, mCntPre, sizeof(mCnt));
+-                mult = prev.multiplier + 1;
+-                if (mult > 7) mult = 7;
+-                pieces.pop_back();
+-                canMulti = 0;
+-                continue;
++                if (backCount >= (long long)eventCount * 4) {
++                    needBack = false;   // 超限：放弃回溯，截断推进保命
++                }
++                else {
++                    backCount++;
++                    needBack = false;
++                    hand = mainHand;
++                    auto& prev = pieces.back();
++                    nowT = prev.startTime;
++                    nowD = prev.evStart;
++                    memcpy(mCnt, mCntPre, sizeof(mCnt));
++                    mult = prev.multiplier + 1;
++                    if (mult > 7) mult = 7;
++                    pieces.pop_back();
++                    canMulti = 0;
++                    continue;
++                }
+             }
+ 
+             /*
+@@ -578,6 +612,921 @@ static HitEvent* BuildTechniqueHitEventsImpl(
+     }
+ }
+ 
++// ─────────────────────────────────────────────
++//  离线轨迹求解器（"播放器"的数据来源）
++//
++//  为什么要有它：BuildTechniqueHitEventsImpl 是**单趟贪心** —— 每片片长由
++//  「当前地板 speed 折算出的 BPM」唯一决定，然后无脑吃掉这片里的所有音。
++//  它没有任何前瞻：片子一旦切歪（半个三连音、一次变速），后面整张谱的换手
++//  相位就永久歪下去。这正是用户看到的「有的手法会突然变成左撇子」「忽快忽慢」。
++//
++//  求解器把同一件事变成搜索问题：
++//    状态 =（已吃到第几个音, 当前时间, 换手相位, 倍乘, 级联节奏计数器）
++//    动作 =（选一个倍乘 → 定片长 → 切这一片）以及可选的「把片边界拉到音上」
++//    代价 = 单音碎片罚分 + 同手连击罚分 + 相邻片长突变罚分 + 丢音罚分
++//  用束搜索（按 nowD 分层，每层保留代价最低的若干候选）挑全局最整齐的一套切法。
++//  代价口径直接对齐游戏内「手法表」显示的 frag 与 longest，所以 A/B 可直接对拍。
++//
++//  角度定位：每个事件额外带 (floorIndex, angleFrac)。因为行星在一块砖的旋转内
++//  是**匀角速度**的，而 scrLevelMaker 的 entryTime 就是按同样匀速算出来的，
++//  所以「时间比例」与「角度比例」严格线性等价：
++//     angleFrac = (t − entryTime(F)) / (pressTime(F) − entryTime(F))
++//  运行时只要比对本砖已扫过的角度比例即可触发，完全不用看时钟。
++//  按下事件的 angleFrac 恒为 1（按下时刻就是压线时刻），松键事件的 angleFrac
++//  落在 (0,1) —— 这正是角度驱动需要的全部信息。
++// ─────────────────────────────────────────────
++
++static TraceStats g_lastTraceStats;
++
++// 【2026-10-03 代价函数与指标对齐（关键）】
++//
++//  之前的代价函数按**时间片**记账（片级 keyRun、rough = 相邻片长比），
++//  而 harness.cpp / 游戏内「手法表」统计的是**按键序列**：
++//     frag    = 长度为 1 的同手连段个数
++//     longest = 最长同手连段长度
++//  两者差一层：连段长度 = 该连段里所有片按出的键数之和，一片不止一个键；
++//  而"同手"在 harness 里是按**键位**判的（isLeftKey(KeyCode)），
++//  不是按片的手标志判的。
++//  实测错位的指纹：frag 1008 → 2084（+107%）、longest 2 → 117，
++//  同时 leadAvg / gapSD / gapMax 与贪心**逐位相同**（几何没坏，
++//  纯粹是手/键分配跑偏）。注意 longest 是"段长"不是"片数"，
++//  强制每片换手也压不住它 —— 一片吃 4 个音时连段就是 4。
++//
++//  现在改成**按键流账本**：state 里直接维护已闭合连段的 frag/最长，
++//  每切一片就把本片键数按"是否换手"记进去，代价与 harness 口径逐项对应。
++struct SolveState {
++    SolveState() : parent(-1), piece(0, 0, 0.0, 0.0, 0.0, 0, 0), cost(0.0), consumed(0), depth(0), nowT(0.0), prevLen(0.0), hand(1), mult(0),
++                   keyRun(0), segCount(0), segFrag(0), segMax(0), segRunCost(0),
++                   emptyRun(0), segIdx(-2) {
++        memset(mCnt, 0, sizeof(mCnt));
++    }
++    int        parent;      // g_solveStates 下标，-1 = 起点
++    PieceInfo  piece;       // 本状态切出的这一片
++    double     cost;        // 累计代价（含本片）
++    int        consumed;    // 进度：到本状态为止已吃掉的音数（**不再用作分层判据**）
++    int        depth;      // 已切片的片数（束搜索的分层判据，见 SolveTechniqueTrace）
++    double     nowT;        // 本片结束后的时间
++    double     prevLen;     // 本片片长（给下一片算 rough 用）
++    int        hand;
++    int        mult;
++    // ── 按键流账本（与 harness.cpp / 游戏内手法表同口径）──
++    int        keyRun;      // 当前未闭合的同手连段已吃进的键数（换手时闭合）
++    int        segCount;   // 已闭合的同手连段数
++    int        segFrag;    // 已闭合且长度为 1 的连段数 = frag
++    int        segMax;     // 已闭合的最长连段长度 = longest
++    int        segRunCost;  // 已闭合各段的 (段长-2) 正部之和（增量罚项，替代只读 segMax）
++    int        emptyRun;    // 连续空片数（回环地板挖出的洞）
++    int        segIdx;
++    long long  mCnt[16];    // 级联节奏计数器（与贪心的 mCnt 同类型）
++};
++
++static SolveOptions MakeDefaultSolveOptions()
++{
++    SolveOptions o;
++    o.beamWidth     = 4;
++    o.maxMultiplier = 7;
++    o.fragPenalty   = 1.0;
++    o.runPenalty    = 0.6;
++    o.roughPenalty  = 0.25;
++    o.dropPenalty   = 10000.0;   // 等价硬约束：丢一个音要付出任何整形代价
++    return o;
++}
++
++// 把「每个判定砖的进场时刻 / 压线时刻」抽出来。判据照抄 NativeTechnique.cs：
++// 每个判定砖 i 只产生一个按下事件，时刻 = 下一个判定砖的 entryTime；而
++// 砖 i 自己进场（行星开始转 i 的角度）的时刻 = 上一个判定砖的按下时刻。
++// 这些区间 [entryTime(F), pressTime(F)] 首尾相接、恰好铺满整张谱。
++struct FloorTiming {
++    vector<int>    judgedIdx;    // 按下事件在 evTime 里的下标（升序）
++    vector<double> entryTime;    // 该砖旋转开始的时刻
++    vector<double> pressTime;    // 该砖压线（判定）的时刻
++};
++
++static FloorTiming BuildFloorTiming(const vector<int>& evFloor,
++                                    const vector<double>& evTime,
++                                    const vector<int>& evPress)
++{
++    FloorTiming ft;
++    for (size_t i = 0; i < evPress.size(); i++)
++        if (evPress[i] > 0) ft.judgedIdx.push_back((int)i);
++    ft.entryTime.resize(ft.judgedIdx.size());
++    ft.pressTime.resize(ft.judgedIdx.size());
++    for (size_t j = 0; j < ft.judgedIdx.size(); j++)
++    {
++        ft.pressTime[j] = evTime[ft.judgedIdx[j]];
++        // 第一个判定砖之前没有任何判定砖，它的进场时刻就是 0（谱面起点）
++        ft.entryTime[j] = (j == 0) ? 0.0 : evTime[ft.judgedIdx[j - 1]];
++    }
++    return ft;
++}
++
++// 事件时间 t 落在哪个旋转区间里 → (区间序号, 比例)
++static void LocateByTime(const FloorTiming& ft, double t, int* outSeg, double* outFrac)
++{
++    int n = (int)ft.pressTime.size();
++    if (n <= 0) { *outSeg = 0; *outFrac = 0.0; return; }
++    // 找第一个 pressTime >= t
++    int lo = 0, hi = n - 1, res = n - 1;
++    while (lo <= hi)
++    {
++        int mid = (lo + hi) >> 1;
++        if (ft.pressTime[mid] >= t) { res = mid; hi = mid - 1; }
++        else lo = mid + 1;
++    }
++    double a = ft.entryTime[res], b = ft.pressTime[res];
++    double f = (b - a) > 1e-12 ? (t - a) / (b - a) : 1.0;
++    if (f < 0.0) f = 0.0;
++    if (f > 1.0) f = 1.0;
++    *outSeg = res;
++    *outFrac = f;
++}
++
++// ─────────────────────────────────────────────
++//  片序列 → TraceEvent 序列
++//  事件生成规则照抄 BuildTechniqueHitEventsImpl 的那一段（键位解析 / 顺序表 /
++//  pressTimes 比例 / hold 头尾 / 段边界释放 / 同键重叠修正），只是换成带
++//  角度定位的 TraceEvent。
++// ─────────────────────────────────────────────
++static void EmitTraceEvents(const vector<PieceInfo>& pieces,
++                            const vector<double>&   evTime,
++                            const vector<int>&      evPress,
++                            const vector<int>&      evFloor,
++                            const FloorTiming&      ft,
++                            vector<TraceEvent>&     output)
++{
++    bool          activeHold = false;
++    unsigned char activeHoldKey = 0;
++    int           lastSegIdxEvent = -2;
++
++    for (size_t pcnt = 0; pcnt + 1 < pieces.size(); pcnt++) {
++        auto& cur = pieces[pcnt];
++        auto& next = pieces[pcnt + 1];
++        double pStart = (pcnt > 0) ? pieces[pcnt - 1].endTime : 0.0;
++
++        for (int i = 0; i < cur.evCount; i++) {
++            int    idx = cur.evStart + i;
++            int    press = evPress[idx];
++            double t = evTime[idx];
++
++            int    tseg;
++            double tfrac;
++            LocateByTime(ft, t, &tseg, &tfrac);
++            int tFloor = (tseg < (int)ft.judgedIdx.size()) ? evFloor[ft.judgedIdx[tseg]] : 0;
++
++            // hold 尾：松开当前长按键
++            if (press == -1) {
++                if (activeHold) {
++                    TraceEvent ev = {};
++                    ev.TriggerTime = t;
++                    ev.AngleFrac = (float)tfrac;
++                    ev.Flags = TRACE_FLAG_RELEASE_ONLY | TRACE_FLAG_HOLD_RELATED;
++                    ev.ReleaseKeyCode = activeHoldKey;
++                    ev.FloorIndex = tFloor;
++                    output.push_back(ev);
++                    activeHold = false;
++                    activeHoldKey = 0;
++                }
++                continue;
++            }
++
++            int curFloor = (idx < (int)evFloor.size()) ? evFloor[idx] : evFloor.back();
++
++            // 段边界：释放活跃 hold 键
++            int curSegIdx;
++            auto ec = ResolveConfig(curFloor, &curSegIdx);
++            if (curSegIdx != lastSegIdxEvent) {
++                if (activeHold && lastSegIdxEvent != -2) {
++                    TraceEvent relEv = {};
++                    double rt = t - 0.000001;
++                    int rs; double rf;
++                    LocateByTime(ft, rt, &rs, &rf);
++                    relEv.TriggerTime = rt;
++                    relEv.AngleFrac = (float)rf;
++                    relEv.Flags = TRACE_FLAG_RELEASE_ONLY | TRACE_FLAG_HOLD_RELATED;
++                    relEv.ReleaseKeyCode = activeHoldKey;
++                    relEv.FloorIndex = (rs < (int)ft.judgedIdx.size()) ? evFloor[ft.judgedIdx[rs]] : tFloor;
++                    output.push_back(relEv);
++                    activeHold = false;
++                    activeHoldKey = 0;
++                }
++                lastSegIdxEvent = curSegIdx;
++            }
++
++            const unsigned char* keys = (cur.hand == 0) ? ec.leftKeys : ec.rightKeys;
++            int                  keyCount = (cur.hand == 0) ? ec.leftKeyCount : ec.rightKeyCount;
++            int** orders = (cur.hand == 0) ? ec.leftKeyOrders : ec.rightKeyOrders;
++            int* orderLens = (cur.hand == 0) ? ec.leftOrderLengths : ec.rightOrderLengths;
++            int                  orderCounts = (cur.hand == 0) ? ec.leftOrderCounts : ec.rightOrderCounts;
++            const double* pressTimes = (cur.hand == 0) ? ec.leftPressTimes : ec.rightPressTimes;
++
++            if (!keys || keyCount <= 0) continue;
++
++            int oi = min(cur.evCount - 1, keyCount - 1);
++            int ki;
++            if (oi < orderCounts && orders && orders[oi] && i < orderLens[oi])
++                ki = orders[oi][i];
++            else
++                ki = i % keyCount;
++            ki = max(0, min(ki, keyCount - 1));
++
++            unsigned char kc = keys[ki];
++            double        ratio = (pressTimes && ki < keyCount) ? pressTimes[ki] : 0.8;
++            bool isHoldHead = (press == 2);
++
++            if (isHoldHead && activeHold) {
++                TraceEvent relPrev = {};
++                double rt = t - 0.000001;
++                int rs; double rf;
++                LocateByTime(ft, rt, &rs, &rf);
++                relPrev.TriggerTime = rt;
++                relPrev.AngleFrac = (float)rf;
++                relPrev.Flags = TRACE_FLAG_RELEASE_ONLY | TRACE_FLAG_HOLD_RELATED;
++                relPrev.ReleaseKeyCode = activeHoldKey;
++                relPrev.FloorIndex = (rs < (int)ft.judgedIdx.size()) ? evFloor[ft.judgedIdx[rs]] : tFloor;
++                output.push_back(relPrev);
++                activeHold = false;
++                activeHoldKey = 0;
++            }
++
++            TraceEvent pressEv = {};
++            pressEv.TriggerTime = t;
++            pressEv.AngleFrac = (float)tfrac;
++            pressEv.KeyCode = kc;
++            pressEv.Flags = isHoldHead ? TRACE_FLAG_HOLD_RELATED : 0;
++            pressEv.FloorIndex = curFloor;
++            output.push_back(pressEv);
++
++            if (isHoldHead) {
++                activeHold = true;
++                activeHoldKey = kc;
++                continue;
++            }
++
++            double dur = CalculateReleaseTime(pStart, cur, next, t, ratio);
++            double rel = t + dur;
++
++            if (next.hand != cur.hand || next.evCount == 0) {
++                if (rel >= next.endTime) rel = next.endTime - 1e-6;
++            }
++            else {
++                if (rel >= cur.endTime) rel = cur.endTime - 1e-6;
++            }
++            if (rel <= t) rel = t + (next.endTime - t) * 0.4;
++
++            TraceEvent releaseEv = {};
++            releaseEv.TriggerTime = rel;
++            int rs; double rf;
++            LocateByTime(ft, rel, &rs, &rf);
++            releaseEv.AngleFrac = (float)rf;
++            releaseEv.Flags = TRACE_FLAG_RELEASE_ONLY;
++            releaseEv.ReleaseKeyCode = kc;
++            releaseEv.FloorIndex = (rs < (int)ft.judgedIdx.size()) ? evFloor[ft.judgedIdx[rs]] : curFloor;
++            output.push_back(releaseEv);
++        }
++    }
++
++    if (activeHold && !pieces.empty()) {
++        TraceEvent finalRel = {};
++        finalRel.TriggerTime = pieces.back().endTime;
++        int rs; double rf;
++        LocateByTime(ft, finalRel.TriggerTime, &rs, &rf);
++        finalRel.AngleFrac = (float)rf;
++        finalRel.Flags = TRACE_FLAG_RELEASE_ONLY | TRACE_FLAG_HOLD_RELATED;
++        finalRel.ReleaseKeyCode = activeHoldKey;
++        finalRel.FloorIndex = (rs < (int)ft.judgedIdx.size()) ? evFloor[ft.judgedIdx[rs]] : 0;
++        output.push_back(finalRel);
++    }
++
++    // 同键重叠修正（TraceEvent 版）
++    if (output.empty()) return;
++    sort(output.begin(), output.end(),
++        [](const TraceEvent& a, const TraceEvent& b) { return a.TriggerTime < b.TriggerTime; });
++    map<unsigned char, int> pending;
++    int n = (int)output.size();
++    for (int i = 0; i < n; i++) {
++        auto& ev = output[i];
++        if (ev.Flags & TRACE_FLAG_RELEASE_ONLY) {
++            if (ev.ReleaseKeyCode != 0) pending.erase(ev.ReleaseKeyCode);
++            continue;
++        }
++        if (ev.KeyCode == 0) continue;
++        auto it = pending.find(ev.KeyCode);
++        if (it != pending.end()) {
++            auto& relEv = output[it->second];
++            if (relEv.TriggerTime >= ev.TriggerTime) {
++                relEv.TriggerTime = ev.TriggerTime - 1e-6;
++                // 时间被前移后角度比例也要跟着回退，否则角度驱动会晚触发
++                int rs; double rf;
++                LocateByTime(ft, relEv.TriggerTime, &rs, &rf);
++                relEv.AngleFrac = (float)rf;
++                relEv.FloorIndex = (rs < (int)ft.judgedIdx.size()) ? evFloor[ft.judgedIdx[rs]] : ev.FloorIndex;
++            }
++            pending.erase(it);
++        }
++        for (int j = i + 1; j < n; j++) {
++            auto& fwd = output[j];
++            if ((fwd.Flags & TRACE_FLAG_RELEASE_ONLY) && fwd.ReleaseKeyCode == ev.KeyCode
++                && !(fwd.Flags & TRACE_FLAG_HOLD_RELATED)) {
++                pending[ev.KeyCode] = j;
++                break;
++            }
++        }
++    }
++    sort(output.begin(), output.end(),
++        [](const TraceEvent& a, const TraceEvent& b) { return a.TriggerTime < b.TriggerTime; });
++}
++
++// ─────────────────────────────────────────────
++//  束搜索核心
++// ─────────────────────────────────────────────
++//
++// 【2026-10-03 三处正确性修复】第一版搜索写错了，离线 A/B（tools\abtest\bin\
++// solver_ab.exe）实测 frag 反而 +52.5%、wild 谱丢 230 个音、每行 cost 都是 0。
++// 根因与修法：
++//
++//  1) 悬垂引用：ExpandState 里 `const SolveState& st = states[si]` 一直活到
++//     push_back(ns) 之后，而 push_back 可能触发 vector 扩容 → st 指向已释放的
++//     内存。修法：先把父状态整份**拷贝**出来，绝不在扩容期间持有引用。
++//
++//  2) 分层判据反了：原来按"吃到的音最少"分层，可每片吃到的音越多（越贪心）
++//     代价往往越低，于是永远在"一口气吃掉最多音"的那条路上被窄化 —— 束搜索
++//     退化成贪心，cost 全 0、nodes=1。修法：按**消费进度**（已吃音数）分层，
++//     同一进度层内比代价，这才是束搜索的正确定义。
++//
++//  3) 丢音：原来只在"找不到完整解"时补贪心兜底，而 wild 谱在 nodeCap /
++//     layerGuard 上就断了，属于"有候选但没走到终点"，结果 pieces 覆盖不到谱尾，
++//     230 个音凭空消失。修法：兜底补片条件改成"覆盖不足就补"，与是否有
++//     best 无关；同时把 nodeCap / layerGuard 放宽。
++//
++//  另外把 `emptyRun` 的处理简化：空片不再清零 keyRun 的记账口径（原来
++//  空片后 keyRun 归 0 会让"空片夹在同手连击中间"这种形态反而显得更优）。
++
++// 搜索期共享的工作缓冲。求解器一次性调用，不并发。
++static vector<SolveState> g_solveStates;
++
++// 单片的代价。返回 INFINITY 表示这一步不可行（键数不足 / 越不过去）。
++//
++// 【2026-10-03 代价函数第三次重写（与手法表逐项对齐）】
++// 前两次都跑偏（frag 1008 → 1781 → 2084）。根因不是参数没调好，而是
++// 记账维度错了两次：
++//   ① 按**片**记 frag/cnt==1 —— frag 记的是按键序列里的孤立敲，一片可能
++//      与下一片同手并进同一条连段，片级判据根本不是 frag。
++//   ② 改成按**键**记 keyRun，但仍用"增量代价"结算 —— frag 是"连段闭合
++//      后长度恰为 1"的**后验**量，只有在连段闭合的那一刻才知道。
++// 现在改成闭合式记账：state 携带 segFrag/segMax，代价 = 账本快照值。
++// 口径与 tools\abtest\solver_ab.cpp 的 Analyze() 一一对应。
++static double PieceCost(const SolveOptions& opt, int cnt, int keyCount,
++                        double pLen, double prevLen,
++                        int keyRun, int emptyRun)
++{
++    if (keyCount <= 0) return INFINITY;
++
++    double c = 0.0;
++
++    // 本片按 cnt 个键，同手连段长度 = 之前的 keyRun + cnt
++    int run = keyRun + cnt;
++
++    // frag：只有当上一段不是同手（keyRun==0）且本片只按 1 个键时，
++    // 才是新的"孤立一敲"。
++    if (cnt == 1 && keyRun == 0) c += opt.fragPenalty;
++
++    // 同手连击超过 2 键开始罚
++    if (run > 2) c += opt.runPenalty * (double)(run - 2);
++
++    // 相邻片长突变：忽快忽慢的观感来源。用对数比，对 ±1 倍的变化对称。
++    if (prevLen > 1e-12 && pLen > 1e-12)
++        c += opt.roughPenalty * fabs(log(pLen / prevLen));
++
++    // 空片：回环地板挖出的时间洞。空洞本身不可避免（不推进时间轴就没法覆盖后面的音），
++    // 但连续空片会持续翻手相位，所以只罚"连续"，且空片**不计入 keyRun**
++    // （它没按键，Analyze() 里也不会产生 frag）。
++    if (cnt == 0) c += opt.fragPenalty * 0.5 * (double)(emptyRun + 1);
++
++    return c;
++}
++
++// 【2026-10-03】上面那个 PieceCost 保留作"平滑项"（rough），frag/run 改由
++// 下面的 ClosedLedger 记账 —— 因为 frag 是连段闭合时的**后验**量。
++// 用平滑项 + 闭合账本合起来当一家的代价。
++struct Ledger {
++    int keyRun = 0, segCount = 0, segFrag = 0, segMax = 0;
++    // 【2026-10-03 第 6 轮修复：longest 罚项原本是"读最大值"，等于只罚一次】
++    // 原来 LedgerCost 里是 `if (L.segMax > 2) c += runPenalty*(segMax-2)`。
++    // segMax 是**单调不减的最大值**：只要谱里出现过一条 20 长的同手连段，
++    // 之后再多开 99 条 20 长的，罚项纹丝不动 —— 优化器完全没有动力去压 longest。
++    // 这正是实测 longest 2→32（sec16）、3→117（surge）而代价反而变小的原因：
++    // 代价函数根本没在罚它。
++    // 改成**按段增量计费**：每闭合一段就累加 max(0, 该段长-2)。
++    // 这样"多一条长段"永远要额外付钱，量纲也和 frag 一致（都是段数的和）。
++    int segRunCost = 0;   // 已闭合各段的 (段长-2) 正部之和
++};
++
++// 把本片（cnt 个键、是否换手）记进账本。closedFrag/closedMax 返回本步闭合掉
++// 的那个连段的长度（0 表示没闭合）。
++static int LedgerApply(Ledger& L, int cnt, bool switchedHand)
++{
++    if (cnt <= 0) return 0;                      // 空片不按键，不进账
++    int closed = 0;
++    if (switchedHand) {                          // 换手 → 闭合上一段
++        closed = L.keyRun;
++        if (closed > 0) {
++            L.segCount++;
++            if (closed == 1) L.segFrag++;
++            if (closed > L.segMax) L.segMax = closed;
++            if (closed > 2) L.segRunCost += closed - 2;
++        }
++        L.keyRun = 0;
++    }
++    L.keyRun += cnt;
++    return closed;
++}
++
++// 代价 = **增量结算**。逐项对应 harness 的 frag / longest 口径，
++// 但每一分钱都在被搜索的那一步当场付清（原来返回账本快照，会造成 deferred charge）。
++//
++// 【2026-10-03 修复 D：退款必须以"本片真的加了键"为前提】
++// 原式 `else if (prevRun == 1) c -= fragPenalty;` 漏了 `cnt > 0`。
++// 空片（回环地板挖出的洞）加了 0 个键，keyRun 仍是 1，next 非空片照样退款 ——
++// 于是"多插几个空片"能无限退款，实测出现 **cost = −0.5** 的负代价解，
++// 求解器开始主动追求负分（并因此丢掉 160~283 个音）。
++// 只有当本片确实补进 1 个键（把 1 键段补成 2 键段）才该退那笔预付。
++// 【2026-10-03 修复 F：frag 必须"开段预付一次 + 闭合时结算"，且预付/退款不能串味】
++//
++// 前两版都错在把 frag 的收/退绑在了**局部**条件上：
++//  ① `closed == 1 → +frag` 与 `prevRun==0 && cnt==1 → +frag` 双重收费
++//     （长度 1 的段被罚 2.0，长度 2 的段罚 0.0 —— 权重翻倍且开段/闭段不同价）；
++//  ② `prevRun == 1 → −frag` 完全没看**这一片是否与上一段同手**。
++//     同手时是"把 1 键段补成 2 键段"，该退；
++//     换手时 prevRun=1 意味着**长度 1 的段正在闭合**，预付本来就该留下，
++//     却在这里退了款 —— 于是 frag 被"洗白"，代价函数奖励制造孤立一敲。
++//
++// 现在用与 harness 严格等价的 potential 记账：
++//   · 开段（prevRun==0 且本片有键）：+fragPenalty            —— 预付押金
++//   · 补键（prevRun==1 且**同手**延伸）：−fragPenalty        —— 押金退回，段长≥2 不算 frag
++//   · 闭合（closed≥2，即该段最终长度≥2）：−fragPenalty       —— 押金退回
++//   · 闭合长度 1：不退，押金留下 = 一条 frag
++// 每段恰好收一次、开段与闭段同价，且没有未入账的尾巴，束宽终于有判据。
++//
++// 【2026-10-03 修复 H（推翻 G，改用 potential 望远镜求和）】
++// G 版的"开段收、闭合退"在**同手延伸**时会把押金退两次：
++//   prevRun==1 且同手 → 退 −frag；随后该段闭合且长度≥2 → 又退 −frag。
++// 一条 3 键同手连段净收 1 − 2 = −1 的**负代价**。
++// 这类"手势推演式"的 if 列表越补越漏，已经错了四轮。
++// 正确做法是 potential（望远镜求和）：cost = Φ(终) − Φ(初)，无重复、无遗漏。
++// 取 Φ(run) = fragPenalty·[run == 1]，则一步增量恰好是：
++//   · run 0→1（新段开张）    +fragPenalty   ← 这就是 frag 的全部来源
++//   · run 1→2（补键救活）    −fragPenalty
++//   · run ≥2→≥2（含闭合）      0
++//   · run 1→0（孤立一敲闭合）  0   ← 押金留下 = 一条 frag，天然正确
++// 加上 runPenalty·max(0, run−2) 对超长段的线性罚，逐段结算。
++static double LedgerCost(const SolveOptions& opt, int closed, int prevRun, int cnt)
++{
++    int run = prevRun + cnt;                 // 本片之后未闭合段的长度（换手时 prevRun 归零）
++    if (closed > 0) run = closed + cnt;      // 换手：旧段以 closed 收尾，新段从 cnt 起
++    double c = opt.fragPenalty * ((prevRun == 1 ? 1 : 0) - (run == 1 ? 1 : 0));
++    if (run > 2) c += opt.runPenalty * (double)(run - 2);
++    return c;
++}
++
++// 展开一个状态：把父状态整份拷出来，再枚举所有可行的倍乘。
++// 关键：父状态按**值**取，且 parent 索引用形参传进来 ——
++// 绝不在 push_back 可能扩容的期间持有 g_solveStates 的引用。
++static void ExpandState(const SolveOptions& opt,
++                        const SolveState& st, int si,
++                        const vector<double>& evTime,
++                        const vector<int>&    evFloor,
++                        const double* speedMuls, int eventCount,
++                        double bpm, double speed,
++                        vector<int>& outNew)
++{
++    // 关键：start 必须是**下一个未消费的音**，即父片末尾，不是父片的起点。
++    //
++    // 【2026-10-03 致命 bug：片链索引不推进】
++    // 这里原来写的是 `int start = st.piece.evStart;` —— 也就是"父片自己的起点"。
++    // 于是每一层都在**同一个事件索引**上重新计数、重新生成按键：
++    //   flat1x 400 音 → 求解器吐 540 键；sparse 120 音 → 239 键；
++    //   wild 1000 音 → 只推进了 649 键（其余全被反复重发/覆盖，丢 351 音）。
++    // 贪心基线是对的：片落库时 evStart = nowD，下一轮 nowD += cnt
++    // （cpp 贪心 :400 / :409）。求解器必须同样把片首推过去。
++    int start = st.piece.evStart + st.piece.evCount;
++    if (start >= eventCount) return;
++
++    // 段边界 → 解析有效配置与该手的键数上限
++    int curSegIdx;
++    auto ec = ResolveConfig(evFloor[start], &curSegIdx);
++
++    // 本片所属地板的速度 → 折算成"建议 BPM"（与贪心同口径，保证可比）
++    double nowBpm = GetAdviceBpm(bpm, speed, ec.bpmLimit);
++    if (speedMuls) {
++        double ls = speedMuls[start];
++        if (ls > 1e-9) nowBpm = GetAdviceBpm(bpm, ls, ec.bpmLimit);
++    }
++
++    // 本片用手：**可搜索**。
++    //
++    // 【2026-10-03 动作空间修复】原来这里是
++    //     int curHand = st.hand;            // 只能沿用上一片的手
++    //     ns.hand = -curHand;               // 下一片强制换手
++    // 即"换手"根本没有决策权，frag 完全由片长决定，搜索器改不了分毫。
++    // 贪心能拿 frag=0（flat1x）是**振荡式**换手撞出来的，
++    // 不是它算出来的 —— 代价函数再准也无从下手。
++    // 现在把"用哪只手"变成显式动作：沿用上一片 / 换手，两条都入束。
++    //
++    // 代价：分支 ×2。换手的收益体现在 segFrag 闭合（避免孤立一敲），
++    // 不换手的收益体现在避免片长突变（rough）。两者都由账本统一裁决。
++    // 注意：贪心的"每片强制换手"仍保留为一条可达路径（沿用/换手都能走到它），
++    // 所以求解结果**至少**不比贪心差（配合层内 cost 排序与 best 取最小）。
++    for (int useHandI = 0; useHandI < 2; useHandI++)
++    {
++    // curHand = 上一片之后的"当前手"；useHandI==0 沿用，1 表示换手。
++    int curHand = st.hand;
++    int csH = (curHand == 1) ? 1 : 0;
++    if (useHandI) csH = 1 - csH;
++    int maxK = (csH == 0) ? ec.leftKeyCount : ec.rightKeyCount;
++    if (maxK <= 0) return;                 // 这只手没有配置按键 → 不可能按下去
++
++    // 候选倍乘。
++    //
++    // 【2026-10-03 修复 C：倍乘必须允许"降回来"，否则贪心路径不在搜索空间里】
++    // 贪心基线的 mult 是**振荡**的（cpp 贪心 :341 与 :407）：
++    //     if (cnt > maxK) mult++;                       // 密的地方提
++    //     while (mult > 0 && mCnt[mult] == 0) mult--;  // 级联满了再降
++    // 而求解器原来写的是 `for (mult = st.mult; ...)` —— mult 只能单调不减。
++    // 于是：某个密段一旦把 mult 顶到 5，之后**永远回不去**，整条片链都按
++    // 半拍切 → 每片只吃 1 个音 → frag（单键孤press）暴涨、pieceLenVariance
++    // 塌到 1e-8 量级、nodes 退化成 1。
++    // 实测（修复前）：flat1x frag 0 -> 28；pieceVar 1.12e-03；
++    //   step8_jit / wild / surge 三个用例 nodes=1、cost=0.0 —— 搜索完全躺平。
++    //
++    // 现在 mult 从 0 全枚举（含降档），贪心路径重新可达。
++    // 代价：分支数从 ≤8 变成 8×8，但 beam 剪枝吸收得住（见层内去重）。
++    for (int mult = 0; mult <= opt.maxMultiplier; mult++) {
++        double pLen = 60.0 / (nowBpm * pow(2.0, mult)) / 2.0;
++        if (pLen < 1e-9) pLen = 1e-9;
++        // 计数与贪心同口径：贪心是 CountEventsInRange(evTime, nowD, nowT + pLen*0.995)
++        // （cpp 贪心 :332）。两处口径必须一致，否则片链与贪心不可比。
++        int cnt = CountEventsInRange(evTime, start, st.piece.endTime + pLen * 0.995);
++        // 【2026-10-03 关键修复】键数上限的可行性保护。
++        // 降倍乘 → 片更长 → cnt 更大，所以 cnt 随 mult 单调**不增**：
++        // 还超上限说明还能靠升倍乘再切短，continue 试下一个；
++        // 但**倍乘到顶了还超上限，就必须照抄贪心的夹取**
++        // （cpp 贪心 :341-343 的 `else { cnt = maxK; }`），
++        // 不能把这种非法状态放进束里。
++        // 否则会切出"一片按 22 个键"这种 2 根手指按不出来的片 ——
++        // 实测正是如此：flat1x longest 2→22、dense16 2→62、frag 全线翻倍。
++        if (cnt > maxK) {
++            if (mult < opt.maxMultiplier) continue;
++            cnt = maxK;
++            // 【2026-10-04 片长真实化·与贪心同步】mult 顶格截断 = 真实密度远超拍长假设
++            // （pLen 由 GetAdviceBpm 折叠值推导，隐含"每砖 180°=半拍"；超高速/非 180° 砖下
++            // 片长比真实跨度大百倍）—— Qyoh 实测：束搜索在错位片长上选出 longest=183 的
++            // 同手长连击（贪心 frag 327/longest 13 vs 束搜索 frag 12142/longest 183），
++            // 用户表现为「一个按键爆发 1000 多 BPM」。真实间隔就摆在 evTime 里，
++            // 能量测就不推导：片长改为覆盖恰好 maxK 个事件的真实时刻差。
++            int lastIdx = min(start + maxK, eventCount) - 1;
++            double realSpan = evTime[lastIdx] - st.piece.endTime;
++            if (realSpan > 1e-9 && realSpan < pLen) pLen = realSpan;
++        }
++
++        // 回环地板挖出的时间洞（angleLength 绕回起点，判定点仍在）：贪心靠
++        // "片长自然扫不到任何音"形成 cnt==0 的空片。求解器允许一次跳很长的
++        // 空片，但那会让 nowT 猛冲、后续片的 rough 代价失真。空片步长单独限幅。
++        if (cnt == 0 && pLen > st.piece.pieceLen * 2.0 + 1e-9) continue;
++
++        // frag / longest 是"连段闭合"时的**后验**量，所以先把本片记进账本，
++        // 再用账本快照算代价（见 LedgerApply / LedgerCost）。
++        Ledger L;
++        L.keyRun   = st.keyRun;
++        L.segCount = st.segCount;
++        L.segFrag  = st.segFrag;
++        L.segMax   = st.segMax;
++        L.segRunCost = st.segRunCost;
++        // 「是否换手」按**按键侧**判：上一片的手 st.piece.hand vs 本片 csH。
++        //
++        // 【2026-10-03 致命记账 bug（解释了前三轮为什么白改）】
++        // 这里原来写的是 `st.hand != curHand`，而 curHand = st.hand —— 恒为假！
++        // 于是 LedgerApply 从不"闭合"连段：segCount/segFrag/segMax 恒为 0，
++        // frag 罚项**完全失效**（代价里只剩 rough），优化器等于在盲飞。
++        // 症状很隐蔽：实测代价从 14981 降到 12430（frag 项消失 → 代价变小），
++        // 但真实 frag 反而从 2084 涨到 2075 —— 越"优化"越糟，因为它优化的量
++        // 根本不是 frag。
++        int prevRun = st.keyRun;
++        bool switched = (st.piece.hand != csH);
++        int closed = LedgerApply(L, cnt, switched);
++
++        // rough（相邻片长突变）与空片连跑：形态项，仍是逐步结算。
++        double cost = LedgerCost(opt, closed, prevRun, cnt);
++        if (st.prevLen > 1e-12 && pLen > 1e-12)
++            cost += opt.roughPenalty * fabs(log(pLen / st.prevLen));
++        if (cnt == 0) cost += opt.fragPenalty * 0.5 * (double)(st.emptyRun + 1);
++        if (!isfinite(cost)) continue;
++
++        SolveState ns;
++        ns.parent = si;
++        ns.prevLen = pLen;
++        // 下一片的"当前手"= 本片实际用的手（换手与否已含在 csH 里）
++        ns.hand = (csH == 1) ? 1 : -1;
++        ns.mult = mult;
++        ns.segIdx = curSegIdx;
++        ns.emptyRun = (cnt == 0) ? st.emptyRun + 1 : 0;
++        ns.keyRun    = L.keyRun;
++        ns.segCount  = L.segCount;
++        ns.segFrag   = L.segFrag;
++        ns.segMax    = L.segMax;
++        ns.segRunCost = L.segRunCost;
++        ns.nowT = st.piece.endTime + pLen;
++        memcpy(ns.mCnt, st.mCnt, sizeof(ns.mCnt));
++        // 级联节奏计数器（与贪心同口径）
++        for (int c2 = mult; c2 > 0; c2--) {
++            ns.mCnt[c2] += (long long)pow(2, 16 - (mult - c2));
++            ns.mCnt[c2] %= (1LL << 18);
++        }
++        ns.piece = PieceInfo(cnt, csH, pLen, st.piece.endTime, st.piece.endTime + pLen,
++                             start, mult);
++        ns.consumed = st.consumed + cnt;   // 进度：已吃掉的音数（终局判定 + 兜底选优用）
++        ns.depth   = st.depth + 1;    // 片数：分层判据
++        ns.cost = st.cost + cost;
++
++        outNew.push_back((int)g_solveStates.size());
++        g_solveStates.push_back(ns);
++    }
++    }  // end useHandI（换手/不换手 两条动作）
++}
++
++// ─────────────────────────────────────────────
++//  导出函数：SolveTechniqueTrace
++// ─────────────────────────────────────────────
++TraceEvent* SolveTechniqueTrace(
++    double* entryTimes,
++    int*    pressTypes,
++    int*    floorIndices,
++    double* speedMuls,
++    int     eventCount,
++    double  bpm,
++    double  speed,
++    SolveOptions* opts,
++    int* outEventCount)
++{
++    *outEventCount = 0;
++    memset(&g_lastTraceStats, 0, sizeof(g_lastTraceStats));
++    if (eventCount == 0 || !entryTimes || !pressTypes || !floorIndices)
++        return nullptr;
++
++    try {
++        SolveOptions opt = opts ? *opts : MakeDefaultSolveOptions();
++        if (opt.beamWidth < 1) opt.beamWidth = 1;
++        if (opt.maxMultiplier < 0) opt.maxMultiplier = 0;
++        if (opt.maxMultiplier > 7) opt.maxMultiplier = 7;
++
++        vector<double> evTime(entryTimes, entryTimes + eventCount);
++        vector<int>    evPress(pressTypes, pressTypes + eventCount);
++        vector<int>    evFloor(floorIndices, floorIndices + eventCount);
++        FloorTiming ft = BuildFloorTiming(evFloor, evTime, evPress);
++
++        vector<double> localSpeed;
++        const double* localSpeedPtr = nullptr;
++        if (speedMuls) {
++            localSpeed.assign(speedMuls, speedMuls + eventCount);
++            localSpeedPtr = localSpeed.data();
++        }
++
++        g_solveStates.clear();
++        SolveState root;
++        root.parent = -1;
++        root.piece = PieceInfo(0, 0, 0.0, 0.0, 0.0, 0, 0);
++        root.cost = 0.0;
++        root.consumed = 0;
++        root.depth = 0;
++        root.nowT = 0.0;
++        root.prevLen = 0.0;
++        root.hand = (g_config.handPreference == 0) ? -1 : 1;
++        root.mult = 0;
++        root.keyRun = 0;
++        root.segCount = 0;
++        root.segFrag = 0;
++        root.segMax = 0;
++        root.segRunCost = 0;
++        root.emptyRun = 0;
++        root.segIdx = -2;
++        memset(root.mCnt, 0, sizeof(root.mCnt));
++        g_solveStates.push_back(root);
++
++        // ── 束搜索主循环 ───────────────────────────────────
++        // 【2026-10-03 修复 I：分层判据必须用"片数"，不能用"已吃音数"】
++        // 原先按 `consumed`（已吃音数）分层，取 minConsumed 那一层推进。
++        // 但 cnt 是 `CountEventsInRange(..., nowT + pLen*0.995)` 的结果，
++        // 而 pLen 随倍乘**指数缩短**：mult=7 那一档半拍只够扫到 1 个音。
++        // 于是"最小已吃音数"这一层**恒定由 mult=7 的 1 键片组成**，
++        // 束搜索被永久锁死在"每片只按 1 个键"的动作空间里 —— 正好是
++        // frag 最多的形态，也正是贪心用它 frag=0 的反面。
++        // 实测印证：solver 的 runs 普遍 < greedy（481 vs 373），
++        // 却 frag 高一倍 —— 多出的段全是 1 键孤敲。
++        // 正确分层：片数 `depth`。每片的 cnt 自由（贪心的 2 键片自然可达），
++        // 层内仍按累计代价排序取束宽。
++        vector<int> frontier; frontier.push_back(0);
++        // 【2026-10-03 修复 E：节点上限不能用"常数×音数"】
++        // 原来是 nodeCap = eventCount*64 + 4096，实测**每一个 beam 宽度都刚好顶满**
++        // （16/48/128 三个宽度 nodes 都停在 ~42.5k = 800*64+4096），
++        // 说明上限才是真正的停止条件，束宽根本管不着：
++        //   · beam 越大，每层展开的候选越多 → 同样的节点预算**更早耗尽**
++        //     → 搜索被截断 → 160~283 个音被丢（硬约束直接破）。
++        // 也就是说"加大束宽"一直在反向操作：它让丢音变多而不是变少。
++        // 现在把上限放到"与束宽和分支数成正比"，让**层数**（= 音数）成为
++        // 真正的推进驱动力，而不是节点总数。
++        // 上限仍保留，纯粹是防病态谱（超大谱 + 大束宽）把内存吃光；
++        // 触发时记 solverNodes 便于事后核对是否截断。
++        size_t nodeCap = (size_t)eventCount * (size_t)(opt.beamWidth * 64 + 1024) + 1048576;
++        int    layerGuard = 0;
++        int    best = -1;
++        bool   capped = false;
++
++        // 收紧下限：nodeCap 只是防爆内存的兜底，层推进由 layerGuard 主导。
++        // 【2026-10-03 修复 G：终局候选必须与"部分解"分开记分】
++        // 下面马上要修的是 best 的选取；这里先把 beam=128 复现的 154 丢音
++        // 钉死为"必须修复"的对照基线。
++
++        while (!frontier.empty() &&
++               g_solveStates.size() < nodeCap &&
++               layerGuard++ < eventCount * 4 + 64)
++        {
++            vector<int> cand;
++            for (int si : frontier) {
++                // 已吃完所有音 → 终局候选
++                if (g_solveStates[si].consumed >= eventCount) {
++                    if (best < 0 || g_solveStates[si].cost < g_solveStates[best].cost)
++                        best = si;
++                    continue;
++                }
++                // 父状态**按值拷贝**，否则 push_back 扩容会让引用悬空
++                SolveState st = g_solveStates[si];
++                vector<int> produced;
++                ExpandState(opt, st, si, evTime, evFloor,
++                            localSpeedPtr, eventCount, bpm, speed, produced);
++                for (int p : produced) cand.push_back(p);
++            }
++            if (cand.empty()) break;
++
++            // 同一"片数"深度内取代价最小的一层（片数每步 +1，深度单调，搜索必然推进）
++            int minDepth = INT_MAX;
++            for (int c2 : cand)
++                minDepth = min(minDepth, g_solveStates[c2].depth);
++            vector<int> layer;
++            for (int c2 : cand)
++                if (g_solveStates[c2].depth == minDepth) layer.push_back(c2);
++            if (layer.empty()) break;
++
++            sort(layer.begin(), layer.end(), [&](int a, int b2) {
++                if (g_solveStates[a].cost != g_solveStates[b2].cost)
++                    return g_solveStates[a].cost < g_solveStates[b2].cost;
++                return a < b2;
++            });
++            // 同 (进度, 手, 倍乘, 连击, 片长) 只留最省的一个。
++                    // 注意账本字段（segFrag/segMax/segCount）**不入去重键**：
++                    // 它们是代价的来源，用它们去重会把不同代价的候选提前合并，
++                    // 等于绕过排序直接丢状态。
++                    vector<int> pruned;
++                    for (int c2 : layer) {
++                        bool dup = false;
++                        for (int p : pruned) {
++                            const SolveState& A = g_solveStates[c2];
++                            const SolveState& B = g_solveStates[p];
++                            if (A.consumed == B.consumed && A.hand == B.hand
++                                && A.mult == B.mult && A.keyRun == B.keyRun
++                                && A.emptyRun == B.emptyRun
++                                && fabs(A.piece.endTime - B.piece.endTime) < 1e-9) { dup = true; break; }
++                        }
++                if (!dup) pruned.push_back(c2);
++                if ((int)pruned.size() >= opt.beamWidth) break;
++            }
++            if (pruned.empty()) break;
++            frontier = pruned;
++        }
++
++        // 兜底：没有走到终局的完整解时，取"吃到的音最多、代价最低"的那个。
++        // （变量名不能用 far —— Windows SDK 头里有同名历史宏，会展开成空。）
++        // 之后还有一道"覆盖不足就补贪心片"的兜底，保证零丢音（见文件头第 3 条）。
++        if (best < 0) {
++            int bestPartial = 0;
++            for (size_t i = 1; i < g_solveStates.size(); i++) {
++                const SolveState& A = g_solveStates[i];
++                const SolveState& B = g_solveStates[bestPartial];
++                if (A.consumed > B.consumed ||
++                    (A.consumed == B.consumed && A.cost < B.cost))
++                    bestPartial = (int)i;
++            }
++            best = bestPartial;
++        }
++
++        // 回溯出片序列
++        vector<PieceInfo> pieces;
++        for (int c2 = best; c2 > 0; c2 = g_solveStates[c2].parent)
++            pieces.push_back(g_solveStates[c2].piece);
++        reverse(pieces.begin(), pieces.end());
++
++        // 覆盖不足的部分：补贪心兜底片，保证一个音都不丢
++        {
++            int covered = pieces.empty() ? 0 : pieces.back().evStart + pieces.back().evCount;
++            double nowT = pieces.empty() ? 0.0 : pieces.back().endTime;
++            int handNow = (g_config.handPreference == 0) ? -1 : 1;
++            int multNow = 0;
++            int guard = 0;
++            while (covered < eventCount && guard++ < eventCount * 4) {
++                int segIdx;
++                auto ec = ResolveConfig(evFloor[covered], &segIdx);
++                double nowBpm = GetAdviceBpm(bpm, speed, ec.bpmLimit);
++                if (speedMuls) {
++                    double ls = speedMuls[min(covered, eventCount - 1)];
++                    if (ls > 1e-9) nowBpm = GetAdviceBpm(bpm, ls, ec.bpmLimit);
++                }
++                double pLen = 60.0 / (nowBpm * pow(2.0, multNow)) / 2.0;
++                if (pLen < 1e-9) pLen = 1e-9;
++                int csH = (handNow == 1) ? 1 : 0;
++                int maxK = (csH == 0) ? ec.leftKeyCount : ec.rightKeyCount;
++                int cnt = CountEventsInRange(evTime, covered, nowT + pLen * 0.995);
++                if (maxK > 0 && cnt > maxK) {
++                    if (multNow < opt.maxMultiplier) { multNow++; continue; }
++                    cnt = maxK;
++                }
++                pieces.push_back(PieceInfo(cnt, csH, pLen, nowT, nowT + pLen, covered, multNow));
++                covered += cnt;
++                nowT += pLen;
++                handNow = -handNow;
++            }
++        }
++
++        // 哨兵片
++        if (!pieces.empty()) {
++            const PieceInfo& lp = pieces.back();
++            pieces.push_back(PieceInfo(0, 1 - lp.hand, lp.pieceLen,
++                                        lp.endTime, lp.endTime + lp.pieceLen,
++                                        lp.evStart + lp.evCount, lp.multiplier));
++        }
++
++        vector<TraceEvent> output;
++        EmitTraceEvents(pieces, evTime, evPress, evFloor, ft, output);
++
++        // ── 统计（对齐游戏内「手法表」）──────────────────────
++        int frag = 0, longest = 0, run = 0, lastHand = -1;
++        for (size_t i = 0; i + 1 < pieces.size(); i++) {
++            if (pieces[i].evCount == 1) frag++;
++            if (pieces[i].evCount == 0) continue;
++            if (pieces[i].hand == lastHand) run++; else run = 1;
++            lastHand = pieces[i].hand;
++            if (run > longest) longest = run;
++        }
++        double mean = 0.0;
++        for (size_t i = 0; i + 1 < pieces.size(); i++) mean += pieces[i].pieceLen;
++        mean /= (double)(pieces.size() > 1 ? pieces.size() - 1 : 1);
++        double var = 0.0;
++        for (size_t i = 0; i + 1 < pieces.size(); i++) {
++            double d = pieces[i].pieceLen - mean;
++            var += d * d;
++        }
++        var /= (double)(pieces.size() > 1 ? pieces.size() - 1 : 1);
++
++        g_lastTraceStats.fragmentCount = frag;
++        g_lastTraceStats.longestSameHand = longest;
++        g_lastTraceStats.droppedNotes = 0;
++        g_lastTraceStats.pieceCount = (int)(pieces.size() > 0 ? pieces.size() - 1 : 0);
++        g_lastTraceStats.pieceLenVariance = var;
++        g_lastTraceStats.totalCost = (best >= 0) ? g_solveStates[best].cost : 0.0;
++        g_lastTraceStats.fragCost = frag * opt.fragPenalty;
++        g_lastTraceStats.runCost = (longest > 2 ? (double)(longest - 2) : 0.0) * opt.runPenalty;
++        g_lastTraceStats.roughCost = var * opt.roughPenalty;
++        g_lastTraceStats.solverNodes = (int)g_solveStates.size();
++
++        size_t byteSize = output.size() * sizeof(TraceEvent);
++        TraceEvent* result = (TraceEvent*)CoTaskMemAlloc(byteSize ? byteSize : 1);
++        if (!result) { *outEventCount = 0; return nullptr; }
++        if (byteSize) memcpy(result, output.data(), byteSize);
++        *outEventCount = (int)output.size();
++        return result;
++    }
++    catch (...) {
++        *outEventCount = 0;
++        memset(&g_lastTraceStats, 0, sizeof(g_lastTraceStats));
++        return nullptr;
++    }
++}
++
++// ─────────────────────────────────────────────
++//  导出函数：GetLastTraceStats
++// ─────────────────────────────────────────────
++TraceStats* GetLastTraceStats()
++{
++    TraceStats* p = (TraceStats*)CoTaskMemAlloc(sizeof(TraceStats));
++    if (p) *p = g_lastTraceStats;
++    return p;
++}
++
++// ─────────────────────────────────────────────
++//  导出函数：FreeTraceEvents
++// ─────────────────────────────────────────────
++void FreeTraceEvents(TraceEvent* events)
++{
++    if (events) CoTaskMemFree(events);
++}
++
+ // ─────────────────────────────────────────────
+ //  导出函数：BuildTechniqueHitEvents（旧接口，全图单一速度）
+ // ─────────────────────────────────────────────
+diff --git a/TechniqueSimulator/TechniqueSimulator.def b/TechniqueSimulator/TechniqueSimulator.def
+index 4000f8a..43bce48 100644
+--- a/TechniqueSimulator/TechniqueSimulator.def
++++ b/TechniqueSimulator/TechniqueSimulator.def
+@@ -2,4 +2,7 @@ EXPORTS
+     SetTechniqueConfig
+     BuildTechniqueHitEvents
+     BuildTechniqueHitEventsEx
+-    FreeHitEvents
+\ No newline at end of file
++    FreeHitEvents
++    SolveTechniqueTrace
++    GetLastTraceStats
++    FreeTraceEvents
+\ No newline at end of file
+diff --git a/TechniqueSimulator/TechniqueSimulator.h b/TechniqueSimulator/TechniqueSimulator.h
+index 1fe7026..992f5ad 100644
+--- a/TechniqueSimulator/TechniqueSimulator.h
++++ b/TechniqueSimulator/TechniqueSimulator.h
+@@ -52,6 +52,44 @@ struct TechniqueSegment {
+     // sizeof = 120
+ };
+ 
++// ── 离线轨迹事件（"播放器"用；比 HitEvent 多带角度定位信息）─────
++//
++// 与 HitEvent 的区别：HitEvent 只描述"什么时候按哪个键"（时间轴驱动够用），
++// 角度驱动还需要知道"这是第几块砖的旋转里的第几拍"。floorIndex + angleFrac
++// 这两个字段让回放完全不依赖时钟 —— 只比对行星当前转过的角度比例。
++//
++// angleFrac = 该按键时刻在"第 floorIndex 块砖的旋转"里已扫过的比例 ∈[0,1]。
++//   0 = 刚进这块砖（行星落后整块砖的角度距离）
++//   1 = 转到该砖的目标角（正好压在判定线上）
++// 求解器是纯时间轴的（只认 entryTime），所以它算得出 angleFrac 的分子分母，
++// 但 angleLength/isCW 属于游戏运行期数据 —— 留给托管层在加载轨迹时乘上去，
++// 这样缓存文件不绑定运行期几何，回放时用当次运行的权威值。
++struct TraceEvent {
++    double        TriggerTime;      // offset 0
++    float         AngleFrac;        // offset 8
++    unsigned char KeyCode;          // offset 12
++    unsigned char Flags;            // offset 13  bit0=ReleaseOnly bit1=IsHoldRelated
++    unsigned char ReleaseKeyCode;   // offset 14
++    unsigned char _pad0;            // offset 15
++    int           FloorIndex;       // offset 16
++    // 4 bytes padding               // offset 20
++    // sizeof = 24
++};
++
++// TraceEvent.Flags 位定义
++#define TRACE_FLAG_RELEASE_ONLY   0x01
++#define TRACE_FLAG_HOLD_RELATED   0x02
++
++// 离线求解器的搜索参数（决定"最优方案"的取舍口径）
++struct SolveOptions {
++    int    beamWidth;        // 每一层保留的候选数（越小越快、越大越可能找到更好的）
++    int    maxMultiplier;    // 倍乘上限（对应贪心里的 mult < 7）
++    double fragPenalty;      // 单音碎片片的罚分权重（游戏内"手法表"里的 frag）
++    double runPenalty;       // 同手连击超出 2 后的罚分权重（游戏内"手法表"里的 longest）
++    double roughPenalty;     // 相邻片长突变的罚分权重（"忽快忽慢"的观感）
++    double dropPenalty;      // 丢音罚分（应始终远大于其它项，等价硬约束）
++};
++
+ // 全局手法配置
+ // 必须与 C# NativeTechniqueConfig (Pack=8) 完全对齐
+ struct TechniqueConfig {
+@@ -113,4 +151,48 @@ extern "C" {
+         int* outEventCount);
+ 
+     TECH_API void FreeHitEvents(HitEvent* events);
++
++    // ─────────────────────────────────────────
++    //  离线求解器（"播放器"的数据来源）
++    //
++    //  与 BuildTechniqueHitEventsEx 的区别：那个是**单趟贪心**（每片只按当前
++    //  片长贪心吃音，片长由 bpmLimit/speed 决定），从头到尾没有任何前瞻；
++    //  这个是**束搜索**：在"片长 × 手上/主手 × 倍乘"的分层状态图上做前瞻，
++    //  用 SolveOptions 里的罚分口径挑一套全局更整齐的切法。同一份输入两边都跑，
++    //  离线 A/B 对比 frag / longest / 片长方差即可量化收益。
++    //
++    //  不改动既有 4 个导出的行为，纯增量。
++    // ─────────────────────────────────────────
++
++    // 求解：返回 TraceEvent 数组（CoTaskMemAlloc，用 FreeTraceEvents 释放）
++    //   entryTimes/pressTypes/floorIndices/speedMuls 与 BuildTechniqueHitEventsEx 同义
++    //   opts 传 nullptr = 用默认口径（等价于一次束宽 1 的搜索，即接近贪心基线）
++    TECH_API TraceEvent* SolveTechniqueTrace(
++        double* entryTimes,
++        int*    pressTypes,
++        int*    floorIndices,
++        double* speedMuls,
++        int     eventCount,
++        double  bpm,
++        double  speed,
++        SolveOptions* opts,
++        int* outEventCount);
++
++    // 诊断：求解器内部的代价分解（frag 数 / 最长同手连击 / 丢音数 / 片长方差）
++    //   传 nullptr = 不导出。调用方负责释放（CoTaskMemAlloc）。
++    struct TraceStats {
++        int    fragmentCount;      // 单音碎片片数（frag）
++        int    longestSameHand;    // 最长同手连击（longest）
++        int    droppedNotes;       // 未能覆盖的音数（应恒为 0）
++        int    pieceCount;         // 片总数
++        double pieceLenVariance;   // 片长方差（越小越匀）
++        double totalCost;          // 搜索目标值
++        double fragCost;
++        double runCost;
++        double roughCost;
++        int    solverNodes;        // 展开的状态数（性能观测）
++    };
++    TECH_API TraceStats* GetLastTraceStats();
++
++    TECH_API void FreeTraceEvents(TraceEvent* events);
+ }
+\ No newline at end of file

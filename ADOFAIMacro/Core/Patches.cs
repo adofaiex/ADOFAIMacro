@@ -161,10 +161,23 @@ namespace ADOFAIMacro.Core
             [HarmonyPostfix]
             public static void Postfix(bool __result, string levelPath)
             {
-                if (__result && Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
+                if (!__result) return;
+
+                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation && Main.Settings.LevelConfigAutoLoad)
                 {
                     LevelTechniqueManager.ResetCheckState();
                     LevelTechniqueManager.CheckAndLoadLevelConfig();
+                }
+
+                // 轨迹播放器：加载期预热（21:20 前的功能，回退时被误删，已恢复）。
+                // 此刻（scnGame.LoadAndPlayLevel 尾部）整首谱的地板与每块砖的
+                // entryTime 都已经算好（MakeLevel → ApplyEventsToFloors →
+                // CalculateFloorEntryTimes），而 conductor 尚未 Start()。
+                // 所以这里就能把最优轨迹求解出来并落盘 —— 进关按下开始之前
+                // 就已就绪，不必"先玩一次"。
+                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation)
+                {
+                    Guarded("TracePrewarm", () => MacroEngine.PrewarmTrace());
                 }
             }
         }
@@ -232,6 +245,16 @@ namespace ADOFAIMacro.Core
                     __instance.editorDifficultySelector.SetChangeable(true);
                     if (Main.Settings.ChangeNoFaillInPlay)
                     __instance.buttonNoFail.interactable = true;
+                }
+
+                // 轨迹播放器预热（编辑器试玩路径）（21:20 前的功能，回退时被误删，已恢复）。
+                // 编辑器试玩不走 scnGame.LoadAndPlayLevel，所以上面那个补丁挂不上。
+                // 但 scnEditor.Play() 内部会跑 customLevel.Play(num) →
+                // FinishCustomLevelLoading() → ApplyEventsToFloors()（试玩时 remakeFloors=true），
+                // 返回到这里时地板与 entryTime 已就绪，同样是"按下开始之前"。
+                if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation)
+                {
+                    Guarded("TracePrewarmEditor", () => MacroEngine.PrewarmTrace());
                 }
             }
         }

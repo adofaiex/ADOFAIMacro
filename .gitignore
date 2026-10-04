@@ -373,3 +373,5 @@ AGENTS.md
 .codegraph/piecedump.txt
 build_cpp.out
 piecelen.txt
+
+tools/freezetest/*.dmp

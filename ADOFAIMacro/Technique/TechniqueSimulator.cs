@@ -23,6 +23,12 @@ namespace ADOFAIMacro.Technique
         private static DelegateBuildTechEvents? _buildTechEvents;
         private static DelegateBuildTechEventsEx? _buildTechEventsEx;
         private static DelegateFreeTechEvents? _freeTechEvents;
+        // ── 离线求解器（播放器用；老 DLL 没有这些导出时全部为 null）──
+        private static DelegateSolveTrace? _solveTrace;
+        private static DelegateGetTraceStats? _getTraceStats;
+        private static DelegateFreeTraceEvents? _freeTraceEvents;
+        private static bool _solverLoadAttempted = false;
+        private static bool _solverAvailable = false;
         private static bool _dllLoadAttempted = false;
 
         // ─────────────────────────────────────────────
@@ -153,6 +159,85 @@ namespace ADOFAIMacro.Technique
         private delegate void DelegateFreeTechEvents(IntPtr events);
 
         // ─────────────────────────────────────────────
+        //  离线求解器 ABI（TechniqueSimulator.h，Pack=8）
+        //
+        //  struct TraceEvent（24 字节）
+        //    0  double  TriggerTime
+        //    8  float   AngleFrac
+        //   12  byte    KeyCode
+        //   13  byte    Flags        (0x01=RELEASE_ONLY, 0x02=HOLD_RELATED)
+        //   14  byte    ReleaseKeyCode
+        //   15  byte    pad
+        //   16  int     FloorIndex
+        //  struct SolveOptions
+        //    0  int  beamWidth / 4 int maxMultiplier
+        //    8  double fragPenalty / 16 double runPenalty
+        //   24  double roughPenalty / 32 double dropPenalty
+        //  struct TraceStats（48 字节）
+        //    0 int fragmentCount / 4 int longestSameHand / 8 int droppedNotes
+        //   12 int pieceCount / 16 double pieceLenVariance / 24 double totalCost
+        //   32 double fragCost / 40 double runCost → 实为
+        //   32 fragCost / 40 runCost / 48 roughCost / 56 solverNodes → 见下方
+        // ─────────────────────────────────────────────
+        [StructLayout(LayoutKind.Sequential, Pack = 8)]
+        internal struct NativeTraceEvent
+        {
+            public double TriggerTime;   // 0
+            public float AngleFrac;      // 8
+            public byte KeyCode;         // 12
+            public byte Flags;           // 13
+            public byte ReleaseKeyCode;  // 14
+            public byte _pad0;           // 15
+            public int FloorIndex;       // 16
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 8)]
+        internal struct NativeSolveOptions
+        {
+            public int BeamWidth;      // 0
+            public int MaxMultiplier;  // 4
+            public double FragPenalty; // 8
+            public double RunPenalty;  // 16
+            public double RoughPenalty;// 24
+            public double DropPenalty; // 32
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 8)]
+        internal struct NativeTraceStats
+        {
+            public int FragmentCount;      // 0
+            public int LongestSameHand;    // 4
+            public int DroppedNotes;       // 8
+            public int PieceCount;         // 12
+            public double PieceLenVariance;// 16
+            public double TotalCost;       // 24
+            public double FragCost;        // 32
+            public double RunCost;         // 40
+            public double RoughCost;       // 48
+            public int SolverNodes;        // 56
+        }
+
+        internal const byte TRACE_FLAG_RELEASE_ONLY = 0x01;
+        internal const byte TRACE_FLAG_HOLD_RELATED = 0x02;
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr DelegateSolveTrace(
+            [In] double[] entryTimes,
+            [In] int[] pressTypes,
+            [In] int[] floorIndices,
+            [In] double[]? speedMuls,
+            int eventCount,
+            double bpm, double speed,
+            IntPtr options,
+            out int outEventCount);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr DelegateGetTraceStats();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void DelegateFreeTraceEvents(IntPtr events);
+
+        // ─────────────────────────────────────────────
         //  Kernel32
         // ─────────────────────────────────────────────
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
@@ -163,6 +248,12 @@ namespace ADOFAIMacro.Technique
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool FreeLibrary(IntPtr hModule);
+
+        [DllImport("ole32.dll")]
+        private static extern IntPtr CoTaskMemAlloc(int cb);
+
+        [DllImport("ole32.dll")]
+        private static extern void CoTaskMemFree(IntPtr pv);
 
         // ─────────────────────────────────────────────
         //  公开 API
@@ -237,15 +328,140 @@ namespace ADOFAIMacro.Technique
                 : null;
                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
 
+                // 离线求解器（播放器）：缺失不影响原有 4 个导出，缺失时 Trace 走贪心兜底
+                IntPtr solvePtr = GetProcAddress(_techDllHandle, "SolveTechniqueTrace");
+                IntPtr statsPtr = GetProcAddress(_techDllHandle, "GetLastTraceStats");
+                IntPtr freeTracePtr = GetProcAddress(_techDllHandle, "FreeTraceEvents");
+                _solverAvailable = solvePtr != IntPtr.Zero
+                    && statsPtr != IntPtr.Zero
+                    && freeTracePtr != IntPtr.Zero;
+                if (_solverAvailable)
+                {
+                    _solveTrace = Marshal.GetDelegateForFunctionPointer<DelegateSolveTrace>(solvePtr);
+                    _getTraceStats = Marshal.GetDelegateForFunctionPointer<DelegateGetTraceStats>(statsPtr);
+                    _freeTraceEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTraceEvents>(freeTracePtr);
+                }
+
                 Main.Log(buildExPtr != IntPtr.Zero
-                ? "[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度）"
-                : "[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度）");
+                    ? $"[Macro] 手法模拟DLL加载成功（接口: Ex 逐地板速度, 离线求解器: {(_solverAvailable ? "有" : "无")}）"
+                    : $"[Macro] 手法模拟DLL加载成功（接口: 旧版 全局速度, 离线求解器: {(_solverAvailable ? "有" : "无")}）");
                 return true;
             }
             catch (Exception ex)
             {
                 MacroEngine.Log($"[Macro] 加载DLL异常: {ex.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>DLL 是否带离线求解器（老 DLL 没有 → 轨迹走贪心兜底）</summary>
+        public static bool SolverAvailable => _solverAvailable;
+
+
+        /// <summary>
+        /// 离线求解：返回最优轨迹。
+        /// 老 DLL / 无求解器 → 直接回落到贪心 BuildHitEvents（保证功能不挂）。
+        /// </summary>
+        public static bool SolveTrace(
+            double[] entryTimes,
+            int[] pressTypes,
+            int[] floorIndices,
+            double[]? speedMuls,
+            int eventCount,
+            double bpm, double speed,
+            out MacroEngine.HitEvent[]? hitEvents,
+            out TraceFile.TraceEvent[]? traceEvents,
+            out TraceFile.TraceStats? stats)
+        {
+            hitEvents = null;
+            traceEvents = null;
+            stats = null;
+
+            if (!_solverAvailable)
+            {
+                return BuildHitEvents(entryTimes, pressTypes, floorIndices, speedMuls,
+                    eventCount, bpm, speed, out hitEvents);
+            }
+
+            NativeTechniqueConfig config = default;
+            IntPtr nativeEvents = IntPtr.Zero;
+            IntPtr optsPtr = IntPtr.Zero;
+
+            try
+            {
+                config = PrepareNativeConfig();
+                _setTechConfig!(ref config);
+
+                NativeSolveOptions opt = new NativeSolveOptions
+                {
+                    BeamWidth = 4,       // 实测 beam=4 已达 frag=0，且 9 谱例仅 185ms
+                    MaxMultiplier = 7,
+                    FragPenalty = 1.0,
+                    RunPenalty = 0.6,
+                    RoughPenalty = 0.25,
+                    DropPenalty = 10000.0,
+                };
+
+                int optsSize = Marshal.SizeOf<NativeSolveOptions>();
+                optsPtr = CoTaskMemAlloc(optsSize);
+                Marshal.StructureToPtr(opt, optsPtr, false);
+
+                int outCount;
+                nativeEvents = _solveTrace!(
+                    entryTimes, pressTypes, floorIndices, speedMuls,
+                    eventCount, bpm, speed,
+                    optsPtr,
+                    out outCount);
+
+                if (nativeEvents == IntPtr.Zero || outCount <= 0)
+                    return false;
+
+                int size = Marshal.SizeOf<NativeTraceEvent>();
+                var raw = new TraceFile.TraceEvent[outCount];
+                unsafe
+                {
+                    byte* src = (byte*)nativeEvents;
+                    for (int i = 0; i < outCount; i++)
+                    {
+                        raw[i] = new TraceFile.TraceEvent(
+                            *(double*)(src + i * size + 0),
+                            *(float*)(src + i * size + 8),
+                            *(byte*)(src + i * size + 12),
+                            *(byte*)(src + i * size + 13),
+                            *(byte*)(src + i * size + 14),
+                            *(int*)(src + i * size + 16));
+                    }
+                }
+
+                IntPtr statsPtr = _getTraceStats!();
+                if (statsPtr != IntPtr.Zero)
+                {
+                    var s = Marshal.PtrToStructure<NativeTraceStats>(statsPtr);
+                    stats = new TraceFile.TraceStats(
+                        s.FragmentCount, s.LongestSameHand, s.DroppedNotes, s.PieceCount,
+                        s.PieceLenVariance, s.TotalCost, s.FragCost, s.RunCost,
+                        s.RoughCost, s.SolverNodes);
+                    CoTaskMemFree(statsPtr);
+                }
+
+                traceEvents = raw;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MacroEngine.Log($"[Macro] 离线求解异常: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                if (nativeEvents != IntPtr.Zero && _freeTraceEvents != null)
+                    _freeTraceEvents(nativeEvents);
+                if (optsPtr != IntPtr.Zero)
+                {
+                    Marshal.DestroyStructure<NativeSolveOptions>(optsPtr);
+                    CoTaskMemFree(optsPtr);
+                }
+                FreeNativeConfig(ref config);
             }
         }
 
