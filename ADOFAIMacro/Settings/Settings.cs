@@ -1405,12 +1405,10 @@ namespace ADOFAIMacro.Settings
             GUILayout.Label(LocalizationManager.Get("tech.bpm_explanation"), tipStyle);
 
             // ── 角度感知片长 ─────────────────────────────────
-            GUILayout.BeginHorizontal();
-            bool newAngleAware = GUILayout.Toggle(TechniqueAngleAware,
-                LocalizationManager.Get("tech.angle_aware"), UIUtils.LabelStyle, GUILayout.Width(140));
+            bool newAngleAware = UIUtils.M3Switch(
+                TechniqueAngleAware, LocalizationManager.Get("tech.angle_aware"));
             if (newAngleAware != TechniqueAngleAware)
                 TechniqueAngleAware = newAngleAware;
-            GUILayout.EndHorizontal();
             GUILayout.Label(LocalizationManager.Get("tech.angle_aware_explanation"), tipStyle);
             GUILayout.Space(10);
             GUILayout.Label(LocalizationManager.Get("tech.player_title"), UIUtils.LabelStyle);

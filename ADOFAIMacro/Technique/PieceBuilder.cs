@@ -43,6 +43,7 @@ namespace ADOFAIMacro.Technique
             // 终点砖（最后一块）也要按键 —— 通关条件是
             // GCS.checkpointNum >= listFloors.Count（scrConductor.cs:411）。
             for (int i = 0; i < floors.Length; i++)
+            {
                 var fl = floors[i];
                 if (fl == null) continue;
                 if (fl.auto) continue;
@@ -103,6 +104,7 @@ namespace ADOFAIMacro.Technique
                 _evFloorRecycle.Add(i);
                 evSpeed.Add(fl.speed);
             }
+            
 
             int total = _evTimeRecycle.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
@@ -284,7 +286,7 @@ int psize = pieces.Count;   // 本片提交前的片数
 // nowT/pLen（now_time 也是 double，窗口判定必须精确），
                 // 故只有 PieceLen 截断。三者全截断 / 全不截断都会让对拍分叉
                 //（实测首个差异分别落在 #139 / #269 片）。
-                double pLenStored = (double)(long long)(pLen * 1e6) / 1e6;
+                double pLenStored = (double)(long)(pLen * 1e6) / 1e6;
                 pieces.Add(new PieceInfo(cnt, csH, pLenStored, nowT, nowT + pLen, nowD, mult));
 // 手号写进槽位。maxK 处读的是本片提交**前**的槽值，
                 // 故 Add 的顺序不影响当轮判定。
@@ -413,7 +415,7 @@ int psize = pieces.Count;   // 本片提交前的片数
                     // :377/:381 的夹取也在整数上算 → 补最后一次截断。
 // 不截断会出现 43.434117019 这类亚微秒值，与上游的
                     // 43.434116000 不同，进而影响同刻事件的先后判定。
-                    rel = (double)(long long)(rel * 1e6) / 1e6;
+                    rel = (double)(long)(rel * 1e6) / 1e6;
 
                     output.Add(new HitEvent(rel, 0, true, false, releaseKeyCode: kc));
                 }
