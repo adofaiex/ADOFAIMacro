@@ -1,3 +1,13 @@
+// tools/MainActivity.java
+//
+// 匀速谱生成器（本项目作者 HitMargin / QQ 2228293026 的作品）。
+// 把任意 .adofai 转成 _steady.adofai：逐块砖算出真实旋转角度 rlangle_，
+// 再按 bpm = rlangle_/180 插入 SetSpeed，使每块砖按匀速 BPM 旋转。
+//
+// 它同时是 TechniqueSimulator 角度感知片长的算法依据：反运算可得
+// 「该砖从进场到压线实际占 dt * 建议bpm / 60 拍」。
+//
+// 原工程（Android Studio 工程）不在本仓库，此处仅保留主类源码备查。
 package hitmargin.adofai.uniformspeed;
 
 import android.Manifest;
