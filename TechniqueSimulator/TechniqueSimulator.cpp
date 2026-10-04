@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <map>
@@ -258,6 +259,18 @@ void SetTechniqueConfig(TechniqueConfig* config)
 static const int kCounterLevel = 64;   // 级联计数器级数（承接无上界倍乘）
 static const int kMaxMult      = 60;   // 倍乘层上限（防越界）
 
+// [2026-10-05] Angle-aware piece length, opt-in via env var ADOFAI_ANGLE_AWARE=1.
+// See the note at the pieceTime computation for why this is NOT auto-detected.
+static bool g_angleAware = false;
+static bool ReadAngleAwareFlag()
+{
+    char* v = NULL; size_t len = 0;
+    if (_dupenv_s(&v, &len, "ADOFAI_ANGLE_AWARE") != 0 || !v) return false;
+    bool on = (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y');
+    free(v);
+    return on;
+}
+
 // 一个变速点（对应原版 restart[i]）
 struct RestartMark
 {
@@ -351,6 +364,7 @@ static bool PotatoPartition(const vector<double>& evTime,
     }
     const bool hasSpeed = !speedMulsVec.empty();
 
+
     vector<RestartMark> marks;
     vector<int>  markAt;
     vector<double> adviceBpm;
@@ -365,10 +379,35 @@ static bool PotatoPartition(const vector<double>& evTime,
                           bpm, limit, mainHand, marks, markAt, adviceBpm);
     }
 
+    // [2026-10-05 angle-aware, opt-in] Per-event beat span, inverted from
+    // the time axis: MainActivity.java (tools/) steady algo has
+    // bpm[i] = rlangle_/180 where rlangle_ is the floor real swept angle,
+    // so during dt seconds the planet turns dt*bpm/60 beats. 15deg floors
+    // give 0.25 beat, 30deg 0.5, 180deg 1.0 -- the shape of snowflake /
+    // genuine loops. Quantized to 1/4 beat (all angles are 15deg multiples).
+    // NOTE: must use this floor OWN advice bpm; using the next one gives
+    // 61.8~66.3 instead of exact multiples of 60.
+    vector<double> beatsOfEvent(n, 1.0);
+    {
+        for (int k = 1; k < n; k++)
+        {
+            double dt = evTime[k] - evTime[k - 1];
+            if (dt <= 0.0) continue;
+            double ab = adviceBpm.size() > k - 1 ? adviceBpm[k - 1] : 0.0;
+            if (!(ab > 1e-9)) continue;
+            double b = (dt * ab) / 60.0;
+            b = floor(b * 4.0 + 0.5) / 4.0;
+            if (b < 0.25) b = 0.25;
+            if (b > 16.0) b = 16.0;
+            beatsOfEvent[k] = b;
+        }
+
+    }
     // 初值（原版 main.cpp:214-220）
     long double nowTime = 0.0L;
     int    nowData = 0;
     int    hand    = mainHand;
+    g_angleAware = ReadAngleAwareFlag();   // env ADOFAI_ANGLE_AWARE=1
     double nowBpm  = adviceBpm.empty() ? 500.0 : adviceBpm[0];
     if (nowBpm <= 0.0) nowBpm = 500.0;
     double pieceTime = 30.0 / nowBpm;        // 原版 30000000/basic_bpm[0] 微秒
@@ -414,6 +453,17 @@ static bool PotatoPartition(const vector<double>& evTime,
 
         // ── 片长（原版 main.cpp:251）────────────────────────────
         pieceTime = 60.0 / (nowBpm * pow(2.0, (double)mult)) / 2.0;  // 原 60000000/(...)/2
+        // GATED BY EXPLICIT FLAG, not auto-detection: the reference chart
+        // itself has 181 short floors (5.1%) yet potato() still matches it
+        // byte-exactly (diff=0) -- short floors are handled fine by the
+        // stepwise nowTime += pieceTime walk. Auto-detecting would break it.
+        // Opt-in only, for charts where a BPM tier (640/660/700) is really
+        // mis-resolved into a triplet.
+        if (g_angleAware && nowData < n)
+        {
+            double bAt = beatsOfEvent[nowData];
+            if (bAt > 1e-6) pieceTime *= bAt;
+        }
         if (pieceTime < 1e-9) pieceTime = 1e-9;
         if (mult > kMaxMult) mult = kMaxMult;
 
