@@ -378,17 +378,10 @@ tools/freezetest/*.dmp
 
 
 # ── 原版手法模拟对拍工装（tools/potatoab）────────────────────────
-# 保留 harness 源码（PotatoAB.cs / DualDrv.cs / ref_main.cpp），
-# 其余为原版数据副本、编译产物与对拍中间文件，都不入库。
-tools/potatoab/*.exe
-tools/potatoab/*.obj
-tools/potatoab/*.txt
-tools/potatoab/*.log
-tools/potatoab/*.crpl
-tools/potatoab/*.timedata
-tools/potatoab/*.speeddata
-tools/potatoab/options.txt
-tools/potatoab/ref.crpl
+# 整个目录不入库：其中的 ref_main.cpp 是上游「手法拟真」main.cpp 的逐字移植，
+# 而那套 C++ 手法模拟宏是不开源的，不能随本仓库分发。
+# 对拍用的 .cs harness（PotatoAB / DualDrv）与原版数据副本一并排除。
+tools/potatoab/
 tools/freezetest/_new_core.txt
 tools/rollback_*/
 
