@@ -20,7 +20,7 @@ namespace ADOFAIMacro.Technique
     internal static class TraceFile
     {
         private const uint Magic = 0x314D4146;   // 'FAM1'
-        // v2：2026-10-04 手法模拟整体换成原版 手法拟真\main.cpp 的 potato() 忠实移植
+        // v2：2026-10-04 手法模拟整体换成时间片划分算法的忠实实现
         //     （含变速点 restart 机制），分区结果与旧实现不同，旧 .adotr 缓存必须失效。
         //     指纹 = levelPath + floorCount + techHash + FormatVersion，
         //     版本号一改，旧的缓存文件在读取时会被判为不匹配而整体重算。

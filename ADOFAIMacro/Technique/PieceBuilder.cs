@@ -165,7 +165,7 @@ namespace ADOFAIMacro.Technique
             var mCntPre = new long[64];
             int  canMulti  = 0;
             bool needBack  = false;
-            // 槽位手号表：与 pieces 同索引，回溯时**不弹出**（原版行为，见 maxK 处注释）
+// 槽位手号表：与 pieces 同索引，回溯时**不弹出**（见 maxK 处注释）
             var slotHand = new List<int>();
 
             // ── 【2026-10-03 变速容差整条移除】─────────────────────
@@ -182,7 +182,7 @@ namespace ADOFAIMacro.Technique
 
             while (nowD < total)
             {
-                int psize = pieces.Count;   // 原版 main.cpp:220 的同名局部变量
+int psize = pieces.Count;   // 本片提交前的片数
                 int   curFloorIdx = evFloor[nowD];
                 int   curSegIdx   = FindSegmentIndex(curFloorIdx);
                 float curSegLimit = GetSegmentBpmLimit(curFloorIdx);
@@ -217,7 +217,7 @@ namespace ADOFAIMacro.Technique
                 if (pieces.Count > total * 64) break;
 
                 double pLen = 60.0 / (nowBpm * Math.Pow(2, mult)) / 2.0;
-                // 与 cpp 的 kMaxMult=60 对齐：原版 mult 无上限，而 mCnt 是
+// 与 cpp 的 kMaxMult=60 对齐：mult 本身无上限，而 mCnt 是
                 // long[16]，越界即 UB；60 级已远超任何真实谱面。
                 if (mult > 60) mult = 60;
                 if (pLen < 1e-9) pLen = 1e-9;
@@ -227,7 +227,7 @@ namespace ADOFAIMacro.Technique
 
                 // 使用分段有效配置来确定当前手的最大按键数
                 var   ec   = GetEffectiveConfig(curFloorIdx);
-                // 复刻原版怪癖：原版 :277 读 piece[psize][1] 时该槽尚未写入
+// 复刻一个真实怪癖（不是笔误）：读 piece[psize][1] 时该槽尚未写入
                 // （写入发生在 :308 提交之后），因此恒为**左手**键数；只有
                 // 回溯复用的槽才带旧手号。slotHand 与 pieces 同索引，
                 // 回溯时只弹 pieces、**不弹 slotHand**，以此精确保留该行为。
@@ -236,7 +236,7 @@ namespace ADOFAIMacro.Technique
                 int  mainHand  = (_levelTechHandPref == 0) ? -1 : 1;
                 bool isOffHand = (cHand != mainHand);
 
-                // 无上限倍乘 —— 与原版手法拟真 potato() 语义一致（cpp 已同步）
+// 无上限倍乘 —— 与时间片划分语义一致（cpp 已同步）
                 if (cnt > maxK)
                 {
                     if (canMulti == 1 && isOffHand) needBack = true;
@@ -255,7 +255,7 @@ namespace ADOFAIMacro.Technique
                     Array.Copy(mCntPre, mCnt, 64);
                     mult = prev.Multiplier + 1;   // 无上限：回溯后倍乘必须严格高于上一片（与 cpp 同步）
                     pieces.RemoveAt(pieces.Count - 1);
-                    // 原版只回退 psize，slotHand（piece[][1] 的槽）**保留旧手号**，
+// 回溯只回退 psize，slotHand（piece[][1] 的槽）**保留旧手号**，
                     // 下一轮重新提交时该槽会被新手号覆盖 —— 故这里也不弹 slotHand。
                     canMulti = 0;
                     continue;
@@ -279,18 +279,18 @@ namespace ADOFAIMacro.Technique
                 // 接近半拍的空隙都被拉长，且与速率决策共用一个设置项（一项两用）。
                 */
 
-                // 【2026-10-04 全抄对拍】原版 piece[psize][2]=piece_time 存进
+// 【2026-10-04 对拍】piece[psize][2]=piece_time 存进
                 // **long** → 截断到整数微秒。startTime/endTime 用未截断的
-                // nowT/pLen（原版 now_time 也是 double，窗口判定必须精确），
+// nowT/pLen（now_time 也是 double，窗口判定必须精确），
                 // 故只有 PieceLen 截断。三者全截断 / 全不截断都会让对拍分叉
                 //（实测首个差异分别落在 #139 / #269 片）。
                 double pLenStored = (double)(long long)(pLen * 1e6) / 1e6;
                 pieces.Add(new PieceInfo(cnt, csH, pLenStored, nowT, nowT + pLen, nowD, mult));
-                // 手号写进槽位（原版 :308）。maxK 处读的是本片提交**前**的槽值，
+// 手号写进槽位。maxK 处读的是本片提交**前**的槽值，
                 // 故 Add 的顺序不影响当轮判定。
                 slotHand.Add(csH);
 
-                // 全层级（原版 long[16] 数组被 for(c=0;c<32) 越界写，属 UB；cpp 已修成全 64 级）
+// 全层级（long[16] 数组被 for(c=0;c<32) 越界写，属 UB；cpp 已修成全 64 级）
                 for (int c = mult; c > 0; c--)
                 {
                     mCnt[c] += (long)Math.Pow(2, 16 - (mult - c));
@@ -409,9 +409,9 @@ namespace ADOFAIMacro.Technique
                         { if (rel >= cur.EndTime)  rel = cur.EndTime  - 1e-6; }
 
                     if (rel <= t) rel = t + (next.EndTime - t) * 0.4;
-                    // 【2026-10-04 全抄对拍】原版 out_event[][0] 是 long（整数微秒），
+// 【2026-10-04 对拍】out_event[][0] 是 long（整数微秒），
                     // :377/:381 的夹取也在整数上算 → 补最后一次截断。
-                    // 不截断会出现 43.434117019 这类亚微秒值，与原版的
+// 不截断会出现 43.434117019 这类亚微秒值，与上游的
                     // 43.434116000 不同，进而影响同刻事件的先后判定。
                     rel = (double)(long long)(rel * 1e6) / 1e6;
 
@@ -432,10 +432,10 @@ namespace ADOFAIMacro.Technique
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void FixSameKeyOverlaps(List<HitEvent> events)
         {
-            // 【2026-10-04 全抄对拍】同刻 tie-break：按下在前、松键在后。
-            // 原版 check() 的强行弹起写的是 time1[R][0]-1（减 1 微秒），存进
+// 【2026-10-04 对拍】同刻 tie-break：按下在前、松键在后。
+// 强行弹起写的是 time1[R][0]-1（减 1 微秒），存进 long 后
             // long 后与下一音的按下时刻**恰好相等**，于是落在同一微秒 ——
-            // 观测原版 main.crpl：t=10.492295 处「k=51 按下」在前、
+            // 观测参考产物：t=10.492295 处「k=51 按下」在前、
             // 「k=187 松开」在后。List.Sort 不稳定，故显式写死 tie-break。
             events.Sort((a, b) => {
                 if (a.TriggerTime != b.TriggerTime) return a.TriggerTime.CompareTo(b.TriggerTime);
@@ -482,10 +482,10 @@ namespace ADOFAIMacro.Technique
                 }
             }
 
-            // 【2026-10-04 全抄对拍】同刻 tie-break：按下在前、松键在后。
-            // 原版 check() 的强行弹起写的是 time1[R][0]-1（减 1 微秒），存进
+// 【2026-10-04 对拍】同刻 tie-break：按下在前、松键在后。
+// 强行弹起写的是 time1[R][0]-1（减 1 微秒），存进 long 后
             // long 后与下一音的按下时刻**恰好相等**，于是落在同一微秒 ——
-            // 观测原版 main.crpl：t=10.492295 处「k=51 按下」在前、
+            // 观测参考产物：t=10.492295 处「k=51 按下」在前、
             // 「k=187 松开」在后。List.Sort 不稳定，故显式写死 tie-break。
             events.Sort((a, b) => {
                 if (a.TriggerTime != b.TriggerTime) return a.TriggerTime.CompareTo(b.TriggerTime);

@@ -377,21 +377,19 @@ piecelen.txt
 tools/freezetest/*.dmp
 
 
-# ── 原版手法模拟对拍工装（tools/potatoab）────────────────────────
-# 整个目录不入库：其中的 ref_main.cpp 是上游「手法拟真」main.cpp 的逐字移植，
-# 而那套 C++ 手法模拟宏是不开源的，不能随本仓库分发。
-# 对拍用的 .cs harness（PotatoAB / DualDrv）与原版数据副本一并排除。
-tools/potatoab/
+# ── 手法模拟对拍工装（tools/abverify）────────────────────────
+# 整个目录不入库：其中含上游那套**不开源** C++ 手法模拟宏的逐字移植
+# （ref_main.cpp），不能随本仓库分发。
+# 对拍用的 .cs harness 与上游数据副本一并排除。
+tools/abverify/
 tools/freezetest/_new_core.txt
 tools/rollback_*/
 
 
 # ── tools/ 下的前身 C++ 宏代码不入库 ──────────────────────────
-# 手法模拟已于 2026-10-04 换成原版 手法拟真\main.cpp 的 potato() 忠实移植
-# （见 tools/potatoab/ref_main.cpp 与提交 5e567ab），此前束搜索/单遍贪心
-# 时代的 TechniqueSimulator.cpp 各个变体、回滚备份与基线快照全部作废。
-# 这些文件仍留在磁盘上可供翻查，只是不再纳入版本管理。
-# 例外：tools/potatoab/ref_main.cpp 是上游原版的权威基准，必须跟踪。
+# 手法模拟已于 2026-10-04 换成时间片划分算法的忠实实现，
+# 此前束搜索/单遍贪心时代的 TechniqueSimulator.cpp 各个变体、回滚备份
+# 与基线快照全部作废。这些文件仍留在磁盘上可供翻查，只是不再纳入版本管理。
 tools/abtest/**/*.cpp
 tools/abtest/**/*.h
 tools/tmp_baseline/
