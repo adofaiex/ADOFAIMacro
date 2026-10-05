@@ -209,29 +209,12 @@ static void FixSameKeyOverlaps(vector<HitEvent>& events)
         });
 }
 
-// [2026-10-05] 角度感知片长开关。见 SetAngleAware 处的说明。
-static bool g_angleAware = false;
-
 // ─────────────────────────────────────────────
 //  导出函数：SetTechniqueConfig
 // ─────────────────────────────────────────────
 void SetTechniqueConfig(TechniqueConfig* config)
 {
     if (config) g_config = *config;
-}
-
-// ─────────────────────────────────────────────
-//  导出函数：SetAngleAware
-// ─────────────────────────────────────────────
-// 角度感知片长开关。
-//
-// **不用环境变量传递**：实测 .NET 的 Environment.SetEnvironmentVariable 只更新
-// 托管侧维护的环境块副本，C 运行时的 getenv/_dupenv_s 读不到它（反向
-// _putenv_s → GetEnvironmentVariable 则可以）。曾经用环境变量传递，结果是
-// 界面上勾选后 DLL 里恒读到 false，功能完全不生效。必须走导出函数。
-void SetAngleAware(int enabled)
-{
-    g_angleAware = (enabled != 0);
 }
 
 // ============================================================
@@ -389,30 +372,7 @@ static bool TimeSlicePartition(const vector<double>& evTime,
                           bpm, limit, mainHand, marks, markAt, adviceBpm);
     }
 
-    // [2026-10-05 angle-aware, opt-in] Per-event beat span, inverted from
-    // the time axis: MainActivity.java (tools/) steady algo has
-    // bpm[i] = rlangle_/180 where rlangle_ is the floor real swept angle,
-    // so during dt seconds the planet turns dt*bpm/60 beats. 15deg floors
-    // give 0.25 beat, 30deg 0.5, 180deg 1.0 -- the shape of snowflake /
-    // genuine loops. Quantized to 1/4 beat (all angles are 15deg multiples).
-    // NOTE: must use this floor OWN advice bpm; using the next one gives
-    // 61.8~66.3 instead of exact multiples of 60.
-    vector<double> beatsOfEvent(n, 1.0);
-    {
-        for (int k = 1; k < n; k++)
-        {
-            double dt = evTime[k] - evTime[k - 1];
-            if (dt <= 0.0) continue;
-            double ab = adviceBpm.size() > k - 1 ? adviceBpm[k - 1] : 0.0;
-            if (!(ab > 1e-9)) continue;
-            double b = (dt * ab) / 60.0;
-            b = floor(b * 4.0 + 0.5) / 4.0;
-            if (b < 0.25) b = 0.25;
-            if (b > 16.0) b = 16.0;
-            beatsOfEvent[k] = b;
-        }
 
-    }
     // 初值（参考实现）
     long double nowTime = 0.0L;
     int    nowData = 0;
@@ -462,37 +422,17 @@ static bool TimeSlicePartition(const vector<double>& evTime,
 
         // ── 片长（参考实现）────────────────────────────
         pieceTime = 60.0 / (nowBpm * pow(2.0, (double)mult)) / 2.0;  // 原 60000000/(...)/2
-        // GATED BY EXPLICIT FLAG, not auto-detection: the reference chart
-        // itself has 181 short floors (5.1%) yet 时间片划分 still matches it
-        // byte-exactly (diff=0) -- short floors are handled fine by the
-        // stepwise nowTime += pieceTime walk. Auto-detecting would break it.
-        // Opt-in only, for charts where a BPM tier (640/660/700) is really
-        // mis-resolved into a triplet.
-        //
-        // 【2026-10-05】不得越过 BPM 阈值约束。
-        //   原片的 (nowBpm * 2^mult) 已经把绝对 bpm 折进 (limit/2, limit]，
-        //   片长随之确定。再乘 beatsOfEvent 是对片长的二次缩水 —— 倍乘层越高
-        //   缩得越狠，等于绕过了阈值，也违背"角度感知只解释短砖"的本意。
-        //
-        // 【2026-10-05】而且绝不能把片长改"长"。
-        //   曾试过"片长比该砖实际所需更长时就截短"，实测换手从 66 次掉到
-        //   6 次、出现 LLLLLLLLLLLLL 长连 —— 片被截短后一片吞进更多音符，
-        //   换手反而被推迟。短砖要的是**更早收手、更频繁换手**，
-        //   不是一片吃更多。
-        //   所以这里只允许**拉长**（让片提前结束，把余量留给下一片），
-        //   且只在倍乘为 0（即未被 BPM 阈值压过）时才介入。
-        if (g_angleAware && nowData < n && mult == 0)
-        {
-            const double bAt = beatsOfEvent[nowData];
-            if (bAt > 1e-6)
-            {
-                // 该砖按自身角度实际需要的时间：60/bpm/2 * 拍数
-                const double natural = pieceTime * bAt;
-                // 只拉长：短砖（拍数 < 1）时 natural < pieceTime，不处理；
-                // 长砖（拍数 > 1，如 Twirl/Pause）时才放大，使片提前截止。
-                if (natural > pieceTime) pieceTime = natural;
-            }
-        }
+        // 【2026-10-05 已删除】曾在此处加"角度感知片长"：按 MainActivity.java
+        // 的匀速算法反推 beatsOfEvent = dt * 建议bpm / 60，再据此调整片长。
+        // 删除原因：
+        //   1. 它依赖 BPM 阈值折叠后的 adviceBpm，等于在片长之外又叠一层
+        //      二次缩水，实际效果会顶掉用户设置的手法切换阈值；
+        //   2. 30° 夹角 + BPM300 下实测"40 音全右手、换手 0 次"，而按上游
+        //      推演应是每 5 音换手 —— 该特性把手性搅乱了；
+        //   3. 截短/拉长两个方向都改不对：截短让一片吞更多音符、换手从 66
+        //      掉到 6；拉长则让长砖提前截止。都在破坏上游语义。
+        // 上游的"半拍固定片长 + nowTime 步进逼近"对短砖本来就能正确处理
+        // （对拍谱 181 个短砖，diff 仍为 0），不需要这层修正。
         if (pieceTime < 1e-9) pieceTime = 1e-9;
         if (mult > kMaxMult) mult = kMaxMult;
 

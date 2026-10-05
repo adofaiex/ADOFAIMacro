@@ -129,13 +129,6 @@ struct TechniqueConfig {
 extern "C" {
     TECH_API void SetTechniqueConfig(TechniqueConfig* config);
 
-    // 角度感知片长开关。
-    //
-    // 不用环境变量传递：实测 .NET 的 Environment.SetEnvironmentVariable 只更新
-    // 托管侧维护的环境块副本，C 运行时的 getenv/_dupenv_s 读不到（反向
-    // _putenv_s → GetEnvironmentVariable 则可以）。所以必须走导出函数。
-    TECH_API void SetAngleAware(int enabled);
-
     TECH_API HitEvent* BuildTechniqueHitEvents(
         double* entryTimes,
         int* pressTypes,

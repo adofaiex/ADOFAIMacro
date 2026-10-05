@@ -119,8 +119,6 @@ namespace ADOFAIMacro.Localization
             ["tech.right_hand"] = "右手",
             ["tech.global_bpm_limit"] = "全局·速度阈值 (BPM)",
             ["tech.bpm_explanation"] = "超过此BPM时自动细分时间片，允许同一只手连续承担多个事件",
-            ["tech.angle_aware"] = "角度感知片长",
-            ["tech.angle_aware_explanation"] = "按每块砖真实旋转的角度确定片长（15°=0.25拍、30°=0.5拍、180°=1拍）。用于雪花 / genuine 循环等含短砖的谱面，以及速度层级被误判成三连音的情况。关闭时使用固定半拍片长。",
             ["tech.player_title"] = "轨迹播放器",
             ["tech.player_driver"] = "驱动方式",
             ["tech.player_driver_time"] = "时间驱动",
