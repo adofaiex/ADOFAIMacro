@@ -94,6 +94,11 @@ namespace ADOFAIMacro.Core
             {
                 LogStartup("[TechniqueSimulator] 技巧模拟器 DLL 加载成功");
 
+                // 把存档里的角度感知开关推给原生 DLL。
+                // 设置反序列化发生在本方法**之前**，那时 DLL 还没加载，
+                // setter 里的调用是空操作，所以必须在这里补推一次，
+                // 否则重启游戏后勾选状态会丢失（界面显示已开、实际未生效）。
+                TechniqueSimulator.SetAngleAware(Settings.TechniqueAngleAware);
             }
             else
             {
@@ -191,6 +196,8 @@ namespace ADOFAIMacro.Core
                 // Release 面板还会据此强制关闭"启用手法模拟"）。
                 if (!TechniqueSimulator.IsDllLoaded() && !TechniqueSimulator.LoadTechniqueDll())
                 Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
+                // 重载后 DLL 内的开关是默认值，按当前设置补推。
+                TechniqueSimulator.SetAngleAware(Settings.TechniqueAngleAware);
                 if (_uiObject == null)
                 {
                     _uiObject = new GameObject("MacroText");

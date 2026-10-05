@@ -23,6 +23,8 @@ namespace ADOFAIMacro.Technique
         private static DelegateBuildTechEvents? _buildTechEvents;
         private static DelegateBuildTechEventsEx? _buildTechEventsEx;
         private static DelegateFreeTechEvents? _freeTechEvents;
+        /// <summary>角度感知开关；老 DLL 没有这个导出时为 null（调用点需判空）。</summary>
+        private static DelegateSetAngleAware? _setAngleAware;
         // ── 离线求解器（播放器用；老 DLL 没有这些导出时全部为 null）──
         private static DelegateSolveTrace? _solveTrace;
         private static DelegateGetTraceStats? _getTraceStats;
@@ -134,6 +136,10 @@ namespace ADOFAIMacro.Technique
         // ─────────────────────────────────────────────
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void DelegateSetTechConfig(ref NativeTechniqueConfig config);
+
+        /// <summary>角度感知片长开关（0=关，非0=开）。</summary>
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void DelegateSetAngleAware(int enabled);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate IntPtr DelegateBuildTechEvents(
@@ -279,6 +285,47 @@ namespace ADOFAIMacro.Technique
             _cachedSegments = segments;
         }
 
+        /// <summary>
+        /// 设置角度感知片长开关。
+        ///
+        /// 必须走导出函数而不是环境变量：实测 .NET 的
+        /// Environment.SetEnvironmentVariable 只更新托管侧维护的环境块副本，
+        /// DLL 里的 C 运行时 getenv/_dupenv_s 读不到它（反向 _putenv_s →
+        /// Environment.GetEnvironmentVariable 则可以）。曾用环境变量传递，
+        /// 结果是界面勾选后 DLL 恒读到 false，功能完全不生效。
+        ///
+        /// 老 DLL 没有该导出时静默忽略（_setAngleAware 为 null）。
+        /// 必须在 LoadTechniqueDll 之后调用。
+        /// </summary>
+        public static void SetAngleAware(bool enabled)
+        {
+            try { _setAngleAware?.Invoke(enabled ? 1 : 0); _angleAwareValue = enabled; }
+            catch (Exception ex) { MacroEngine.Log($"[Macro] SetAngleAware 调用失败: {ex.Message}"); }
+        }
+
+        /// <summary>最近一次推给 DLL 的角度感知值（null = 尚未推送）。</summary>
+        private static bool? _angleAwareValue = null;
+
+        /// <summary>把角度感知开关随 config 一起推给 DLL。</summary>
+        /// <remarks>
+        /// 必须在 _setTechConfig 之后调用。原因：BuildHitEvents 每次建表都会
+        /// 重新推一份 TechniqueConfig，而角度开关是 DLL 侧的全局变量，不在
+        /// config 里。若只在界面切换时推一次，下一次建表就会把开关覆盖回
+        /// 默认值 —— 表现为「改完设置手法模拟就失效」。
+        /// </remarks>
+        private static void PushAngleAwareWithConfig()
+        {
+            if (_setAngleAware == null) return;
+            if (_angleAwareValue == null)
+
+            {
+                // DLL 刚加载（或刚重载）还没推过：取当前设置补上
+                _angleAwareValue = Main.Settings?.TechniqueAngleAware ?? false;
+            }
+            try { _setAngleAware.Invoke(_angleAwareValue.Value ? 1 : 0); }
+            catch { /* 老 DLL 无此导出时已判空，这里兜异常不影响建表 */ }
+        }
+
         /// <summary>加载 TechniqueSimulator.dll</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool LoadTechniqueDll()
@@ -327,6 +374,13 @@ namespace ADOFAIMacro.Technique
                 ? Marshal.GetDelegateForFunctionPointer<DelegateBuildTechEventsEx>(buildExPtr)
                 : null;
                 _freeTechEvents = Marshal.GetDelegateForFunctionPointer<DelegateFreeTechEvents>(freePtr);
+
+                // 角度感知开关：可选导出（老 DLL 没有）。缺失时 _setAngleAware 为 null，
+                // 调用点判空即可，不影响其余功能。
+                IntPtr anglePtr = GetProcAddress(_techDllHandle, "SetAngleAware");
+                _setAngleAware = anglePtr != IntPtr.Zero
+                    ? Marshal.GetDelegateForFunctionPointer<DelegateSetAngleAware>(anglePtr)
+                    : null;
 
                 // 离线求解器（播放器）：缺失不影响原有 4 个导出，缺失时 Trace 走贪心兜底
                 IntPtr solvePtr = GetProcAddress(_techDllHandle, "SolveTechniqueTrace");
@@ -391,6 +445,7 @@ namespace ADOFAIMacro.Technique
             {
                 config = PrepareNativeConfig();
                 _setTechConfig!(ref config);
+                PushAngleAwareWithConfig();
 
                 NativeSolveOptions opt = new NativeSolveOptions
                 {
@@ -502,6 +557,7 @@ namespace ADOFAIMacro.Technique
             {
                 config = PrepareNativeConfig();
                 _setTechConfig!(ref config);
+                PushAngleAwareWithConfig();
 
                 int outCount;
                 if (_buildTechEventsEx != null && speedMuls != null && speedMuls.Length >= eventCount)
@@ -576,6 +632,7 @@ namespace ADOFAIMacro.Technique
         {
             if (_techDllHandle != IntPtr.Zero) { FreeLibrary(_techDllHandle); _techDllHandle = IntPtr.Zero; }
             _setTechConfig = null; _buildTechEvents = null; _buildTechEventsEx = null; _freeTechEvents = null;
+            _setAngleAware = null;
             _dllLoadAttempted = false;
         }
 

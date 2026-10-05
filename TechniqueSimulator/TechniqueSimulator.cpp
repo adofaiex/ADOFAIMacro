@@ -209,12 +209,29 @@ static void FixSameKeyOverlaps(vector<HitEvent>& events)
         });
 }
 
+// [2026-10-05] 角度感知片长开关。见 SetAngleAware 处的说明。
+static bool g_angleAware = false;
+
 // ─────────────────────────────────────────────
 //  导出函数：SetTechniqueConfig
 // ─────────────────────────────────────────────
 void SetTechniqueConfig(TechniqueConfig* config)
 {
     if (config) g_config = *config;
+}
+
+// ─────────────────────────────────────────────
+//  导出函数：SetAngleAware
+// ─────────────────────────────────────────────
+// 角度感知片长开关。
+//
+// **不用环境变量传递**：实测 .NET 的 Environment.SetEnvironmentVariable 只更新
+// 托管侧维护的环境块副本，C 运行时的 getenv/_dupenv_s 读不到它（反向
+// _putenv_s → GetEnvironmentVariable 则可以）。曾经用环境变量传递，结果是
+// 界面上勾选后 DLL 里恒读到 false，功能完全不生效。必须走导出函数。
+void SetAngleAware(int enabled)
+{
+    g_angleAware = (enabled != 0);
 }
 
 // ============================================================
@@ -262,17 +279,7 @@ void SetTechniqueConfig(TechniqueConfig* config)
 static const int kCounterLevel = 64;   // 级联计数器级数（承接无上界倍乘）
 static const int kMaxMult      = 60;   // 倍乘层上限（防越界）
 
-// [2026-10-05] Angle-aware piece length, opt-in via env var ADOFAI_ANGLE_AWARE=1.
-// See the note at the pieceTime computation for why this is NOT auto-detected.
-static bool g_angleAware = false;
-static bool ReadAngleAwareFlag()
-{
-    char* v = NULL; size_t len = 0;
-    if (_dupenv_s(&v, &len, "ADOFAI_ANGLE_AWARE") != 0 || !v) return false;
-    bool on = (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y');
-    free(v);
-    return on;
-}
+// [2026-10-05] 角度感知片长的注意点见 SetAngleAware 处的说明。
 
 // 一个变速点（对应上游 restart[i]）
 struct RestartMark
@@ -410,7 +417,6 @@ static bool TimeSlicePartition(const vector<double>& evTime,
     long double nowTime = 0.0L;
     int    nowData = 0;
     int    hand    = mainHand;
-    g_angleAware = ReadAngleAwareFlag();   // env ADOFAI_ANGLE_AWARE=1
     double nowBpm  = adviceBpm.empty() ? 500.0 : adviceBpm[0];
     if (nowBpm <= 0.0) nowBpm = 500.0;
     double pieceTime = 30.0 / nowBpm;        // 上游 30000000/basic_bpm[0] 微秒
@@ -462,10 +468,30 @@ static bool TimeSlicePartition(const vector<double>& evTime,
         // stepwise nowTime += pieceTime walk. Auto-detecting would break it.
         // Opt-in only, for charts where a BPM tier (640/660/700) is really
         // mis-resolved into a triplet.
-        if (g_angleAware && nowData < n)
+        //
+        // 【2026-10-05】不得越过 BPM 阈值约束。
+        //   原片的 (nowBpm * 2^mult) 已经把绝对 bpm 折进 (limit/2, limit]，
+        //   片长随之确定。再乘 beatsOfEvent 是对片长的二次缩水 —— 倍乘层越高
+        //   缩得越狠，等于绕过了阈值，也违背"角度感知只解释短砖"的本意。
+        //
+        // 【2026-10-05】而且绝不能把片长改"长"。
+        //   曾试过"片长比该砖实际所需更长时就截短"，实测换手从 66 次掉到
+        //   6 次、出现 LLLLLLLLLLLLL 长连 —— 片被截短后一片吞进更多音符，
+        //   换手反而被推迟。短砖要的是**更早收手、更频繁换手**，
+        //   不是一片吃更多。
+        //   所以这里只允许**拉长**（让片提前结束，把余量留给下一片），
+        //   且只在倍乘为 0（即未被 BPM 阈值压过）时才介入。
+        if (g_angleAware && nowData < n && mult == 0)
         {
-            double bAt = beatsOfEvent[nowData];
-            if (bAt > 1e-6) pieceTime *= bAt;
+            const double bAt = beatsOfEvent[nowData];
+            if (bAt > 1e-6)
+            {
+                // 该砖按自身角度实际需要的时间：60/bpm/2 * 拍数
+                const double natural = pieceTime * bAt;
+                // 只拉长：短砖（拍数 < 1）时 natural < pieceTime，不处理；
+                // 长砖（拍数 > 1，如 Twirl/Pause）时才放大，使片提前截止。
+                if (natural > pieceTime) pieceTime = natural;
+            }
         }
         if (pieceTime < 1e-9) pieceTime = 1e-9;
         if (mult > kMaxMult) mult = kMaxMult;

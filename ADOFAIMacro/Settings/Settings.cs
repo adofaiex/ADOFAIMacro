@@ -364,10 +364,11 @@ namespace ADOFAIMacro.Settings
             set
             {
                 _techniqueAngleAware = value;
-                // 角度感知开关经环境变量传给 TechniqueSimulator.dll（避免改 ABI）。
-                // DLL 每次建表时读一次（ReadAngleAwareFlag），改完立刻生效，
-                // 不需要重启游戏或重载 DLL。
-                Environment.SetEnvironmentVariable("ADOFAI_ANGLE_AWARE", value ? "1" : "0");
+                // 经 TechniqueSimulator.SetAngleAware 导出推给原生 DLL。
+                // 不用环境变量：实测 .NET 的 SetEnvironmentVariable 只更新托管侧
+                // 环境块副本，DLL 里 C 运行时的 getenv 读不到（详见该方法的注释）。
+                // 下次建表即按新值执行，无需重启游戏。
+                Technique.TechniqueSimulator.SetAngleAware(value);
             }
         }
 
