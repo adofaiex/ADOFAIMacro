@@ -24,7 +24,11 @@ namespace ADOFAIMacro.Technique
         //     （含变速点 restart 机制），分区结果与旧实现不同，旧 .adotr 缓存必须失效。
         //     指纹 = levelPath + floorCount + techHash + FormatVersion，
         //     版本号一改，旧的缓存文件在读取时会被判为不匹配而整体重算。
-        private const int FormatVersion = 2;
+        // v3：2026-10-06 片长改为「对齐到下一个判定音的间隔」（消三连音伪双押）。
+        //     指纹原本**不含原生算法版本**，于是改完 cpp 后旧的 .adotr 仍会命中，
+        //     玩家看到的是「改了跟没改一样」——这次踩的就是这个坑（见 lesson
+        //     0mux1jw1）。凡改动手法输出（尤其 TechniqueSimulator.cpp），必须同步 +1。
+        private const int FormatVersion = 3;
         //  文件头 = 4(魔数)+4(版本)+4(条数)+16(4 个 int)+16(方差+总代价)+24(3 个代价)+4(节点) = 72
         private const int HeaderSize = 72;
         /// <summary>单事件落盘字节数：8(double)+4(float)+1+1+1+1(pad)+4(int)</summary>
@@ -118,13 +122,57 @@ namespace ADOFAIMacro.Technique
         // ─────────────────────────────────────────────
         //  缓存键
         // ─────────────────────────────────────────────
+
+        /// <summary>
+        /// 原生求解器的身份戳（内容哈希），进缓存键。
+        ///
+        /// 为什么必须有它：手法结果**完全由 TechniqueSimulator.dll 的内部算法决定**，
+        /// 而这个值过去不在指纹里。于是「改完 cpp、重新部署、进游戏」看到的仍是
+        /// 上一版轨迹（命中旧 .adotr），表现就是「改了跟没改一样」——2026-10-06
+        /// 片长对齐修复就栽在这里（lesson 0mux1jw1）。
+        ///
+        /// 用内容哈希而非 mtime/长度：重新部署必然改内容，而开发期反复重编可能
+        /// 碰巧同长度；哈希对两者都免疫。只算一次（Lazy），300KB 读取可忽略。
+        /// 取不到文件时退回 mtime+长度，再不行用 "0"（只是少一层保险，不影响功能）。
+        /// </summary>
+        private static readonly Lazy<string> _solverStamp = new Lazy<string>(() =>
+        {
+            try
+            {
+                string modPath = Main.Mod?.Path
+                    ?? Path.GetDirectoryName(typeof(TraceFile).Assembly.Location) ?? string.Empty;
+                string dll = Path.Combine(modPath, "TechniqueSimulator.dll");
+                if (File.Exists(dll))
+                {
+                    byte[] bytes = File.ReadAllBytes(dll);
+                    return Fnv1a(Convert.ToBase64String(bytes));
+                }
+            }
+            catch (Exception ex)
+            {
+                MacroEngine.Log($"[Macro-Tech] 求解器身份戳不可用，退回时间戳: {ex.Message}");
+            }
+
+            try
+            {
+                string modPath = Main.Mod?.Path
+                    ?? Path.GetDirectoryName(typeof(TraceFile).Assembly.Location) ?? string.Empty;
+                var fi = new FileInfo(Path.Combine(modPath, "TechniqueSimulator.dll"));
+                if (fi.Exists) return $"{fi.Length:x}-{fi.LastWriteTimeUtc.Ticks:x}";
+            }
+            catch { /* 下面返回 0 */ }
+
+            return "0";
+        });
+
         private static string FingerprintOf(string levelPath, int floorCount, int techniqueHash)
         {
             var sb = new StringBuilder(128);
             sb.Append(levelPath ?? "?").Append('|')
               .Append(floorCount).Append('|')
               .Append(techniqueHash.ToString("x8")).Append('|')
-              .Append(FormatVersion);
+              .Append(FormatVersion).Append('|')
+              .Append(_solverStamp.Value);
             return Fnv1a(sb.ToString());
         }
 
