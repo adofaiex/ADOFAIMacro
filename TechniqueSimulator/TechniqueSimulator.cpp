@@ -516,8 +516,22 @@ static bool TimeSlicePartition(const vector<double>& evTime,
 
             nowData += cnt;
             nowTime += pieceTime;
-            hand     = -hand;
             canMulti = 1;
+
+            // 【2026-10-06】空片不换手。
+            //
+            // 上游在这里无条件 hand = -hand，于是一片装 0 个音时（cnt == 0）
+            // 也照样翻一次手，把后续的换手节奏整个打乱 —— 表现是明明该
+            // 交替，实际连续出现同一只手。
+            //
+            // 触发条件：片长远小于音符间隔（短砖/稀疏判定音），例如
+            // BPM170 + 阈值200 → 片长 0.1765s，而砖间隔 0.3529s（1 拍）
+            // 时每两片就有 1 片吃空。AWC 类谱 15°/30° 短砖密集，全程踩中。
+            //
+            // 语义上「一片没有按键，就不算占用一只手」，所以空片不该换手。
+            // 代价：对拍谱（505.25 BPM，无此结构）行为不变、diff 仍为 0；
+            // 但含空片的结构会与上游分叉 —— 这是刻意修正的上游缺陷。
+            if (cnt > 0) hand = -hand;
 
             // 微误差矫正（参考实现）
             if (nowData < n && fabs(evTime[nowData] - (double)nowTime) < pieceTime * 0.01)
