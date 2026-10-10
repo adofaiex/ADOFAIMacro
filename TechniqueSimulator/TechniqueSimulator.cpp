@@ -115,27 +115,7 @@ static int CountEventsInRange(const vector<double>& times, int start, double end
     return result - start;
 }
 
-// 建议 BPM：只向下折（除 2）到不超过阈值，**不乘回阈值附近**。
-//
-// 【2026-10-06 修正】上游是 `while(r>limit) r/=2; while(r<=limit/2) r*=2;`，
-// 即把结果折进 (limit/2, limit] 这个区间。那对上游的输入是恒等操作 ——
-// 上游的 speeddata 由谱面生成器产出，每个变速点的 bpm 事先就落在该区间，
-// 所以第二个循环从不执行。
-//
-// 但本移植拿到的是**逐地板的连续 speedMuls**（scrFloor.speed 直接给），
-// 于是第二个循环会疯狂触发：bpm=170、limit=200 时，sm=2/4/8 的真实 bpm
-// 340/680/1360 全被折回 170，速度差被完全抹平。
-//
-// ⚠【2026-10-07 实测更正 · 这处改动**不是**伪双押的修复，它已被证明是 no-op】
-//   本文档此前断言「去掉乘回后片长随真实 bpm 变化，速度差的语义得以保留」——
-//   **该因果断言是错的**。对照构建（本函数保持原样 + 保留下面对齐块）在 AWC
-//   与对拍基准谱上产出的结果与本版**完全一致**（同为 6614 / 7170 事件、同刻
-//   同为 0、前 80 按换手同为 79）。真正让片长跟上音符间隔的是
-//   TimeSlicePartition 里的对齐块，不是这里。
-//
-//   保留它的理由仅是语义自洽：`bpm*speed` 本来就是这个砖的真实速度，再乘回
-//   阈值附近等于人为抹平速度差；且它只决定片长初值，初值随后必被对齐块覆盖。
-//   **不要**把它当成修复本身，也不要靠回退它来"验证效果"——那样看不出任何差别。
+// 将实际 BPM 折叠到 (limit/2, limit] 区间
 static double GetAdviceBpm(double bpm, double speed, double limit)
 {
     // 防御死循环：limit ≤ 0 时 `r <= limit/2` 对 r==0 恒真 → 无限循环。
@@ -143,7 +123,8 @@ static double GetAdviceBpm(double bpm, double speed, double limit)
     if (limit <= 0.0) limit = 500.0;
     double r = bpm * speed;
     if (r <= 0.0) return limit;
-    while (r > limit) r /= 2.0;
+    while (r > limit)      r /= 2.0;
+    while (r <= limit / 2.0) r *= 2.0;
     return r;
 }
 
@@ -280,6 +261,11 @@ void SetTechniqueConfig(TechniqueConfig* config)
 
 static const int kCounterLevel = 64;   // 级联计数器级数（承接无上界倍乘）
 static const int kMaxMult      = 60;   // 倍乘层上限（防越界）
+
+// 【2026-10-10】片界防伪双押的窗口：一帧 ≈ 16.7ms（60fps）。
+// 相邻两次「按下」若落在同一帧内且分给两只手，玩家看到的就是「双手同步」
+// （用户报的「rp 两个键打」）。把这类音并入同一片 = 同一只手多指，即可消除。
+static const double kBoundaryGuardSec = 0.0167;
 
 // [2026-10-05] 角度感知片长的注意点见 SetAngleAware 处的说明。
 
@@ -455,61 +441,6 @@ static bool TimeSlicePartition(const vector<double>& evTime,
         if (pieceTime < 1e-9) pieceTime = 1e-9;
         if (mult > kMaxMult) mult = kMaxMult;
 
-        // 【2026-10-06 起】防伪双押：把片长对齐到「到下一个判定音的间隔」。
-        //
-        // 症状（用户报「三连音伪双押」）：同一只手在同一条砖上被迫连按两下，
-        // 按下手性呈 右左右|右左右|右左，而不是逐音严格左右交替。
-        // 机制：上游片长 = 60/bpm/2（半拍），这是**拿不到逐砖时长时的近似**；
-        // 当它大于真实音符间隔，一片就吞进 2 个以上音，全落给同一只手。
-        //
-        // 处理：片长直接取「到下一个判定音的间隔」。这个量天然包含砖的角度与速度，
-        // 无需再算 bpm；对齐后每片正好 1 音，手性得以逐音交替。
-        //
-        // ⚠ 注：此处**不要**再引用 GetAdviceBpm 作为原因。它确实有把 340/680/1360
-        //   折回同一值的行为，但 2026-10-07 的对照构建已证明：保留它原样、仅加本
-        //   对齐块，结果与现行版本完全一致 —— 片长脱钩的实际成因是「半拍近似 > 真实
-        //   间隔」，本块就是它唯一的修复点。
-        // 对齐后每片正好 1 音，手性得以逐音交替。
-        //
-        // 【2026-10-07 变体比选 · 判据是「同手同帧连按」，不是 diff/同刻数】
-        //
-        // ⚠ 用错指标会得出相反结论，这里把踩过的坑写清楚：
-        //
-        // ① **不能看 diff / maxDt**：它们是按下标对齐的位置相关指标，一旦手性
-        //    分配变化（事件次序重排）就在数学上失去意义（见 tools/abtest 记忆）。
-        //
-        // ② **也不能看「相邻事件时间戳相同」(同刻数)**：实测旧版本那 274 个同刻
-        //    **全部是一按一松或双松开**（正常的时序巧合，游戏完全能处理），真正的
-        //    「同时按下两键」是 **0**。曾经用它当验收指标，等于对着噪声调参。
-        //
-        // ③ 真正对准用户症状的判据 = **连续两次「按下」落在同一帧（<16.7ms）内、
-        //    且被分给同一只手**。一只手在这个间隔内不可能连按两下（人类极限约
-        //    30ms），玩家看到的就是「同一只手被逼着同时按两键」= 伪双押。
-        //    成因：片长用了上游半拍近似，这些超密音符被并进同一片，全落同一手。
-        //
-        // 实测（tools/abverify/SimulCheck.exe，按上面判据 ③）：
-        //         谱面   应然(同帧内音符对)   旧版同手   本版同手
-        //         AWC           1068           1041 ✗      0 ✓
-        //         对拍基准谱     1198            911 ✗      0 ✓
-        //   两谱的「同手」全部清零，且「跨手」数恰好等于应然数——逐对正确交替。
-        //   变体 ①`floor(pieceTime*0.995/gap)>=2` 在 AWC 上残留同手 225，不合格。
-        //
-        // ④ 时间轴守恒（tools/abverify/TimeAxisCheck.exe）：新旧版本都是
-        //    「输出按下数 = 输入音符数」，且每个按下时刻**逐微秒命中**某个音符
-        //    时刻（未命中 0、漏音 0）。即本对齐**只改左右手分配，不挪时间轴**。
-        //    这也说明 diff 6724 确实是纯分配变化，不是准度退化。
-        //
-        // 对拍基准谱 diff 1937→6724 的代价已知且用户已同意：该谱倍率是 153 种
-        // 连续渐变（上游离线生成器产物），手性分配与本移植分道扬镳，但时间轴与
-        // 一音一按不变。
-        if (nowData + 1 < n)
-        {
-            const double gap = evTime[nowData + 1] - evTime[nowData];
-            if (gap > 1e-9)
-                pieceTime = gap;
-        }
-        if (pieceTime < 1e-9) pieceTime = 1e-9;
-
         // ── 本片可纳入事件数（参考实现 的 try_data）──
         // 窗口系数 0.995（change_speed 恒 0，见考证 A）；遇变速点立即断开。
         int cnt = 0;
@@ -619,6 +550,56 @@ static bool TimeSlicePartition(const vector<double>& evTime,
         }
 
         if (pieces.size() > pieceCap) break;    // 偏差 3：防死循环兜底
+    }
+
+    // ── 片界防伪双押后处理（2026-10-10）────────────────────────────
+    //
+    // 放在分片循环之后、追加哨兵片之前。
+    //
+    // 【为什么是后处理，而不是在分片循环里 cnt++】
+    // 第一版把吞并写在循环里（cnt++ 后再提交），结果撞出**相位漂移**：
+    // 手性靠 if (cnt > 0) hand = -hand 累积，被吞的那片一旦变空就不再翻手，
+    // 于是后续每片手性按奇偶整体对调。AWC 实测 t=174.4~177.2s 连续 22 音翻边，
+    // 用户报「同一节奏起手一会儿右一会儿左」。
+    //
+    // 这里改为：分片循环照常跑完（片边界、mult、nowTime 与基线逐项相同），
+    // 再把「跨手片界上、间隔 < 一帧」的音从下一片**搬**到上一片。
+    // 因为每片的 hand 是显式存进 PieceInfo 的（不是运行期奇偶），
+    // 搬音不改变任何一片的 hand ⇒ **相位零漂移**。
+    //
+    // 约束：
+    //   ① 只处理跨手片界（同手界不是伪双押）；
+    //   ② 搬后本片音数不得超过该手键数上限（超过会退化成同键重叠）；
+    //   ③ 遇变速点不搬（BPM 层级切换语义必须保留）。
+    for (size_t i = 0; i + 1 < pieces.size(); i++) {
+        if (pieces[i].hand == pieces[i + 1].hand) continue;
+        if (pieces[i].evCount <= 0 || pieces[i + 1].evCount <= 0) continue;
+
+        int maxK;
+        {
+            int sIdx;
+            auto ec = ResolveConfig(evFloor[pieces[i].evStart], &sIdx);
+            maxK = (pieces[i].hand == 0) ? ec.leftKeyCount : ec.rightKeyCount;
+        }
+        if (maxK <= 0) continue;
+
+        // ④ ★ `pieces[i+1].evCount > 1` —— **不许把下一片掏空**。
+        //    这是 2026-10-10 第二次修正：掏空下一片会让它变成空片，而空片按
+        //    10-06 规则**不翻手**，于是「它后面的片」与「本片」同手 ⇒ 用户报的
+        //    「同一节奏起手一会儿右一会儿左」。实测：放开这条约束时出现
+        //    19 音 / 13 音的整段单手（基线最长仅 5 音），即多片被并给同一只手。
+        //    保留 ≥1 音 ⇒ 片间严格交替 ⇒ 相位与手感都稳定。
+        while (pieces[i].evCount < maxK && pieces[i + 1].evCount > 1) {
+            const int lastIdx = pieces[i].evStart + pieces[i].evCount - 1;
+            const int nextIdx = pieces[i + 1].evStart;
+            if (nextIdx != lastIdx + 1) break;                  // 非相邻（防御）
+            const double gap = evTime[nextIdx] - evTime[lastIdx];
+            if (!(gap > 1e-9) || gap >= kBoundaryGuardSec) break;
+            if (markAt[nextIdx] >= 0) break;                    // 变速点不搬
+            pieces[i].evCount++;
+            pieces[i + 1].evStart++;
+            pieces[i + 1].evCount--;
+        }
     }
 
     // 哨兵片（参考实现）：turn_to/Emit 需要"下一片"几何。
