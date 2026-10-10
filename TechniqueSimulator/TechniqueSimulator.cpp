@@ -523,20 +523,32 @@ static bool TimeSlicePartition(const vector<double>& evTime,
             nowTime += pieceTime;
             canMulti = 1;
 
-            // 【2026-10-06】空片不换手。
+            // 【2026-10-11 修正】恢复「每片无条件换手」。—— 参照实现的语义。
             //
-            // 上游在这里无条件 hand = -hand，于是一片装 0 个音时（cnt == 0）
-            // 也照样翻一次手，把后续的换手节奏整个打乱 —— 表现是明明该
-            // 交替，实际连续出现同一只手。
+            // 曾于 2026-10-06 改成 `if (cnt > 0) hand = -hand;`（空片不换手），
+            // 理由是「空片没按键就不该占用一只手」。该改动实测使**手性不再是
+            // 时间的函数**，用户报「同一个节奏，一会儿右手起手、一会儿左手起手」。
             //
-            // 触发条件：片长远小于音符间隔（短砖/稀疏判定音），例如
-            // BPM170 + 阈值200 → 片长 0.1765s，而砖间隔 0.3529s（1 拍）
-            // 时每两片就有 1 片吃空。AWC 类谱 15°/30° 短砖密集，全程踩中。
+            // 严格归因（tools/abverify，主谱 + 用户真实配置，bpmLimit=550）：
+            //   片数 2219 == 参照 2219，逐片 (cnt, evStart) 不一致数 = 0；
+            //   即片边界、片长、倍乘全部与参照逐片相同。
+            //   把两种翻手规则分别施加到**同一份片序列**：
+            //     无条件翻手 → 与参照实际 hand 吻合 2219/2219 = 100.0%
+            //     仅非空翻手 → 与参照实际 hand 吻合 1442/2219 =  65.0%
+            //     仅非空翻手 → 与本移植实际 hand 吻合 2219/2219 = 100.0%
+            //   所以「同一个节奏换手」的唯一差异源就是这一行。
             //
-            // 语义上「一片没有按键，就不算占用一只手」，所以空片不该换手。
-            // 代价：对拍谱（505.25 BPM，无此结构）行为不变、diff 仍为 0；
-            // 但含空片的结构会与上游分叉 —— 这是刻意修正的上游缺陷。
-            if (cnt > 0) hand = -hand;
+            // 语义差别：
+            //   无条件（参照）：hand = 片序号的奇偶 = **时间的函数**
+            //     ⇒ 同一段节奏无论落在谱面哪里，都由「离拍点的距离」决定手，
+            //       同一节奏必然同一只手（用户要的手感）。
+            //   仅非空（已废）：hand = 前面装过音的片数 = **谱面数据的函数**
+            //     ⇒ 主谱 13% 的空片（289/2219）位置随数据变，手性相位被顶偏。
+            //       实测同一节奏形状换手率 54%（参照仅 16%）。
+            //
+            // 空片会换手 ⇒ 相邻两个非空片之间夹奇数个空片时同手（主谱 205 次），
+            // 这不是缺陷：参照同样如此（相邻非空片 换手 1724 / 同手 205）。
+            hand = -hand;
 
             // 微误差矫正（参考实现）
             if (nowData < n && fabs(evTime[nowData] - (double)nowTime) < pieceTime * 0.01)
@@ -550,6 +562,27 @@ static bool TimeSlicePartition(const vector<double>& evTime,
         }
 
         if (pieces.size() > pieceCap) break;    // 偏差 3：防死循环兜底
+    }
+
+    // ── [调试] 逐片转储（对拍用；仅当环境变量 ADOFAI_PIECE_DUMP 有值时启用）──
+    //  转储的是**分片循环的原始产物**（后处理之前），用于与参考实现的
+    //  potato() 逐片对拍「片边界 + 手性」到底从第几片开始分叉。
+    //  不开环境变量时零开销、零副作用。
+    char* dumpPath = nullptr;
+    size_t dumpPathLen = 0;
+    if (_dupenv_s(&dumpPath, &dumpPathLen, "ADOFAI_PIECE_DUMP") == 0 && dumpPath) {
+        FILE* dfp = nullptr;
+        if (fopen_s(&dfp, dumpPath, "w") == 0 && dfp) {
+            fprintf(dfp, "PIECES %d\n", (int)pieces.size());
+            for (size_t di = 0; di < pieces.size(); di++) {
+                const PieceInfo& dp = pieces[di];
+                fprintf(dfp, "P %d cnt=%d hand=%d len=%.9f start=%.9f end=%.9f evStart=%d mult=%d\n",
+                        (int)di, dp.evCount, dp.hand, dp.pieceLen, dp.startTime, dp.endTime,
+                        dp.evStart, dp.multiplier);
+            }
+            fclose(dfp);
+        }
+        free(dumpPath);
     }
 
     // ── 片界防伪双押后处理（2026-10-10）────────────────────────────
