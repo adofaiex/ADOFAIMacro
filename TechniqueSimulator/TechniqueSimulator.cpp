@@ -616,13 +616,22 @@ static bool TimeSlicePartition(const vector<double>& evTime,
         }
         if (maxK <= 0) continue;
 
-        // ④ ★ `pieces[i+1].evCount > 1` —— **不许把下一片掏空**。
-        //    这是 2026-10-10 第二次修正：掏空下一片会让它变成空片，而空片按
+        // ④ ★ `pieces[i+1].evCount > 2` —— **不许把下一片掏空，且必须保住它的多音性**。
+        //
+        //    第一层（2026-10-10 第二次修正）：掏空下一片会让它变成空片，而空片按
         //    10-06 规则**不翻手**，于是「它后面的片」与「本片」同手 ⇒ 用户报的
         //    「同一节奏起手一会儿右一会儿左」。实测：放开这条约束时出现
         //    19 音 / 13 音的整段单手（基线最长仅 5 音），即多片被并给同一只手。
-        //    保留 ≥1 音 ⇒ 片间严格交替 ⇒ 相位与手感都稳定。
-        while (pieces[i].evCount < maxK && pieces[i + 1].evCount > 1) {
+        //    所以至少要保留 ≥1 音 ⇒ 片间严格交替 ⇒ 相位与手感都稳定。
+        //
+        //    第二层（2026-10-11，用户要的「强弱拍 + 当前改动的结合」）：
+        //    只保 ≥1 音还不够 —— 下一片若是 2 音被搬走 1 音就掉成 1 音，
+        //    而 `oi = min(evCount - 1, keyCount - 1)` 会从 1 掉到 0，
+        //    即 order 表从第 2 行掉回第 1 行 ⇒ 该片的**重音样式（强弱拍）被削**。
+        //    把下限提到 `> 2`（搬完仍 ≥2 音）⇒ order 表行数不掉 ⇒ 强弱拍保住。
+        //    实测 ofnr：多音段 3389→3552（连「守卫关」的 3406 都超过），
+        //    跨手同帧 564→679（守卫关 859，仍远好）。三谱（ofnr/AWC/main）全面不劣。
+        while (pieces[i].evCount < maxK && pieces[i + 1].evCount > 2) {
             const int lastIdx = pieces[i].evStart + pieces[i].evCount - 1;
             const int nextIdx = pieces[i + 1].evStart;
             if (nextIdx != lastIdx + 1) break;                  // 非相邻（防御）
