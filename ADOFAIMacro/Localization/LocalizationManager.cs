@@ -211,7 +211,7 @@ namespace ADOFAIMacro.Localization
                 if (!File.Exists(filePath))
                 {
                     if (Main.LoggingEnabled)
-                    UnityEngine.Debug.LogWarning($"[Localization] 语言文件不存在: {filePath}, 使用默认翻译");
+                        UnityEngine.Debug.LogWarning($"[Localization] 语言文件不存在: {filePath}, 使用默认翻译");
                     _currentTranslations = new Dictionary<string, string>(_fallbackTranslations);
                     _currentLanguage = "zh-CN";
                     return false;
@@ -223,7 +223,7 @@ namespace ADOFAIMacro.Localization
                 if (langData == null || langData.translations == null)
                 {
                     if (Main.LoggingEnabled)
-                    UnityEngine.Debug.LogError($"[Localization] 语言文件格式错误或translations为空: {filePath}");
+                        UnityEngine.Debug.LogError($"[Localization] 语言文件格式错误或translations为空: {filePath}");
                     _currentTranslations = new Dictionary<string, string>(_fallbackTranslations);
                     _currentLanguage = "zh-CN";
                     return false;
@@ -233,13 +233,13 @@ namespace ADOFAIMacro.Localization
                 _currentLanguage = languageCode;
 
                 if (Main.LoggingEnabled)
-                UnityEngine.Debug.Log($"[Localization] 已加载语言: {langData.name} ({languageCode})");
+                    UnityEngine.Debug.Log($"[Localization] 已加载语言: {langData.name} ({languageCode})");
                 return true;
             }
             catch (Exception ex)
             {
                 if (Main.LoggingEnabled)
-                UnityEngine.Debug.LogError($"[Localization] 加载语言失败: {ex.Message}");
+                    UnityEngine.Debug.LogError($"[Localization] 加载语言失败: {ex.Message}");
                 _currentTranslations = new Dictionary<string, string>(_fallbackTranslations);
                 _currentLanguage = "zh-CN";
                 return false;
@@ -258,7 +258,7 @@ namespace ADOFAIMacro.Localization
                 {
                     //UnityEngine.Debug.Log($"[Localization] Key '{key}' is protected, returning hardcoded translation");
                     if (args.Length > 0)
-                    return string.Format(protectedValue, args);
+                        return string.Format(protectedValue, args);
                     return protectedValue;
                 }
                 // 受保护键但没有对应语言，fall through 到正常逻辑
@@ -274,7 +274,7 @@ namespace ADOFAIMacro.Localization
             if (_currentTranslations.TryGetValue(key, out string value))
             {
                 if (args.Length > 0)
-                return string.Format(value, args);
+                    return string.Format(value, args);
                 return value;
             }
 
@@ -283,7 +283,7 @@ namespace ADOFAIMacro.Localization
             {
                 WarnOnce(key, $"[Localization] Key '{key}' not found in current language, using fallback");
                 if (args.Length > 0)
-                return string.Format(fallback, args);
+                    return string.Format(fallback, args);
                 return fallback;
             }
 
@@ -300,7 +300,7 @@ namespace ADOFAIMacro.Localization
         {
             if (!Main.LoggingEnabled) return;
             if (_warnedKeys.Add(key))
-            UnityEngine.Debug.LogWarning(message);
+                UnityEngine.Debug.LogWarning(message);
         }
 
         /// <summary>key 本身不含占位符时 string.Format 会抛 FormatException，这里兜住。</summary>

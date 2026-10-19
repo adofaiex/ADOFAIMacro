@@ -148,12 +148,12 @@ namespace ADOFAIMacro.Input
             // 兜底：旧版原生 DLL 没有 SendKeyDirect 导出时走入队路径，
             // 绝不能静默丢键（否则宏会"整个失效"）
             if (result != 0)
-            result = InputSystem.PushKeyEvent(keyCode, isDown, 0);
+                result = InputSystem.PushKeyEvent(keyCode, isDown, 0);
 
             // 统计（非热路径分支，result!=0 极少发生）
             if (result == 0)
-            // 仅调用方线程写 _totalProcessed，无竞争，直接 ++
-            _totalProcessed++;
+                // 仅调用方线程写 _totalProcessed，无竞争，直接 ++
+                _totalProcessed++;
             else
                 Interlocked.Increment(ref _totalDropped);
 
@@ -171,7 +171,7 @@ namespace ADOFAIMacro.Input
 
             // 清空 C++ 层内部队列
             if (_isInitialized)
-            InputSystem.ClearQueue();
+                InputSystem.ClearQueue();
 
             MacroEngine.Log("[InputSystem] 队列已清空");
         }

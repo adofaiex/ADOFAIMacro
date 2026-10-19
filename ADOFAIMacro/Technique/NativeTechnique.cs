@@ -205,7 +205,7 @@ namespace ADOFAIMacro.Technique
                 else
                 {
                     nf = floors[ni];
-                    t  = nf?.entryTime ?? double.MaxValue;
+                    t = nf?.entryTime ?? double.MaxValue;
                 }
 
                 // 纯中旋（无长按）不产生按键

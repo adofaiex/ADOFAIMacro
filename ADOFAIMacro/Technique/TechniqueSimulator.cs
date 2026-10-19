@@ -566,7 +566,7 @@ namespace ADOFAIMacro.Technique
             {
                 FreeNativeConfig(ref config);
                 if (nativeEvents != IntPtr.Zero)
-                _freeTechEvents!(nativeEvents);
+                    _freeTechEvents!(nativeEvents);
             }
         }
 
@@ -588,7 +588,7 @@ namespace ADOFAIMacro.Technique
         private static NativeTechniqueConfig PrepareNativeConfig()
         {
             if (_cachedLeftKeys == null || _cachedRightKeys == null)
-            throw new InvalidOperationException("请先调用 UpdateConfig");
+                throw new InvalidOperationException("请先调用 UpdateConfig");
 
             var config = new NativeTechniqueConfig
             {
@@ -608,17 +608,17 @@ namespace ADOFAIMacro.Technique
 
                 // ── 全局按键顺序 ───────────────────────────────────
                 if (_cachedLeftKeyOrders != null)
-                AllocOrderData(_cachedLeftKeyOrders, ref config.LeftKeyOrders,
-                                   ref config.LeftOrderLengths, ref config.LeftOrderCounts);
+                    AllocOrderData(_cachedLeftKeyOrders, ref config.LeftKeyOrders,
+                                       ref config.LeftOrderLengths, ref config.LeftOrderCounts);
                 if (_cachedRightKeyOrders != null)
-                AllocOrderData(_cachedRightKeyOrders, ref config.RightKeyOrders,
-                                   ref config.RightOrderLengths, ref config.RightOrderCounts);
+                    AllocOrderData(_cachedRightKeyOrders, ref config.RightKeyOrders,
+                                       ref config.RightOrderLengths, ref config.RightOrderCounts);
 
                 // ── 全局按键时长 ───────────────────────────────────
                 if (_cachedLeftPressTimes != null)
-                config.LeftPressTimes = AllocDoubles(_cachedLeftPressTimes);
+                    config.LeftPressTimes = AllocDoubles(_cachedLeftPressTimes);
                 if (_cachedRightPressTimes != null)
-                config.RightPressTimes = AllocDoubles(_cachedRightPressTimes);
+                    config.RightPressTimes = AllocDoubles(_cachedRightPressTimes);
 
                 // ── 分段数组（含可选按键覆盖）─────────────────────
                 if (_cachedSegments != null && _cachedSegments.Length > 0)
@@ -826,17 +826,17 @@ namespace ADOFAIMacro.Technique
         private static double[] ParsePressTimes(string? input, int keyCount, double[]? fallback)
         {
             if (string.IsNullOrWhiteSpace(input))
-            return fallback ?? [.. Enumerable.Repeat(0.8, keyCount)];
+                return fallback ?? [.. Enumerable.Repeat(0.8, keyCount)];
 
             var result = new double[keyCount];
             for (int i = 0; i < result.Length; i++) result[i] = 0.8;
 
             var parts = input!.Split([','], StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < Math.Min(parts.Length, result.Length); i++)
-            if (double.TryParse(parts[i].Trim(),
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out double v))
-            result[i] = v;
+                if (double.TryParse(parts[i].Trim(),
+                            System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double v))
+                    result[i] = v;
 
             return result;
         }
@@ -861,8 +861,8 @@ namespace ADOFAIMacro.Technique
                 string group = n < groups.Length ? groups[n] : groups[groups.Length - 1];
                 var indices = new List<int>();
                 foreach (var p in group.Split([','], StringSplitOptions.RemoveEmptyEntries))
-                if (int.TryParse(p.Trim(), out int idx))
-                indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
+                    if (int.TryParse(p.Trim(), out int idx))
+                        indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
                 if (indices.Count > 0) result[n] = [.. indices];
             }
 

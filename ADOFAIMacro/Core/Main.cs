@@ -68,7 +68,7 @@ namespace ADOFAIMacro.Core
             Localization.LocalizationManager.Initialize(modEntry.Path);
             // 根据 Settings.UseChinese 加载对应语言
             if (Settings.UseChinese)
-            Localization.LocalizationManager.LoadLanguage("zh-CN");
+                Localization.LocalizationManager.LoadLanguage("zh-CN");
             else
                 Localization.LocalizationManager.LoadLanguage("en-US");
 
@@ -134,7 +134,7 @@ namespace ADOFAIMacro.Core
             Assembly assembly = Assembly.GetExecutingAssembly();
             var attribute = assembly.GetCustomAttribute<DebuggableAttribute>();
             if (attribute == null)
-            return false;
+                return false;
             return attribute.IsJITOptimizerDisabled;
         }
 
@@ -193,7 +193,7 @@ namespace ADOFAIMacro.Core
                 // 用户却看到"Info.json 被修改"的误报。
                 // Beta / 调试后缀只在 UI 展示层拼接（见 Settings.UiVersionText）。
                 if (IsDebugAssembly() && Mod?.Info.DisplayName?.Contains("(Debug)") == false)
-                Mod?.Info.DisplayName += " <color=grey>(Debug)</color>";
+                    Mod?.Info.DisplayName += " <color=grey>(Debug)</color>";
 
                 IsEnabled = true;
 
@@ -218,7 +218,7 @@ namespace ADOFAIMacro.Core
                 // 重载，否则手法模拟在本次游戏会话内永久失效（IsDllLoaded() 恒 false，
                 // Release 面板还会据此强制关闭"启用手法模拟"）。
                 if (!TechniqueSimulator.IsDllLoaded() && !TechniqueSimulator.LoadTechniqueDll())
-                Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
+                    Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
 
                 // ★ 用户「重新启用模组」= 有意重试：解除 Rust 触发器的进程级熔断
                 // （熔断后换关/重开工作线程不会自动恢复，见 TriggerRsHost 字段注释）。

@@ -91,7 +91,7 @@ namespace ADOFAIMacro.Technique
                 if (step > 4f) step = 4f; else if (step < -4f) step = -4f;
             }
             else
-        {
+            {
                 step = mean * 0.06f;
                 if (step > 0.8f) step = 0.8f; else if (step < -0.8f) step = -0.8f;
             }
@@ -128,7 +128,7 @@ namespace ADOFAIMacro.Technique
         {
             if (_noGcActive || _noGcBroken || !Main.Settings.SuppressGcPauses) return;
             try
-        {
+            {
                 if (GC.TryStartNoGCRegion(256L << 20))
                 {
                     _noGcActive = true;
@@ -144,7 +144,7 @@ namespace ADOFAIMacro.Technique
             if (!_noGcActive) return;
             _noGcActive = false;
             try
-        {
+            {
                 GC.EndNoGCRegion();
                 // NoGCRegion 会重置延迟模式，恢复低延迟设置
                 System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
@@ -189,7 +189,7 @@ namespace ADOFAIMacro.Technique
         private static void LogTechniqueTableSummary(HitEvent[] events, List<double> speeds)
         {
             try
-        {
+            {
                 double smin = 0, smax = 0;
                 for (int i = 0; i < speeds.Count; i++)
                 {
@@ -208,13 +208,13 @@ namespace ADOFAIMacro.Technique
                     presses++;
                     bool left = false;
                     for (int i = 0; i < _techLeftKeys.Length; i++)
-                    if (_techLeftKeys[i] == e.KeyCode) { left = true; break; }
+                        if (_techLeftKeys[i] == e.KeyCode) { left = true; break; }
                     if (left) leftUsed++; else rightUsed++;
 
                     if (!has) { cur = 1; has = true; }
                     else if (left == lastLeft) cur++;
                     else
-                {
+                    {
                         if (cur == 1) frag++;
                         if (cur > longest) longest = cur;
                         turns++;

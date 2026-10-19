@@ -49,7 +49,7 @@ namespace ADOFAIMacro.Core
         //
         // 日志要节流：同一个异常每帧都发生时，只记前 3 条，之后每 10 秒记一条
         // 「仍在发生」，否则防护本身又成了刷屏源。
-        private const int    GuardLogHead = 3;      // 前 N 条逐条记
+        private const int GuardLogHead = 3;      // 前 N 条逐条记
         private const double GuardLogEverySec = 10; // 之后每 N 秒记一条
         private static readonly Dictionary<string, int> _guardCount = new();
         private static readonly Dictionary<string, int> _guardLastMs = new();
@@ -117,7 +117,7 @@ namespace ADOFAIMacro.Core
             {
                 scrController ctrl;
                 if (_cachedControllerRef.TryGetTarget(out ctrl) && ctrl != null)
-                return ctrl;
+                    return ctrl;
                 return null;
             }
             set => _cachedControllerRef.SetTarget(value);
@@ -236,7 +236,7 @@ namespace ADOFAIMacro.Core
                 : ADOBase.editor != null ? ADOBase.editor
                 : ADOBase.customLevel;
                 if (host != null)
-                host.StartCoroutine(DelayedSendDeathKey());
+                    host.StartCoroutine(DelayedSendDeathKey());
             }
         }
 
@@ -376,40 +376,40 @@ namespace ADOFAIMacro.Core
                 var conductor = scrConductor.instance;
                 if (conductor == null) return;
 
-                    // 2026-09 游戏 API 变更：AddHit 现在把自身参数【原地】换算成毫秒误差
-                    //   angleDiff = angleDiff * -57.29578f;          // 弧度 → 度
-                    //   angleDiff = angleDiff * (60.0 / boundary);   // 度 → ms
-                    // Harmony 的 postfix 读到的是【改写后】的实参（已用 0Harmony 实测确认：
-                    // 被 starg.s 改写的参数，postfix 看到的是新值），因此这里直接取用即可。
-                    // 旧实现又乘一次 -57.29578 与 60/boundary，把量纲放大 50~115 倍并翻转
-                    // 符号 → 每个样本饱和到 ±40ms → 闭环校准被推向 ±60ms 轨道。
-                    float errMs = angleDiff;
-                    float? spd = (hitFloor ?? planet?.player?.currFloor?.prevfloor)?.speed;
+                // 2026-09 游戏 API 变更：AddHit 现在把自身参数【原地】换算成毫秒误差
+                //   angleDiff = angleDiff * -57.29578f;          // 弧度 → 度
+                //   angleDiff = angleDiff * (60.0 / boundary);   // 度 → ms
+                // Harmony 的 postfix 读到的是【改写后】的实参（已用 0Harmony 实测确认：
+                // 被 starg.s 改写的参数，postfix 看到的是新值），因此这里直接取用即可。
+                // 旧实现又乘一次 -57.29578 与 60/boundary，把量纲放大 50~115 倍并翻转
+                // 符号 → 每个样本饱和到 ±40ms → 闭环校准被推向 ±60ms 轨道。
+                float errMs = angleDiff;
+                float? spd = (hitFloor ?? planet?.player?.currFloor?.prevfloor)?.speed;
 
-                    int floorId = hitFloor != null ? hitFloor.seqID
-                    : planet?.player?.currFloor?.seqID ?? -1;
-                    double nowSpeed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 0.0;
+                int floorId = hitFloor != null ? hitFloor.seqID
+                : planet?.player?.currFloor?.seqID ?? -1;
+                double nowSpeed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 0.0;
 
-                    // 方案7：闭环校准——把实测判定误差喂给宏
-                    ADOFAIMacro.Technique.MacroEngine.RecordJudgedError(errMs, (float)(spd ?? 1f));
+                // 方案7：闭环校准——把实测判定误差喂给宏
+                ADOFAIMacro.Technique.MacroEngine.RecordJudgedError(errMs, (float)(spd ?? 1f));
 
-                    // ⚠️ 这里在"每一次判定"上执行。旧实现无条件写一行 UMM 日志：
-                    // 高密度谱面每局数千次文件 I/O，是主线程卡顿与日志膨胀的来源。
-                    // 改为低频诊断（≥1s 一行，带窗口内样本数与均值），
-                    // 与 Macro 中 [Macro-Diag] 的既有做法保持一致。
-                    _judgeLogSum += errMs;
-                    _judgeLogCount++;
-                    int nowMs = Environment.TickCount;
-                    if (unchecked(nowMs - _judgeLogLastMs) >= 1000)
-                    {
-                        double avg = _judgeLogCount > 0 ? _judgeLogSum / _judgeLogCount : 0.0;
-                        Main.Log(
-                            $"[Macro-Judge] 近1s {_judgeLogCount} 次判定 | 平均误差 {avg:+0.00;-0.00}ms | " +
-                            $"最近 floor={floorId} err={errMs:+0.0;-0.0}ms spdUsed={spd ?? 1f:F2} spdNow={nowSpeed:F2} marginScale={marginScale:F2}");
-                        _judgeLogSum = 0;
-                        _judgeLogCount = 0;
-                        _judgeLogLastMs = nowMs;
-                    }
+                // ⚠️ 这里在"每一次判定"上执行。旧实现无条件写一行 UMM 日志：
+                // 高密度谱面每局数千次文件 I/O，是主线程卡顿与日志膨胀的来源。
+                // 改为低频诊断（≥1s 一行，带窗口内样本数与均值），
+                // 与 Macro 中 [Macro-Diag] 的既有做法保持一致。
+                _judgeLogSum += errMs;
+                _judgeLogCount++;
+                int nowMs = Environment.TickCount;
+                if (unchecked(nowMs - _judgeLogLastMs) >= 1000)
+                {
+                    double avg = _judgeLogCount > 0 ? _judgeLogSum / _judgeLogCount : 0.0;
+                    Main.Log(
+                        $"[Macro-Judge] 近1s {_judgeLogCount} 次判定 | 平均误差 {avg:+0.00;-0.00}ms | " +
+                        $"最近 floor={floorId} err={errMs:+0.0;-0.0}ms spdUsed={spd ?? 1f:F2} spdNow={nowSpeed:F2} marginScale={marginScale:F2}");
+                    _judgeLogSum = 0;
+                    _judgeLogCount = 0;
+                    _judgeLogLastMs = nowMs;
+                }
             }
             catch (Exception ex)
             {
@@ -539,7 +539,7 @@ namespace ADOFAIMacro.Core
         private static bool IsKeyAllowed(KeyCode keyCode)
         {
             if (!Main.IsEnabled || !Main.Settings.Macro)
-            return true; // 如果宏未启用，不过滤任何按键
+                return true; // 如果宏未启用，不过滤任何按键
             if (!Main.Settings.EnableKeyFilter) return true;
 
             // 需要重建位图？
@@ -604,7 +604,7 @@ namespace ADOFAIMacro.Core
             _blockedKeyCount = 0;
 
             if (!Main.IsEnabled || !Main.Settings.Macro || !Main.Settings.EnableKeyFilter)
-            return;
+                return;
 
             try
             {
@@ -819,7 +819,7 @@ namespace ADOFAIMacro.Core
         private static bool IsAsyncKeyAllowed(ushort keyCode)
         {
             if (!Main.IsEnabled || !Main.Settings.Macro)
-            return true; // 如果宏未启用，不过滤任何按键
+                return true; // 如果宏未启用，不过滤任何按键
             if (!Main.Settings.EnableKeyFilter) return true;
 
             // 需要重建位图？

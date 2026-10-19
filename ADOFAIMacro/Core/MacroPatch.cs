@@ -42,7 +42,7 @@ namespace ADOFAIMacro.Core
     //     DisableAfterExceptions > 0 时窗口内累计达到阈值直接自动卸载该补丁。
     //     ⚠ Prefix 中途抛出被吞后原方法不会执行（Harmony 语义），该功能可能退化，
     //     属"有日志的可控降级"，仍优于旧二进制在新游戏上反复打断游戏流程。
-    #pragma warning disable CS0649
+#pragma warning disable CS0649
     /// <summary>
     /// 方法级补丁声明；由 <see cref="MacroPatchHub"/> 扫描应用（候选链/版本门控/异常兜底/探针）。
     /// 用法与多版本剧本详见上方注释块，注入规则与 Harmony 原生一致。
@@ -107,5 +107,5 @@ namespace ADOFAIMacro.Core
             PatchType = patchType;
         }
     }
-    #pragma warning restore CS0649
+#pragma warning restore CS0649
 }

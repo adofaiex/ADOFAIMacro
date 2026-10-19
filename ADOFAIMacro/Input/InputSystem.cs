@@ -304,7 +304,7 @@ namespace ADOFAIMacro.Input
             if (!_isInitialized || SendKeyCombinationFunc == null
             || keys == null || keys.Length == 0) return -1;
             fixed (byte* pKeys = keys)
-            return SendKeyCombinationFunc(pKeys, keys.Length, delayMs);
+                return SendKeyCombinationFunc(pKeys, keys.Length, delayMs);
         }
 
         public static int SendText(string text)

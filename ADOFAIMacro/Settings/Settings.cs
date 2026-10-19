@@ -154,13 +154,13 @@ namespace ADOFAIMacro.Settings
                 if (!ADOFAIMacro.Localization.LocalizationManager.IsInitialized) return;
 
                 if (Main.LoggingEnabled)
-                Main.Log($"[Settings] 切换语言 → UseChinese={value}");
+                    Main.Log($"[Settings] 切换语言 → UseChinese={value}");
                 bool success = value
                 ? LocalizationManager.LoadLanguage("zh-CN")
                 : LocalizationManager.LoadLanguage("en-US");
                 if (Main.LoggingEnabled)
-                Main.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
-                             $"{LocalizationManager.CurrentLanguage}");
+                    Main.Log($"[Settings] LoadLanguage 返回 {success}，当前语言 " +
+                                 $"{LocalizationManager.CurrentLanguage}");
             }
         }
 
@@ -262,8 +262,8 @@ namespace ADOFAIMacro.Settings
                 // 模组或重启游戏才生效。其余同类开关（高精度时间/高级输入/虚拟键盘）
                 // 都是实时的，这里明确告知，避免用户把"切换了没反应"当成功能损坏。
                 if (Main.IsEnabled && Main.LoggingEnabled)
-                Main.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
-                        "该特性在模组启用时改写游戏方法，需重新启用模组（或重启游戏）后生效");
+                    Main.Log($"[ADOFAIMacro] 高精度异步 = {value}：" +
+                            "该特性在模组启用时改写游戏方法，需重新启用模组（或重启游戏）后生效");
             }
         }
 
@@ -295,7 +295,7 @@ namespace ADOFAIMacro.Settings
                 if (_inputMode == value) return;
                 _inputMode = value;
                 if (InputSystem.IsInitialized)
-                InputSystem.SetInputMode((InputMode)value);
+                    InputSystem.SetInputMode((InputMode)value);
             }
         }
 
@@ -636,8 +636,8 @@ namespace ADOFAIMacro.Settings
         {
             if (string.IsNullOrEmpty(keyString)) return null;
             if (keyString.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            if (int.TryParse(keyString.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hex))
-            return hex;
+                if (int.TryParse(keyString.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out int hex))
+                    return hex;
             if (KeyCodeMap.TryGetValue(keyString, out int code)) return code;
             return null;
         }
@@ -676,14 +676,14 @@ namespace ADOFAIMacro.Settings
                 AddTab(Localization.LocalizationManager.Get("tab.other_settings"), DrawOtherSettingsCard);
 
                 if (SimulateKeyPress)
-                AddTab(Localization.LocalizationManager.Get("tab.technique_simulation"), DrawTechniqueSimCard);
+                    AddTab(Localization.LocalizationManager.Get("tab.technique_simulation"), DrawTechniqueSimCard);
             }
 
             AddTab(Localization.LocalizationManager.Get("tab.update_log"), DrawUpdateLogCard);
             AddTab(Localization.LocalizationManager.Get("tab.author"), DrawAuthorCard);
 
             if (IsBeta)
-            AddTab(Localization.LocalizationManager.Get("tab.beta"), DrawBetaCard);
+                AddTab(Localization.LocalizationManager.Get("tab.beta"), DrawBetaCard);
 
             if (selectedCardIndex >= _tabCount) selectedCardIndex = 0;
             if (_tabNames.Length != _tabCount)
@@ -706,7 +706,7 @@ namespace ADOFAIMacro.Settings
             catch (Exception ex)
             {
                 if (Main.LoggingEnabled)
-                UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
+                    UnityEngine.Debug.LogError($"[ADOFAIMacro/Settings] 绘制选项卡失败: {ex}");
                 try
                 {
                     GUILayout.BeginVertical(UIUtils.CardStyle);
@@ -735,7 +735,7 @@ namespace ADOFAIMacro.Settings
             if (newSel != sel)
             {
                 if (Main.LoggingEnabled)
-                UnityEngine.Debug.Log($"[DrawLanguageCard] Switching: UseChinese = {newSel == 0}");
+                    UnityEngine.Debug.Log($"[DrawLanguageCard] Switching: UseChinese = {newSel == 0}");
                 UseChinese = newSel == 0;
             }
             GUILayout.EndHorizontal();
@@ -902,9 +902,9 @@ namespace ADOFAIMacro.Settings
                         };
                         string lbl = Localization.LocalizationManager.Get(modeKey);
                         if (!available)
-                        lbl += Localization.LocalizationManager.Get("key_mode_not_supported");
+                            lbl += Localization.LocalizationManager.Get("key_mode_not_supported");
                         if (GUILayout.Button(lbl, UIUtils.ButtonStyle, GUILayout.Height(24)) && available && InputMode != i)
-                        InputMode = i;
+                            InputMode = i;
                     }
                     GUILayout.EndHorizontal();
 
@@ -1072,8 +1072,8 @@ namespace ADOFAIMacro.Settings
                 GUILayout.Space(4);
                 GUILayout.BeginHorizontal();
                 foreach (string k in _deathKeyQuickSet)
-                if (GUILayout.Button(k, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
-                DeathKeyInput = k;
+                    if (GUILayout.Button(k, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
+                        DeathKeyInput = k;
                 GUILayout.EndHorizontal();
 
                 GUILayout.Space(2);
@@ -1308,7 +1308,7 @@ namespace ADOFAIMacro.Settings
             EnableTechniqueSimulation = newEnable;
 #else
             if (newEnable != EnableTechniqueSimulation)
-            EnableTechniqueSimulation = newEnable;
+                EnableTechniqueSimulation = newEnable;
 #endif
 
 #if !DEBUG
@@ -1342,7 +1342,7 @@ namespace ADOFAIMacro.Settings
             string profileName = GUILayout.TextField(_techniqueProfiles[SelectedTechniqueProfileIndex].name,
                 UIUtils.TextFieldStyle, GUILayout.ExpandWidth(true));
             if (profileName != _techniqueProfiles[SelectedTechniqueProfileIndex].name)
-            _techniqueProfiles[SelectedTechniqueProfileIndex].name = profileName;
+                _techniqueProfiles[SelectedTechniqueProfileIndex].name = profileName;
 
             if (GUILayout.Button(LocalizationManager.Get("tech.new"), UIUtils.ButtonStyle, GUILayout.Width(60)))
             {
@@ -1367,9 +1367,9 @@ namespace ADOFAIMacro.Settings
             GUILayout.BeginHorizontal();
             GUILayout.Label(LocalizationManager.Get("tech.select_profile"), UIUtils.LabelStyle, GUILayout.Width(100));
             if (_profileNameCache.Length != _techniqueProfiles.Count)
-            _profileNameCache = new string[_techniqueProfiles.Count];
+                _profileNameCache = new string[_techniqueProfiles.Count];
             for (int i = 0; i < _profileNameCache.Length; i++)
-            _profileNameCache[i] = _techniqueProfiles[i].name;
+                _profileNameCache[i] = _techniqueProfiles[i].name;
             int newIdx = UIUtils.M3SelectionGrid(SelectedTechniqueProfileIndex, _profileNameCache,
                 Mathf.Min(_profileNameCache.Length, 4), GUILayout.ExpandWidth(true));
             if (newIdx != SelectedTechniqueProfileIndex) SelectedTechniqueProfileIndex = newIdx;
@@ -1444,7 +1444,7 @@ namespace ADOFAIMacro.Settings
             }
             if (_traceSolveMsg.Length > 0) GUILayout.Label(_traceSolveMsg, tipStyle);
             GUILayout.EndHorizontal();
-                        GUILayout.Label(LocalizationManager.Get("tech.player_solve_now_hint"), tipStyle);
+            GUILayout.Label(LocalizationManager.Get("tech.player_solve_now_hint"), tipStyle);
 
             // 导出 / 导入轨迹文件（Spectre 式可携带回放）
             GUILayout.BeginHorizontal();
@@ -1604,7 +1604,7 @@ namespace ADOFAIMacro.Settings
                     arrow, i + 1, seg.startFloor, seg.endFloor, seg.bpmLimit, overrideMk);
 
                 if (GUILayout.Button(segLabel, UIUtils.ButtonStyle, GUILayout.ExpandWidth(true)))
-                _segmentExpanded[i] = !_segmentExpanded[i];
+                    _segmentExpanded[i] = !_segmentExpanded[i];
 
                 if (GUILayout.Button("✕", UIUtils.ButtonStyle, GUILayout.Width(36)))
                 {
@@ -1701,7 +1701,7 @@ namespace ADOFAIMacro.Settings
 
             GUILayout.Space(2);
             if (GUILayout.Button(LocalizationManager.Get("tech.add_segment"), UIUtils.ButtonStyle))
-            segments.Add(new TechniqueSegment { bpmLimit = Main.Settings.TechniqueBpmLimit });
+                segments.Add(new TechniqueSegment { bpmLimit = Main.Settings.TechniqueBpmLimit });
         }
 
         // ─────────────────────────────────────────────
@@ -1748,7 +1748,7 @@ namespace ADOFAIMacro.Settings
         private string GetLevelConfigStatusText()
         {
             if (_levelStatusVersion == LevelTechniqueManager.CacheVersion)
-            return _levelStatusTextCache;
+                return _levelStatusTextCache;
             _levelStatusVersion = LevelTechniqueManager.CacheVersion;
             _levelStatusTextCache = BuildLevelConfigStatusText();
             return _levelStatusTextCache;

@@ -337,7 +337,7 @@ namespace ADOFAIMacro.Technique
 
             // 手动加载也应用到 Settings，让用户能在 UI 中看到配置项
             if (_loadedConfigs.TryGetValue(levelPath!, out var config) && config != null)
-            ApplyConfigToSettings(config);
+                ApplyConfigToSettings(config);
         }
 
         /// <summary>

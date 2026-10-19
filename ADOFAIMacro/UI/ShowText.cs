@@ -36,13 +36,13 @@ namespace ADOFAIMacro.UI
         public void OnEnable()
         {
             if (Main.Settings != null)
-            Main.Settings.OnMacroChanged += OnMacroChanged;
+                Main.Settings.OnMacroChanged += OnMacroChanged;
         }
 
         public void OnDisable()
         {
             if (Main.Settings != null)
-            Main.Settings.OnMacroChanged -= OnMacroChanged;
+                Main.Settings.OnMacroChanged -= OnMacroChanged;
         }
 
         private void OnMacroChanged(bool newValue)
@@ -75,7 +75,7 @@ namespace ADOFAIMacro.UI
 
                 // 虚拟异步键盘的内置按键显示（OS 层看不见，由模组自己渲染）
                 if (Main.Settings.SimulateKeyPress && Main.Settings.UseVirtualAsyncInput)
-                DrawVirtualKeys();
+                    DrawVirtualKeys();
             }
         }
 
@@ -91,7 +91,7 @@ namespace ADOFAIMacro.UI
             lock (VirtualAsyncInput.DisplayLock)
             {
                 foreach (var kv in VirtualAsyncInput.DisplayDown)
-                _downSnapshot[kv.Key] = kv.Value;
+                    _downSnapshot[kv.Key] = kv.Value;
                 for (int i = VirtualAsyncInput.DisplayUps.Count - 1; i >= 0; i--)
                 {
                     var up = VirtualAsyncInput.DisplayUps[i];

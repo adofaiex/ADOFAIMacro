@@ -229,8 +229,8 @@ namespace ADOFAIMacro.Technique
             if (seconds <= 0) return;
 
             if (_hWaitTimer == IntPtr.Zero)
-            _hWaitTimer = CreateWaitableTimerExW(IntPtr.Zero, IntPtr.Zero,
-                    CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+                _hWaitTimer = CreateWaitableTimerExW(IntPtr.Zero, IntPtr.Zero,
+                        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
             if (_hWaitTimer == IntPtr.Zero)
             {
                 // 回退：Sleep 粒度 1~2ms，会睡过头——少睡 1ms，宁可早醒进自旋，不可迟到
@@ -241,7 +241,7 @@ namespace ADOFAIMacro.Technique
 
             long due = -(long)Math.Ceiling(seconds * 1e7); // 负值 = 相对时间（100ns 单位）
             if (SetWaitableTimer(_hWaitTimer, ref due, 0, IntPtr.Zero, IntPtr.Zero, false))
-            WaitForSingleObject(_hWaitTimer, unchecked((uint)-1)); // INFINITE
+                WaitForSingleObject(_hWaitTimer, unchecked((uint)-1)); // INFINITE
         }
 
         /// <summary>
@@ -403,7 +403,7 @@ namespace ADOFAIMacro.Technique
                 double projected = _songPosSm + ElapsedSec(_smRefTick, qpcSnap) * _smPitch;
                 double err = currentSongPos - projected;
                 if (Math.Abs(err) > 0.05)
-                _songPosSm = currentSongPos;   // 跳变（暂停恢复等）
+                    _songPosSm = currentSongPos;   // 跳变（暂停恢复等）
                 else
                 {
                     double adj = err * 0.15;

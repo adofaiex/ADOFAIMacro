@@ -30,8 +30,8 @@ namespace ADOFAIMacro.Technique
         {
             ParseTechniqueConfig();
 
-            var  floors  = cachedFloors!;
-            bool sim     = Main.Settings.SimulateKeyPress;
+            var floors = cachedFloors!;
+            bool sim = Main.Settings.SimulateKeyPress;
 
             // 使用对象池，避免分配
             _evTimeRecycle.Clear();
@@ -88,8 +88,8 @@ namespace ADOFAIMacro.Technique
                     continue;
                 }
 
-                var    nf = floors[ni];
-                double t  = nf?.entryTime ?? double.MaxValue;
+                var nf = floors[ni];
+                double t = nf?.entryTime ?? double.MaxValue;
 
                 if (sim && fl.holdLength > -1 && nf != null && nf.holdLength == -1)
                 {
@@ -104,7 +104,7 @@ namespace ADOFAIMacro.Technique
                 _evFloorRecycle.Add(i);
                 evSpeed.Add(fl.speed);
             }
-            
+
 
             int total = _evTimeRecycle.Count;
             if (total == 0) { _hitEvents = []; _hitEventCount = 0; return; }
@@ -130,7 +130,7 @@ namespace ADOFAIMacro.Technique
             else
             {
                 for (int i = 0; i < output.Count; i++)
-                _hitEventPool[i] = output[i];
+                    _hitEventPool[i] = output[i];
                 _hitEvents = _hitEventPool.AsSpan(0, output.Count).ToArray();
             }
 
@@ -146,7 +146,7 @@ namespace ADOFAIMacro.Technique
             {
                 var seg = _currentSegments[i];
                 if (floorIdx >= seg.startFloor && floorIdx <= seg.endFloor)
-                return i;
+                    return i;
             }
             return -1;
         }
@@ -208,17 +208,17 @@ namespace ADOFAIMacro.Technique
             int total, List<PieceInfo> pieces,
             List<double>? evSpeed = null)   // 逐地板速度；为 null 时退化成全局速度
         {
-            double nowT    = 0.0;
-            int    nowD    = 0;
-            var    _levelTechHandPref = LevelTechniqueManager.GetCurrentLevelConfig()?.handPreference ?? Main.Settings.TechniqueHandPreference;
-            int    cHand   = (_levelTechHandPref == 0) ? -1 : 1;
-            int    mult    = 0;
+            double nowT = 0.0;
+            int nowD = 0;
+            var _levelTechHandPref = LevelTechniqueManager.GetCurrentLevelConfig()?.handPreference ?? Main.Settings.TechniqueHandPreference;
+            int cHand = (_levelTechHandPref == 0) ? -1 : 1;
+            int mult = 0;
 
-            var mCnt    = new long[64];   // 64 级：无上限倍乘（与 cpp 同步扩容）
+            var mCnt = new long[64];   // 64 级：无上限倍乘（与 cpp 同步扩容）
             var mCntPre = new long[64];
-            int  canMulti  = 0;
-            bool needBack  = false;
-// 槽位手号表：与 pieces 同索引，回溯时**不弹出**（见 maxK 处注释）
+            int canMulti = 0;
+            bool needBack = false;
+            // 槽位手号表：与 pieces 同索引，回溯时**不弹出**（见 maxK 处注释）
             var slotHand = new List<int>();
 
             // ── 【2026-10-03 变速容差整条移除】─────────────────────
@@ -264,20 +264,20 @@ namespace ADOFAIMacro.Technique
 
             while (nowD < total)
             {
-int psize = pieces.Count;   // 本片提交前的片数
+                int psize = pieces.Count;   // 本片提交前的片数
 
                 // ── 变速点：重开时间片（C++ :403-426）────────────
                 if (markAt[nowD] >= 0)
                 {
                     RestartMark m = marks[markAt[nowD]];
                     mult = 0;
-                    Array.Clear(mCnt,    0, mCnt.Length);
+                    Array.Clear(mCnt, 0, mCnt.Length);
                     Array.Clear(mCntPre, 0, mCntPre.Length);
                     if (m.Kind == 1) cHand = m.Hand;
-                    else             cHand *= m.Hand;
+                    else cHand *= m.Hand;
                     nowT = evTime[nowD];
                     if (adviceBpm[nowD] > 0.0) nowBpm = adviceBpm[nowD];
-                    else                       nowBpm *= -1.0 * adviceBpm[nowD];
+                    else nowBpm *= -1.0 * adviceBpm[nowD];
                     // 原生 restart 后自清标记（C++ :418-422）：
                     // nowT 已对齐 evTime[nowD]，差值恒 0，不自清会永久自旋。
                     markAt[nowD] = -1;
@@ -294,7 +294,7 @@ int psize = pieces.Count;   // 本片提交前的片数
 
                 // ── 片长（C++ :429）────────────────────────────
                 double pLen = 60.0 / (nowBpm * Math.Pow(2, mult)) / 2.0;
-// 与 cpp 的 kMaxMult=60 对齐：mult 本身无上限，而 mCnt 是
+                // 与 cpp 的 kMaxMult=60 对齐：mult 本身无上限，而 mCnt 是
                 // long[16]，越界即 UB；60 级已远超任何真实谱面。
                 if (mult > 60) mult = 60;
                 if (pLen < 1e-9) pLen = 1e-9;
@@ -315,21 +315,21 @@ int psize = pieces.Count;   // 本片提交前的片数
                     cnt = j - nowD;
                 }
 
-                int   curFloorIdx = evFloor[nowD];
-                int   csH   = (cHand == 1) ? 1 : 0;
+                int curFloorIdx = evFloor[nowD];
+                int csH = (cHand == 1) ? 1 : 0;
 
                 // 使用分段有效配置来确定当前手的最大按键数
-                var   ec   = GetEffectiveConfig(curFloorIdx);
-// 复刻一个真实怪癖（不是笔误）：读 piece[psize][1] 时该槽尚未写入
+                var ec = GetEffectiveConfig(curFloorIdx);
+                // 复刻一个真实怪癖（不是笔误）：读 piece[psize][1] 时该槽尚未写入
                 // （写入发生在 :308 提交之后），因此恒为**左手**键数；只有
                 // 回溯复用的槽才带旧手号。slotHand 与 pieces 同索引，
                 // 回溯时只弹 pieces、**不弹 slotHand**，以此精确保留该行为。
-                int   slotH = slotHand.Count > psize ? slotHand[psize] : 0;
-                int   maxK  = (slotH == 0) ? ec.LeftKeys.Length : ec.RightKeys.Length;
-                int  mainHand  = (_levelTechHandPref == 0) ? -1 : 1;
+                int slotH = slotHand.Count > psize ? slotHand[psize] : 0;
+                int maxK = (slotH == 0) ? ec.LeftKeys.Length : ec.RightKeys.Length;
+                int mainHand = (_levelTechHandPref == 0) ? -1 : 1;
                 bool isOffHand = (cHand != mainHand);
 
-// 无上限倍乘 —— 与时间片划分语义一致（cpp 已同步）
+                // 无上限倍乘 —— 与时间片划分语义一致（cpp 已同步）
                 if (cnt > maxK)
                 {
                     if (canMulti == 1 && isOffHand) needBack = true;
@@ -340,14 +340,14 @@ int psize = pieces.Count;   // 本片提交前的片数
                 if (needBack && pieces.Count > 0)
                 {
                     needBack = false;
-                    cHand    = mainHand;
+                    cHand = mainHand;
                     var prev = pieces[pieces.Count - 1];
                     nowT = prev.StartTime;
                     nowD = prev.EvStart;
                     Array.Copy(mCntPre, mCnt, 64);
                     mult = prev.Multiplier + 1;   // 无上限：回溯后倍乘必须严格高于上一片（与 cpp 同步）
                     pieces.RemoveAt(pieces.Count - 1);
-// 回溯只回退 psize，slotHand（piece[][1] 的槽）**保留旧手号**，
+                    // 回溯只回退 psize，slotHand（piece[][1] 的槽）**保留旧手号**，
                     // 下一轮重新提交时该槽会被新手号覆盖 —— 故这里也不弹 slotHand。
                     canMulti = 0;
                     continue;
@@ -371,25 +371,25 @@ int psize = pieces.Count;   // 本片提交前的片数
                 // 接近半拍的空隙都被拉长，且与速率决策共用一个设置项（一项两用）。
                 */
 
-// 【2026-10-04 对拍】piece[psize][2]=piece_time 存进
+                // 【2026-10-04 对拍】piece[psize][2]=piece_time 存进
                 // **long** → 截断到整数微秒。startTime/endTime 用未截断的
-// nowT/pLen（now_time 也是 double，窗口判定必须精确），
+                // nowT/pLen（now_time 也是 double，窗口判定必须精确），
                 // 故只有 PieceLen 截断。三者全截断 / 全不截断都会让对拍分叉
                 //（实测首个差异分别落在 #139 / #269 片）。
                 double pLenStored = (double)(long)(pLen * 1e6) / 1e6;
                 pieces.Add(new PieceInfo(cnt, csH, pLenStored, nowT, nowT + pLen, nowD, mult));
-// 手号写进槽位。maxK 处读的是本片提交**前**的槽值，
+                // 手号写进槽位。maxK 处读的是本片提交**前**的槽值，
                 // 故 Add 的顺序不影响当轮判定。
                 slotHand.Add(csH);
 
-// 【2026-10-11 同步 C++ :514】提交片前快照级联计数器。
-// 此前 C# 从未做过这次复制（mCntPre 只在段切换时被清零），
-// 回溯时 Array.Copy(mCntPre, mCnt) 恢复的是零/过期数组 —— 回溯后
-// 的倍乘节拍与原生完全不同。现在与原生一致：mCntPre = 上一片
-// 提交前的 mCnt，回溯用它恢复。
+                // 【2026-10-11 同步 C++ :514】提交片前快照级联计数器。
+                // 此前 C# 从未做过这次复制（mCntPre 只在段切换时被清零），
+                // 回溯时 Array.Copy(mCntPre, mCnt) 恢复的是零/过期数组 —— 回溯后
+                // 的倍乘节拍与原生完全不同。现在与原生一致：mCntPre = 上一片
+                // 提交前的 mCnt，回溯用它恢复。
                 Array.Copy(mCnt, mCntPre, 64);
 
-// 全层级（long[16] 数组被 for(c=0;c<32) 越界写，属 UB；cpp 已修成全 64 级）
+                // 全层级（long[16] 数组被 for(c=0;c<32) 越界写，属 UB；cpp 已修成全 64 级）
                 for (int c = mult; c > 0; c--)
                 {
                     mCnt[c] += (long)Math.Pow(2, 16 - (mult - c));
@@ -403,7 +403,7 @@ int psize = pieces.Count;   // 本片提交前的片数
                 canMulti = 1;
 
                 if (nowD < total && Math.Abs(evTime[nowD] - nowT) < pLen * 0.01)
-                nowT = evTime[nowD];
+                    nowT = evTime[nowD];
             }
 
             // ── 片界防伪双押后处理（2026-10-11 与 C++ :588-645 同步）────
@@ -463,24 +463,24 @@ int psize = pieces.Count;   // 本片提交前的片数
             List<double> evTime, List<int> evPress, List<int> evFloor,
             List<PieceInfo> pieces, bool sim)
         {
-            int total  = evTime.Count;
+            int total = evTime.Count;
             var output = new List<HitEvent>(total * 2);
 
-            bool          activeHold    = false;
-            byte          activeHoldKey = 0;
-            int           lastSegIdxEvent = -2;
+            bool activeHold = false;
+            byte activeHoldKey = 0;
+            int lastSegIdxEvent = -2;
 
             for (int pcnt = 0; pcnt < pieces.Count - 1; pcnt++)
             {
-                var    cur    = pieces[pcnt];
-                var    next   = pieces[pcnt + 1];
+                var cur = pieces[pcnt];
+                var next = pieces[pcnt + 1];
                 double pStart = (pcnt > 0) ? pieces[pcnt - 1].EndTime : 0.0;
 
                 for (int i = 0; i < cur.EvCount; i++)
                 {
-                    int    idx   = cur.EvStart + i;
-                    int    press = evPress[idx];
-                    double t     = evTime[idx];
+                    int idx = cur.EvStart + i;
+                    int press = evPress[idx];
+                    double t = evTime[idx];
 
                     if (press == -1)
                     {
@@ -512,17 +512,17 @@ int psize = pieces.Count;   // 本片提交前的片数
 
                     var ec = GetEffectiveConfig(curFloor);
 
-                    byte[]   hK = (cur.Hand == 0) ? ec.LeftKeys        : ec.RightKeys;
-                    int[][]  hO = (cur.Hand == 0) ? ec.LeftOrders       : ec.RightOrders;
-                    double[] hT = (cur.Hand == 0) ? ec.LeftPressTimes   : ec.RightPressTimes;
+                    byte[] hK = (cur.Hand == 0) ? ec.LeftKeys : ec.RightKeys;
+                    int[][] hO = (cur.Hand == 0) ? ec.LeftOrders : ec.RightOrders;
+                    double[] hT = (cur.Hand == 0) ? ec.LeftPressTimes : ec.RightPressTimes;
 
                     int oi = Math.Min(cur.EvCount - 1, hK.Length - 1);
                     int ki = (i < hO[oi].Length) ? hO[oi][i] : (i % hK.Length);
                     ki = Mathf.Clamp(ki, 0, hK.Length - 1);
 
-                    byte   kc          = hK[ki];
-                    double ratio       = (ki < hT.Length) ? hT[ki] : 0.8;
-                    bool   isHoldHead  = (press == 2);
+                    byte kc = hK[ki];
+                    double ratio = (ki < hT.Length) ? hT[ki] : 0.8;
+                    bool isHoldHead = (press == 2);
 
                     if (isHoldHead && activeHold)
                     {
@@ -556,12 +556,12 @@ int psize = pieces.Count;   // 本片提交前的片数
                     if (next.Hand != cur.Hand || next.EvCount == 0)
                     { if (rel >= next.EndTime) rel = next.EndTime - 1e-6; }
                     else
-                        { if (rel >= cur.EndTime)  rel = cur.EndTime  - 1e-6; }
+                    { if (rel >= cur.EndTime) rel = cur.EndTime - 1e-6; }
 
                     if (rel <= t) rel = t + (next.EndTime - t) * 0.4;
-// 【2026-10-04 对拍】out_event[][0] 是 long（整数微秒），
+                    // 【2026-10-04 对拍】out_event[][0] 是 long（整数微秒），
                     // :377/:381 的夹取也在整数上算 → 补最后一次截断。
-// 不截断会出现 43.434117019 这类亚微秒值，与上游的
+                    // 不截断会出现 43.434117019 这类亚微秒值，与上游的
                     // 43.434116000 不同，进而影响同刻事件的先后判定。
                     rel = (double)(long)(rel * 1e6) / 1e6;
 
@@ -582,12 +582,13 @@ int psize = pieces.Count;   // 本片提交前的片数
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void FixSameKeyOverlaps(List<HitEvent> events)
         {
-// 【2026-10-04 对拍】同刻 tie-break：按下在前、松键在后。
-// 强行弹起写的是 time1[R][0]-1（减 1 微秒），存进 long 后
+            // 【2026-10-04 对拍】同刻 tie-break：按下在前、松键在后。
+            // 强行弹起写的是 time1[R][0]-1（减 1 微秒），存进 long 后
             // long 后与下一音的按下时刻**恰好相等**，于是落在同一微秒 ——
             // 观测参考产物：t=10.492295 处「k=51 按下」在前、
             // 「k=187 松开」在后。List.Sort 不稳定，故显式写死 tie-break。
-            events.Sort((a, b) => {
+            events.Sort((a, b) =>
+            {
                 if (a.TriggerTime != b.TriggerTime) return a.TriggerTime.CompareTo(b.TriggerTime);
                 return a.ReleaseOnly.CompareTo(b.ReleaseOnly);
             });
@@ -632,12 +633,13 @@ int psize = pieces.Count;   // 本片提交前的片数
                 }
             }
 
-// 【2026-10-04 对拍】同刻 tie-break：按下在前、松键在后。
-// 强行弹起写的是 time1[R][0]-1（减 1 微秒），存进 long 后
+            // 【2026-10-04 对拍】同刻 tie-break：按下在前、松键在后。
+            // 强行弹起写的是 time1[R][0]-1（减 1 微秒），存进 long 后
             // long 后与下一音的按下时刻**恰好相等**，于是落在同一微秒 ——
             // 观测参考产物：t=10.492295 处「k=51 按下」在前、
             // 「k=187 松开」在后。List.Sort 不稳定，故显式写死 tie-break。
-            events.Sort((a, b) => {
+            events.Sort((a, b) =>
+            {
                 if (a.TriggerTime != b.TriggerTime) return a.TriggerTime.CompareTo(b.TriggerTime);
                 return a.ReleaseOnly.CompareTo(b.ReleaseOnly);
             });
@@ -651,8 +653,8 @@ int psize = pieces.Count;   // 本片提交前的片数
             while (left <= right)
             {
                 int mid = (left + right) >> 1;
-                if (times[mid] < endTime) left  = mid + 1;
-                else                      right = mid - 1;
+                if (times[mid] < endTime) left = mid + 1;
+                else right = mid - 1;
             }
             return left - start;
         }

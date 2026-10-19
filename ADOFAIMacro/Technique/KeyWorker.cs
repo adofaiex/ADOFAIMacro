@@ -100,7 +100,7 @@ namespace ADOFAIMacro.Technique
                     {
                         int ver = Volatile.Read(ref _resetVersion);
                         for (int s = 0; s < 50 && _workerRunning && Volatile.Read(ref _resetVersion) == ver; s++)
-                        Thread.Sleep(1);
+                            Thread.Sleep(1);
                         goto WriteBack;
                     }
 
@@ -211,7 +211,7 @@ namespace ADOFAIMacro.Technique
 
 #if DEBUG
                         if (i < 5 || Math.Abs(triggerAt - audioNow) > 0.5)
-                        Log($"[Macro-Worker] TICK i={i} audioNow={audioNow:F6} triggerAt={triggerAt:F6} diff={triggerAt - audioNow:F6} elapsed={elapsed:F6}");
+                            Log($"[Macro-Worker] TICK i={i} audioNow={audioNow:F6} triggerAt={triggerAt:F6} diff={triggerAt - audioNow:F6} elapsed={elapsed:F6}");
 #endif
 
                         if (triggerAt > audioNow)
@@ -315,11 +315,11 @@ namespace ADOFAIMacro.Technique
                         if (_isHoldDown) WorkerReleaseHoldKey();
                     }
 
-                    WriteBack:
+                WriteBack:
                     if (triggered && Volatile.Read(ref _resetVersion) == localResetVer)
-                    Volatile.Write(ref _workerLastTriggeredFloor, localLastFloor);
+                        Volatile.Write(ref _workerLastTriggeredFloor, localLastFloor);
                     if (hitCount > 0)
-                    Interlocked.Add(ref _workerNeedsHit, hitCount);
+                        Interlocked.Add(ref _workerNeedsHit, hitCount);
                     FlushFireStats();
                 }
             }
@@ -417,7 +417,7 @@ namespace ADOFAIMacro.Technique
             // 从而落入【按键过滤】的判定范围。若开了过滤，先登记放行配额，
             // 否则白名单模式下宏会把自己的键全部拦掉（详见 VirtualAsyncInput 注释）。
             if (Main.Settings.EnableKeyFilter)
-            VirtualAsyncInput.RegisterInjectedKey(keyCode, isDown);
+                VirtualAsyncInput.RegisterInjectedKey(keyCode, isDown);
 
             if (_cachedSkyHookMode)
             {
@@ -432,7 +432,7 @@ namespace ADOFAIMacro.Technique
                 _cachedInput.u.ki.wScan = scanCodeCache[keyCode];
                 _cachedInput.u.ki.dwFlags = isDown ? KEYEVENTF_KEYDOWN : KEYEVENTF_KEYUP;
                 fixed (SkyHookSystem.INPUT* ptr = &_cachedInput)
-                SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
+                    SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
                 LogVerbose($"[Macro-Worker] SendInput key=0x{keyCode:X2} down={isDown}");
             }
         }
