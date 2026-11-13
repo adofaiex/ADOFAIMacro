@@ -266,6 +266,12 @@ static const int kMaxMult      = 60;   // 倍乘层上限（防越界）
 // 相邻两次「按下」若落在同一帧内且分给两只手，玩家看到的就是「双手同步」
 // （用户报的「rp 两个键打」）。把这类音并入同一片 = 同一只手多指，即可消除。
 static const double kBoundaryGuardSec = 0.0167;
+// 【2026-11-13】按压停留时长下限（一帧 ≈ 16.7ms，60fps）。
+// 松键夹取在「下一片/本片几何早于本音」时会把松键夹到按下之前，
+// 继电器夹回 40% 余量仍可能只剩亚毫秒 —— 一手按不下就进帧判定，
+// 玩家看到的就是「瞬间值手法的停留时长被压缩 / 漏按」。
+// 这里给一个下限兜底：只在边界允许时把停留抬到一帧，正常谱面不触发。
+static const double kMinHoldSec = 0.0168;
 
 // [2026-10-05] 角度感知片长的注意点见 SetAngleAware 处的说明。
 
@@ -828,6 +834,15 @@ static HitEvent* BuildTechniqueHitEventsImpl(
                     if (rel >= cur.endTime) rel = cur.endTime - 1e-6;
                 }
                 if (rel <= t) rel = t + (next.endTime - t) * 0.4;
+                // 【2026-11-13】停留下限兜底：夹取后若停留不足一帧，抬到一帧。
+                // 仅当「松键上限」允许时才抬（不越过下一音/下一片边界），
+                // 因此不会破坏同键不重叠，也不改动手性/相位。
+                {
+                    const double relCap = (next.hand != cur.hand || next.evCount == 0)
+                        ? next.endTime : cur.endTime;
+                    if (rel - t < kMinHoldSec && relCap - 1e-6 > t + kMinHoldSec)
+                        rel = t + kMinHoldSec;
+                }
 
                 // 【2026-10-04 对拍】rel 的最终值在上游是 out_event[][0]（long，
                 // 整数微秒）；:377/:381 的夹取也在整数上算。本移植全程用 double，
@@ -1065,6 +1080,15 @@ static void EmitTraceEvents(const vector<PieceInfo>& pieces,
                 if (rel >= cur.endTime) rel = cur.endTime - 1e-6;
             }
             if (rel <= t) rel = t + (next.endTime - t) * 0.4;
+            // 【2026-11-13】停留下限兜底：夹取后若停留不足一帧，抬到一帧。
+            // 仅当「松键上限」允许时才抬（不越过下一音/下一片边界），
+            // 因此不会破坏同键不重叠，也不改动手性/相位。
+            {
+                const double relCap = (next.hand != cur.hand || next.evCount == 0)
+                    ? next.endTime : cur.endTime;
+                if (rel - t < kMinHoldSec && relCap - 1e-6 > t + kMinHoldSec)
+                    rel = t + kMinHoldSec;
+            }
 
                 // 【2026-10-04 对拍】rel 的最终值在上游是 out_event[][0]（long，
                 // 整数微秒）；:377/:381 的夹取也在整数上算。本移植全程用 double，
