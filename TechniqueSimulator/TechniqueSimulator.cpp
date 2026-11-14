@@ -266,6 +266,15 @@ static const int kMaxMult      = 60;   // 倍乘层上限（防越界）
 // 相邻两次「按下」若落在同一帧内且分给两只手，玩家看到的就是「双手同步」
 // （用户报的「rp 两个键打」）。把这类音并入同一片 = 同一只手多指，即可消除。
 static const double kBoundaryGuardSec = 0.0167;
+
+// 片界防伪双押的「瞬双窗口」（2026-11-13）：
+//   gap < 3ms 的跨手片界音，两只手实际上是同一瞬间落下，玩家看到的就是伪双押
+//   （用户报的 P+3 / R+= 被当成伪双押）。这一档必须处理：下一片有富余就搬音
+//   （搬后仍 >=1 音）；下一片只剩 1 音搬不动时，走后置「合并兜底」整片并入
+//   （INVERSION 雨段实测 f1395→f1396 gap=2.679ms、两片各 1 音，正是此场景）。
+//   3ms ~ 16.7ms 是「极快交替」，双手来得及换着打，搬走反而削掉下一片的
+//   多音性（强弱拍）：那里仍要求搬后 >=2 音，且不触发合并兜底。
+static const double kBoundaryTinySec = 0.003;
 // 【2026-11-13】按压停留时长下限（一帧 ≈ 16.7ms，60fps）。
 // 松键夹取在「下一片/本片几何早于本音」时会把松键夹到按下之前，
 // 继电器夹回 40% 余量仍可能只剩亚毫秒 —— 一手按不下就进帧判定，
@@ -637,18 +646,170 @@ static bool TimeSlicePartition(const vector<double>& evTime,
         //    把下限提到 `> 2`（搬完仍 ≥2 音）⇒ order 表行数不掉 ⇒ 强弱拍保住。
         //    实测 ofnr：多音段 3389→3552（连「守卫关」的 3406 都超过），
         //    跨手同帧 564→679（守卫关 859，仍远好）。三谱（ofnr/AWC/main）全面不劣。
-        while (pieces[i].evCount < maxK && pieces[i + 1].evCount > 2) {
+        while (pieces[i].evCount < maxK && pieces[i + 1].evCount > 0) {
             const int lastIdx = pieces[i].evStart + pieces[i].evCount - 1;
             const int nextIdx = pieces[i + 1].evStart;
             if (nextIdx != lastIdx + 1) break;                  // 非相邻（防御）
             const double gap = evTime[nextIdx] - evTime[lastIdx];
-            if (!(gap > 1e-9) || gap >= kBoundaryGuardSec) break;
+            if (!(gap >= 0.0) || gap >= kBoundaryGuardSec) break;
+            // [2026-11-14 实验版 C·实机测试] donorFloor=1：均匀 flam 同手化，
+            // 离线指标 伪双押 134→39、长单手段 5 处（与 B 相同）。实机手感待验。
+            const int donorFloor = 1;
+            if (pieces[i + 1].evCount <= donorFloor) break;
             if (markAt[nextIdx] >= 0) break;                    // 变速点不搬
+            // 【2026-11-13 改善守卫】搬后新界 gap 必须**严格大于**搬前界 gap 才搬。
+            // 旧守卫只查搬前 gap < 16.7ms：INVERSION 雨段 14.285ms 的健康交替界
+            // 被搬成 2.678ms 瞬双界（f1395→f1396 报告对的根因：捐赠自伤）。
+            // 新界 = evTime[nextIdx+1] - evTime[nextIdx]；nextIdx+1 必存在
+            //（上方 donorFloor 已保证下一片搬后 >=1 音）。不再改善即停，
+            // 原始分界保留 —— 循环在不再改善处自然停止。
+            if (nextIdx + 1 >= n) break;                        // 防御（donorFloor 保证一般不可达）
+            const double newGap = evTime[nextIdx + 1] - evTime[nextIdx];
+            if (!(newGap > gap)) break;
             pieces[i].evCount++;
             pieces[i + 1].evStart++;
             pieces[i + 1].evCount--;
         }
     }
+
+    // ── 合并兜底（2026-11-13，与 C# PieceBuilder 同步）────────────────
+    //
+    // 搬音约束要求下一片搬后仍有余量；超密段（INVERSION 雨段）相邻片各 1 音
+    // 时恒不满足，守卫空转 → 相邻砖跨手同帧 = 双手同步伪双押（实测
+    // f1395→f1396 gap=2.679ms：两片各 1 音，donor 循环 1 <= 1 break 不搬）。
+    // 搬不动就整片并入本片（同手），order 表随片内音数加深 → 同手换指。
+    // 只并 gap < kBoundaryTinySec 的瞬双界，交替段（>=3ms）不动；
+    // 片数只减不增、不产生空片 ⇒ 不会复现「掏空下一片」的整段单手事故。
+    // 相位零漂移：各片 hand 显式存储，合并只减片数、不改后续片的 hand。
+    for (size_t i = 0; i + 1 < pieces.size(); ) {
+        if (pieces[i].hand == pieces[i + 1].hand) { i++; continue; }
+        if (pieces[i].evCount <= 0 || pieces[i + 1].evCount <= 0) { i++; continue; }
+
+        int maxK2;
+        {
+            int sIdx;
+            auto ec = ResolveConfig(evFloor[pieces[i].evStart], &sIdx);
+            maxK2 = (pieces[i].hand == 0) ? ec.leftKeyCount : ec.rightKeyCount;
+        }
+        if (maxK2 <= 0) { i++; continue; }
+
+        const int mLast = pieces[i].evStart + pieces[i].evCount - 1;
+        const int mNext = pieces[i + 1].evStart;
+        if (mNext != mLast + 1) { i++; continue; }          // 非相邻（防御）
+        const double mGap = evTime[mNext] - evTime[mLast];
+        if (!(mGap > 1e-9) || mGap >= kBoundaryTinySec) { i++; continue; }
+        if (pieces[i].evCount + pieces[i + 1].evCount > maxK2) { i++; continue; }
+
+        pieces[i].evCount += pieces[i + 1].evCount;
+        pieces.erase(pieces.begin() + (i + 1));
+    }
+
+    // ── 反向捐赠（2026-11-13，与 C# PieceBuilder 同步）──────────────
+    //
+    // 前向捐赠要求本片有键位余量、合并兜底要求两片音数和 <= 本片键数；
+    // 两片都已满员时（超密段相邻片各顶满键数）瞬双界只能原样保留。
+    // 反向捐赠换方向：把**本片末音**搬进下一片（接收方通常更空），
+    // 搬完新界 gap = 本片内部相邻间隔。守卫：
+    //   ① 只动 gap < kBoundaryTinySec 的瞬双界（交替段不动）；
+    //   ② 本片搬后仍 >=1 音（evCount >= 2）；
+    //   ③ 接收方收下后 <= 其键数上限；
+    //   ④ 被搬事件不是变速点；
+    //   ⑤ 新界 gap 严格大于搬前（与改善守卫同构，不再改善就停）。
+    // 相位零漂移：只改 evCount/evStart，不动任何一片的 hand。
+    for (size_t i = 0; i + 1 < pieces.size(); i++) {
+        if (pieces[i].hand == pieces[i + 1].hand) continue;
+        if (pieces[i].evCount <= 0 || pieces[i + 1].evCount <= 0) continue;
+
+        int maxKNext;
+        {
+            int sIdx;
+            auto ec = ResolveConfig(evFloor[pieces[i + 1].evStart], &sIdx);
+            maxKNext = (pieces[i + 1].hand == 0) ? ec.leftKeyCount : ec.rightKeyCount;
+        }
+        if (maxKNext <= 0) continue;
+
+        while (true) {
+            const int lastIdx = pieces[i].evStart + pieces[i].evCount - 1;
+            const int nextIdx = pieces[i + 1].evStart;
+            if (nextIdx != lastIdx + 1) break;                  // 非相邻（防御）
+            const double gap = evTime[nextIdx] - evTime[lastIdx];
+            // [2026-11-14] 频带扩展到守卫窗：[3ms,16.7ms) 的 flam 界同样反向捐
+            //（main f2155|f2156）。改善守卫照旧把关：新界 = 本片尾部相邻间隔
+            // 必须 > 旧界，均速连打（间隔≈界）必被拦，不会伤交替段。
+            // 注意：反向捐不减少片数 ⇒ 交替结构/相位完全不动，这是它与
+            // flam 界合并（整片吸收、会塌交替）的本质区别。
+            if (!(gap >= 0.0) || gap >= kBoundaryGuardSec) break;
+            if (pieces[i].evCount <= 1) break;                  // 本片至少留 1 音
+            if (pieces[i + 1].evCount + 1 > maxKNext) break;    // 接收方键数上限
+            if (markAt[lastIdx] >= 0) break;                    // 被搬的是变速点不搬
+            const double newGap = evTime[lastIdx] - evTime[lastIdx - 1];
+            if (!(newGap > gap)) break;                         // 改善守卫：不改善就停
+            pieces[i].evCount--;
+            pieces[i + 1].evStart--;
+            pieces[i + 1].evCount++;
+        }
+    }
+
+    // ── flam 界合并（2026-11-14，与 C# PieceBuilder 同步）────────────
+    //
+    // main.adofai f2155|f2156 实测：变速 mark 强制片界落在 14.71ms 的 flam 对上，
+    // 翻手后 = 跨手伪双押（左手 R 键 + 右手 P 键）。既有三套机构全管不到：
+    //   捐赠在 markAt>=0 不搬、且接收片只有 1 音不可掏空；
+    //   合并兜底与反向捐赠都只认 gap < kBoundaryTinySec(3ms)。
+    // 本通道只并「flam 形状」的界：gap < 守卫窗(16.7ms) 且**后间隔 > 2×gap**。
+    // flam 的特征是贴身一对、下一拍远离；均速连打的后间隔 ≈ gap，被此条件
+    // 排除 —— 绝不产生整段单手，也不碰均匀流（INVERSION 雨段 14.285ms
+    // 的界后间隔 2.678ms < 2×gap，不受影响）。
+    // 合并 = 右片整片并入左片（同手多指），音数和仍受键数上限约束。
+    // 相位零漂移：只减片数，不改任何一片的 hand。
+    for (size_t i = 0; i + 1 < pieces.size(); ) {
+        if (pieces[i].hand == pieces[i + 1].hand) { i++; continue; }
+        if (pieces[i].evCount <= 0 || pieces[i + 1].evCount <= 0) { i++; continue; }
+
+        int maxKF;
+        {
+            int sIdx;
+            auto ec = ResolveConfig(evFloor[pieces[i].evStart], &sIdx);
+            maxKF = (pieces[i].hand == 0) ? ec.leftKeyCount : ec.rightKeyCount;
+        }
+        if (maxKF <= 0) { i++; continue; }
+
+        const int fLast = pieces[i].evStart + pieces[i].evCount - 1;
+        const int fNext = pieces[i + 1].evStart;
+        if (fNext != fLast + 1) { i++; continue; }          // 非相邻（防御）
+        const double fGap = evTime[fNext] - evTime[fLast];
+        if (!(fGap > 1e-9) || fGap >= kBoundaryGuardSec) { i++; continue; }
+        // [2026-11-14] 和弦簇判定（取代单一后间隔）：边界所在 <16.7ms 簇的总音数
+        // ≤4 且簇两端间隔 ≥2×界 gap 才是「和弦」（三押/四押一手多指，main f3020-22
+        // 三押实测 14.71ms×2、两端 176/147ms —— 旧的后间隔判据会被均匀内距误判成
+        // 连打流而放任跨手）。长簇 = 连打流（INVERSION 雨段），交替手才是对的，不并。
+        int fc = 1;                                         // B1 起向前同簇音数（含 B1）
+        while (fNext + fc < n && evTime[fNext + fc] - evTime[fNext + fc - 1] < kBoundaryGuardSec) fc++;
+        int bc = 1;                                         // A 起向后同簇音数（含 A）
+        while (fLast - bc >= 0 && evTime[fLast - bc + 1] - evTime[fLast - bc] < kBoundaryGuardSec) bc++;
+        // [2026-11-14 只退一点] 簇必须恰好 3-4 音（真和弦：3021 三押）：2 音簇是
+        // 普通 flam 对，整片吸收会链式吃掉交替槽（f3037-3055 实测塌成 19 连右手
+        // + 晚松 + 键错位），一律不并 —— 普通 flam 维持拆两手交替（旧版行为）。
+        if (fc + bc < 3 || fc + bc > 4) { i++; continue; }
+        const int cFirst = fLast - (bc - 1);
+        const int cLast = fNext + (fc - 1);
+        if (cFirst - 1 >= 0 && evTime[cFirst] - evTime[cFirst - 1] < 2.0 * fGap) { i++; continue; }
+        if (cLast + 1 < n && evTime[cLast + 1] - evTime[cLast] < 2.0 * fGap) { i++; continue; }
+        if (pieces[i].evCount + pieces[i + 1].evCount > maxKF) { i++; continue; }
+
+        pieces[i].evCount += pieces[i + 1].evCount;
+        // 窗口扩展：被吞并片的时长归本片。否则被并音符的时刻溢出本片窗外，
+        // 松键上限（同手下一片取 cur.endTime）会把它们与 flam 首音的按住时长
+        // 压到边界差（main 实测 41.2ms→14.7ms、70.6ms→0.0ms）。
+        pieces[i].endTime = pieces[i + 1].endTime;
+        pieces[i].pieceLen = pieces[i].endTime - pieces[i].startTime;
+        pieces.erase(pieces.begin() + (i + 1));             // i 不前进：连续 flam 界继续并
+    }
+
+    // 【2026-11-14 已回滚】60° 扫角组归手：扫角反推依赖 sm（逐事件速度），
+    // 而 speeddata/谱面携带速度与游戏内有效速度存在系统性偏差（main 3309 处
+    // 表载 sm=8、实测节奏对应 4，扫角算出 120° 而非 60°），判定不可靠且在
+    // 其他 60° 段误触发造成深键回归。待速度映射问题解决后再议。
 
     // 哨兵片（参考实现）：turn_to/Emit 需要"下一片"几何。
     // 上游哨兵 hand 写 0-piece[psize-1][1]，但该字段只被 参考实现 读到，

@@ -616,6 +616,8 @@ namespace ADOFAIMacro.Technique
         /// </summary>
         internal static void ResetTraceState()
         {
+            // 收尾上一局：有新数据才落一份报告（随后清零，重试重新记账）
+            DeviationProbe.ReportIfAny("换关/重试");
             _trace = null;
             _angleDriverActive = false;
             _anglePlayIndex = -1;
@@ -627,6 +629,7 @@ namespace ADOFAIMacro.Technique
             PlaybackFromCache = false;
             // 异步发键线程：换关时停掉（线程退出前会松开它自己按下的键）
             StopAngleAsync();
+            DeviationProbe.Reset();
         }
 
         /// <summary>TraceEvent → HitEvent（时间驱动：丢掉角度信息，语义与原生事件表一致）</summary>
@@ -750,6 +753,7 @@ namespace ADOFAIMacro.Technique
                 // 异步路径：清空待发队列 + 让工作线程松开它按下的键（防越界发键/卡键）
                 FlushAngleAsync();
                 ReleaseAllAngleKeys(controller.paused ? "游戏暂停" : "离开游玩状态");
+                DeviationProbe.ReportOnce(controller.paused ? "游戏暂停" : "离开游玩状态");
                 return;
             }
             // 回到正常游玩态：恢复异步发布（幂等）
@@ -782,6 +786,7 @@ namespace ADOFAIMacro.Technique
                 // 重同步会让游标跳过区间，松键可能永不发出 —— 先把还按着的键全松开
                 FlushAngleAsync();          // 异步路径：清队列 + 让工作线程松开它的键
                 ReleaseAllAngleKeys("砖序回退");
+                DeviationProbe.OnRollback(_lastSweepFloor, sweepFloor);
             }
             _lastSweepFloor = sweepFloor;
 
@@ -827,6 +832,7 @@ namespace ADOFAIMacro.Technique
                 // 异步路径：先清空待发队列（表已跑完，不应再有事件发出）
                 FlushAngleAsync();
                 ReleaseAllAngleKeys("事件表跑完");
+                DeviationProbe.ReportOnce("事件表跑完");
                 return;
             }
 
@@ -868,6 +874,8 @@ namespace ADOFAIMacro.Technique
             // （AdjustAngle→AsyncRefreshAngles），视觉上星球瞬移/抖动。
             // 到点才发 + 时间戳封顶当下，角度回拨永远是 ≤0，视觉恒平滑。
 
+            DeviationProbe.OnFrame();   // 游玩帧间隔统计（纯观测）
+
             bool simulateKey = Main.Settings.SimulateKeyPress;
             bool enableTechnique = Main.Settings.EnableTechniqueSimulation;
             double leadMs = Main.Settings.techniqueAngleLeadMs;
@@ -908,6 +916,7 @@ namespace ADOFAIMacro.Technique
                 if (ev.FloorIndex < sweepFloor)
                 {
                     FireTraceEventAsync(ev, simulateKey, enableTechnique, 0);
+                    DeviationProbe.OnCatchUp();   // 计划时刻已不可还原的补发
                     frameSends++;
                     _anglePlayIndex++;
                     continue;
@@ -946,6 +955,7 @@ namespace ADOFAIMacro.Technique
                 //   · 到点判据已保证 hitStar − lead ≤ now → 上钳位只兜浮点舍入；
                 //   · 已过点较久（补发/卡顿后追账）→ 钳到下限，至少不会灾难回拨。
                 long eventTicks = hitStarTicks - leadTicks;
+                DeviationProbe.OnGateEvent(hitStarTicks, nowTicks, eventTicks < minPast);
                 if (eventTicks < minPast) eventTicks = minPast;
                 if (eventTicks > nowTicks) eventTicks = nowTicks;
 

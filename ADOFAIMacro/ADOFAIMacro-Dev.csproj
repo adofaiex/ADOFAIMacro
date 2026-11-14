@@ -87,6 +87,7 @@
     <Compile Include="Technique\TraceFile.cs" />
     <Compile Include="Technique\TracePlayer.cs" />
     <Compile Include="Technique\AngleAsyncDriver.cs" />
+    <Compile Include="Technique\DeviationProbe.cs" />
     <Compile Include="Technique\LevelTechniqueManager.cs" />
   </ItemGroup>
 

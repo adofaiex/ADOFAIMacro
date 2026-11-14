@@ -202,6 +202,10 @@ namespace ADOFAIMacro.Technique
         // 片界守卫窗口（一帧 ≈ 16.7ms），与原生 kBoundaryGuardSec 相同
         private const double BoundaryGuardSec = 0.0167;
 
+        // 瞬双窗口（2026-11-13，与原生 kBoundaryTinySec 同步）：gap < 3ms 的跨手片界
+        // 音视为「同一瞬间落下」的伪双押（INVERSION 雨段实测 2.679ms）。
+        private const double BoundaryTinySec = 0.003;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BuildPieces(
             List<double> evTime, List<int> evPress, List<int> evFloor,
@@ -421,7 +425,7 @@ namespace ADOFAIMacro.Technique
             //   ① 只处理跨手片界（同手界不是伪双押）；
             //   ② 搬后本片音数不得超过该手键数上限（超过会退化成同键重叠）；
             //   ③ 遇变速点不搬（BPM 层级切换语义必须保留）；
-            //   ④ 不许把下一片掏空，且必须保住它的多音性（`> 2`）——
+            //   ④ 不许把下一片掏空，且必须保住它的多音性（瞬双档搬后 >=1 / 其余 >=2）——
             //     掏空会让它变成空片（空片也翻手 ⇒ 后续片与更后面片同手）；
             //     只保 ≥1 音还不够：下一片 2 音被搬走 1 音就掉成 1 音，
             //     oi = min(evCount-1, keyCount-1) 从 1 掉到 0，order 表掉行，
@@ -440,14 +444,25 @@ namespace ADOFAIMacro.Technique
                 }
                 if (maxK <= 0) continue;
 
-                while (pieces[i].EvCount < maxK && pieces[i + 1].EvCount > 2)
+                while (pieces[i].EvCount < maxK && pieces[i + 1].EvCount > 0)
                 {
                     int lastIdx = pieces[i].EvStart + pieces[i].EvCount - 1;
                     int nextIdx = pieces[i + 1].EvStart;
                     if (nextIdx != lastIdx + 1) break;              // 非相邻（防御）
                     double gap = evTime[nextIdx] - evTime[lastIdx];
                     if (!(gap > 1e-9) || gap >= BoundaryGuardSec) break;
+                    // [2026-11-14 实验版 C·实机测试] donorFloor=1：均匀 flam 同手化，
+                    // 离线指标 伪双押 134→39、长单手段 5 处。实机手感待验。
+                    int donorFloor = 1;
+                    if (pieces[i + 1].EvCount <= donorFloor) break;
                     if (markAt[nextIdx] >= 0) break;                // 变速点不搬
+                    // 【2026-11-13 改善守卫，与原生同步】搬后新界 gap 必须**严格大于**搬前
+                    // 界 gap 才搬：INVERSION 雨段 14.285ms 健康交替界曾被搬成 2.678ms
+                    // 瞬双界（f1395→f1396 报告对根因：捐赠自伤）。不再改善即停，
+                    // 原始分界保留。
+                    if (nextIdx + 1 >= evTime.Count) break;         // 防御（donorFloor 保证一般不可达）
+                    double newGap = evTime[nextIdx + 1] - evTime[nextIdx];
+                    if (!(newGap > gap)) break;
                     pieces[i] = new PieceInfo(pieces[i].EvCount + 1, pieces[i].Hand,
                         pieces[i].PieceLen, pieces[i].StartTime, pieces[i].EndTime,
                         pieces[i].EvStart, pieces[i].Multiplier);
@@ -456,6 +471,138 @@ namespace ADOFAIMacro.Technique
                         pieces[i + 1].EvStart + 1, pieces[i + 1].Multiplier);
                 }
             }
+
+            // ── 合并兜底（2026-11-13，与原生 TechniqueSimulator.cpp 同步）──
+            // 搬音要求下一片 > 2 音（保住强弱拍）；超密段一片一音时恒不满足，
+            // 守卫空转 → 相邻砖跨手同帧 = 双手同步伪双押。搬不动就整片并入本片
+            //（同手），发键段 order 表随片内音数加深 → 同手换指。
+            // 相位零漂移：各片 Hand 显式存储，合并只减片数、不改后续片的 Hand。
+            // 阈值用瞬双窗口 BoundaryTinySec（3ms）：只并「同一瞬间落下」的片界，
+            // 交替段（>=3ms）不动 —— 用守卫窗 16.7ms 会把快速连打并成整段单手。
+            for (int i = 0; i + 1 < pieces.Count; )
+            {
+                if (pieces[i].Hand == pieces[i + 1].Hand) { i++; continue; }
+                if (pieces[i].EvCount <= 0 || pieces[i + 1].EvCount <= 0) { i++; continue; }
+
+                int maxK2;
+                {
+                    var ec2 = GetEffectiveConfig(evFloor[pieces[i].EvStart]);
+                    maxK2 = (pieces[i].Hand == 0) ? ec2.LeftKeys.Length : ec2.RightKeys.Length;
+                }
+                if (maxK2 <= 0) { i++; continue; }
+
+                int mLast = pieces[i].EvStart + pieces[i].EvCount - 1;
+                int mNext = pieces[i + 1].EvStart;
+                if (mNext != mLast + 1) { i++; continue; }
+                double mGap = evTime[mNext] - evTime[mLast];
+                if (!(mGap > 1e-9) || mGap >= BoundaryTinySec) { i++; continue; }
+                if (pieces[i].EvCount + pieces[i + 1].EvCount > maxK2) { i++; continue; }
+
+                pieces[i] = new PieceInfo(pieces[i].EvCount + pieces[i + 1].EvCount, pieces[i].Hand,
+                    pieces[i].PieceLen, pieces[i].StartTime, pieces[i].EndTime,
+                    pieces[i].EvStart, pieces[i].Multiplier);
+                pieces.RemoveAt(i + 1);
+            }
+
+            // ── 反向捐赠（2026-11-13，与原生 TechniqueSimulator.cpp 同步）──
+            // 前向捐赠要求本片有键位余量、合并兜底要求两片音数和 <= 本片键数；
+            // 两片都已满员时（超密段相邻片各顶满键数）瞬双界只能原样保留。
+            // 反向捐赠换方向：把**本片末音**搬进下一片（接收方通常更空），
+            // 搬完新界 gap = 本片内部相邻间隔。守卫：只动 gap < BoundaryTinySec
+            // 的瞬双界；本片搬后仍 >=1 音；接收方收下后 <= 其键数上限；
+            // 被搬事件不是变速点；新界 gap 严格大于搬前（不再改善就停）。
+            // 相位零漂移：只改 EvCount/EvStart，不动任何一片的 Hand。
+            //（与原生的 gap 判据差一个 1e-9 下界：本文件既有惯例，gap==0 事件
+            //  实际不存在于 entryTime 序列。）
+            for (int i = 0; i + 1 < pieces.Count; i++)
+            {
+                if (pieces[i].Hand == pieces[i + 1].Hand) continue;
+                if (pieces[i].EvCount <= 0 || pieces[i + 1].EvCount <= 0) continue;
+
+                int maxKNext;
+                {
+                    var ecN = GetEffectiveConfig(evFloor[pieces[i + 1].EvStart]);
+                    maxKNext = (pieces[i + 1].Hand == 0) ? ecN.LeftKeys.Length : ecN.RightKeys.Length;
+                }
+                if (maxKNext <= 0) continue;
+
+                while (true)
+                {
+                    int rLast = pieces[i].EvStart + pieces[i].EvCount - 1;
+                    int rNext = pieces[i + 1].EvStart;
+                    if (rNext != rLast + 1) break;              // 非相邻（防御）
+                    double rGap = evTime[rNext] - evTime[rLast];
+                    // [2026-11-14] 频带扩展到守卫窗：[3ms,16.7ms) 的 flam 界同样反向捐。
+                    // 改善守卫照旧把关，均速连打必被拦；不减少片数 ⇒ 交替结构不动。
+                    if (!(rGap > 1e-9) || rGap >= BoundaryGuardSec) break;
+                    if (pieces[i].EvCount <= 1) break;          // 本片至少留 1 音
+                    if (pieces[i + 1].EvCount + 1 > maxKNext) break;    // 接收方键数上限
+                    if (markAt[rLast] >= 0) break;              // 被搬的是变速点不搬
+                    double rNewGap = evTime[rLast] - evTime[rLast - 1];
+                    if (!(rNewGap > rGap)) break;               // 改善守卫：不改善就停
+                    pieces[i] = new PieceInfo(pieces[i].EvCount - 1, pieces[i].Hand,
+                        pieces[i].PieceLen, pieces[i].StartTime, pieces[i].EndTime,
+                        pieces[i].EvStart, pieces[i].Multiplier);
+                    pieces[i + 1] = new PieceInfo(pieces[i + 1].EvCount + 1, pieces[i + 1].Hand,
+                        pieces[i + 1].PieceLen, pieces[i + 1].StartTime, pieces[i + 1].EndTime,
+                        pieces[i + 1].EvStart - 1, pieces[i + 1].Multiplier);
+                }
+            }
+
+            // ── flam 界合并（2026-11-14，与原生 TechniqueSimulator.cpp 同步）──
+            // main.adofai f2155|f2156 实测：变速 mark 强制片界落在 14.71ms 的 flam
+            // 对上，翻手后 = 跨手伪双押（左手 R 键 + 右手 P 键）。捐赠在 mark 处
+            // 门禁且接收片 1 音不可掏空；合并/反向捐赠只认 <3ms —— 全管不到。
+            // 本通道只并「flam 形状」的界：gap < BoundaryGuardSec(16.7ms) 且
+            // 后间隔 > 2×gap（贴身一对、下一拍远离）。均速连打的后间隔 ≈ gap，
+            // 被排除 —— 不产生整段单手，也不碰均匀流（INVERSION 雨段不受影响）。
+            // 合并 = 右片整片并入左片（同手多指），音数和受键数上限约束；
+            // 相位零漂移：只减片数，不改任何一片的 Hand。
+            for (int i = 0; i + 1 < pieces.Count; )
+            {
+                if (pieces[i].Hand == pieces[i + 1].Hand) { i++; continue; }
+                if (pieces[i].EvCount <= 0 || pieces[i + 1].EvCount <= 0) { i++; continue; }
+
+                int maxKF;
+                {
+                    var ecF = GetEffectiveConfig(evFloor[pieces[i].EvStart]);
+                    maxKF = (pieces[i].Hand == 0) ? ecF.LeftKeys.Length : ecF.RightKeys.Length;
+                }
+                if (maxKF <= 0) { i++; continue; }
+
+                int fLast = pieces[i].EvStart + pieces[i].EvCount - 1;
+                int fNext = pieces[i + 1].EvStart;
+                if (fNext != fLast + 1) { i++; continue; }      // 非相邻（防御）
+                double fGap = evTime[fNext] - evTime[fLast];
+                if (!(fGap > 1e-9) || fGap >= BoundaryGuardSec) { i++; continue; }
+                // [2026-11-14] 和弦簇判定（取代单一后间隔，与原生同步）：边界所在
+                // <16.7ms 簇总音数 ≤4 且簇两端间隔 ≥2×界 gap 才是「和弦」；长簇 =
+                // 连打流（雨段），交替手才是对的，不并。
+                int fc = 1;
+                while (fNext + fc < evTime.Count && evTime[fNext + fc] - evTime[fNext + fc - 1] < BoundaryGuardSec) fc++;
+                int bc = 1;
+                while (fLast - bc >= 0 && evTime[fLast - bc + 1] - evTime[fLast - bc] < BoundaryGuardSec) bc++;
+                // [2026-11-14 只退一点] 簇必须恰好 3-4 音（真和弦）：2 音簇是普通
+                // flam 对，整片吸收会链式吃掉交替槽，一律不并。
+                if (fc + bc < 3 || fc + bc > 4) { i++; continue; }
+                int cFirst = fLast - (bc - 1);
+                int cLast = fNext + (fc - 1);
+                if (cFirst - 1 >= 0 && evTime[cFirst] - evTime[cFirst - 1] < 2.0 * fGap) { i++; continue; }
+                if (cLast + 1 < evTime.Count && evTime[cLast + 1] - evTime[cLast] < 2.0 * fGap) { i++; continue; }
+                if (pieces[i].EvCount + pieces[i + 1].EvCount > maxKF) { i++; continue; }
+
+                // 窗口扩展：被吞并片的时长归本片（否则被并音符溢出窗外，松键上限
+                // 把 flam 首音按住时长压到边界差，实测 41.2ms→14.7ms、70.6ms→0.0ms）。
+                double fNewEnd = pieces[i + 1].EndTime;
+                pieces[i] = new PieceInfo(pieces[i].EvCount + pieces[i + 1].EvCount, pieces[i].Hand,
+                    fNewEnd - pieces[i].StartTime, pieces[i].StartTime, fNewEnd,
+                    pieces[i].EvStart, pieces[i].Multiplier);
+                pieces.RemoveAt(i + 1);                         // i 不前进：连续 flam 界继续并
+            }
+
+            // 【2026-11-14 已回滚】60° 扫角组归手：扫角反推依赖 sm（逐事件速度），
+            // 而 speeddata/谱面携带速度与游戏内有效速度存在系统性偏差，判定不可靠
+            // 且在其他 60° 段误触发造成深键回归。待速度映射问题解决后再议。
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

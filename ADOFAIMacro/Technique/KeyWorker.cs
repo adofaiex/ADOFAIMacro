@@ -401,6 +401,9 @@ namespace ADOFAIMacro.Technique
 
             if (Main.Settings.BlockInputWhenUnfocused && !IsGameWindowFocused()) return;
 
+            // L0 偏差探针：统计实际发出去的键（三路发键共用此口；被上面拦下的不算发出）。
+            DeviationProbe.OnKeySent(keyCode, isDown, eventTicks);
+
             // 虚拟异步键盘：合成事件直喂游戏 keyQueue（零注入抖动，详见 VirtualAsyncInput）。
             // eventTicks != 0 时事件携带指定时刻（角度驱动插值回填的跨越时刻 t*），
             // 游戏按事件时间戳判定 → 帧量化延迟被消除；注入路径（SkyHook/SendInput）
@@ -440,6 +443,21 @@ namespace ADOFAIMacro.Technique
         // ═══════════════════════════════════════════════════════════════
         //  初始化
         // ═══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// 键归属哪只手（偏差探针用）：-1=左手键，1=右手键，0=不在手法键表。
+        /// 探针据此统计「跨手同帧」——伪双押的直接可观测量。
+        /// </summary>
+        internal static int ClassifyKeySide(byte keyCode)
+        {
+            var left = _techLeftKeys;
+            var right = _techRightKeys;
+            for (int i = 0; i < left.Length; i++)
+                if (left[i] == keyCode) return -1;
+            for (int i = 0; i < right.Length; i++)
+                if (right[i] == keyCode) return 1;
+            return 0;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Initialize()
         {
