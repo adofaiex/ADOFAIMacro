@@ -2230,8 +2230,9 @@ namespace ADOFAIMacro.Technique
                     if (gap >= .025 && gap <= .075 && Near(Note(start).FollowingTurn, .5, .02))
                     {
                         while (stop + 1 < end && Near(Gap(stop), gap, .012) && Near(Note(stop).FollowingTurn, .5, .02)) stop++;
-                        bool closedSquare = stop + 1 < end && stop - start == 4 && Near(Gap(stop), 2 * gap, .025) &&
-                            Near(Note(stop).FollowingTurn, 1, .035) && (start == begin || Gap(start - 1) >= gap * 1.5);
+                        bool closedSquare = start > begin && stop + 1 < end && stop - start == 4 &&
+                            Near(Gap(start - 1), 2 * gap, .025) && Near(Gap(stop), 2 * gap, .025) &&
+                            Near(Note(start - 1).FollowingTurn, 1, .035) && Near(Note(stop).FollowingTurn, 1, .035);
                         if (stop - start >= 6 || closedSquare)
                         {
                             var groups = new List<(int Start, int End, double Width, int Beats)>();
