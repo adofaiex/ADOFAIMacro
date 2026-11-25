@@ -62,6 +62,7 @@ internal static class Program
             ChartRhythmChecks.FourQuarterTurnsPerHand,
             ChartRhythmChecks.SlowSquaresUseFourKeys,
             ChartRhythmChecks.OffbeatPickupDoesNotChooseLeadForThePhrase,
+            ChartRhythmChecks.HalfPulseEntryAlternatesAcrossTheSeam,
             ChartRhythmChecks.ShortHalfBeatPhraseKeepsArticulation,
             ChartRhythmChecks.ReturnFromTripletsKeepsSubdivisionOnOneHand,
             ChartRhythmChecks.DensePhraseCarriesPhaseThroughMixedSizesAndRests,

@@ -96,7 +96,7 @@ namespace ADOFAIMacro.Technique
         internal const string PieceFallbackStrategyId = "pieceFallback";
         // Bump when grouping, hand choice, key mapping or derived statistics change;
         // this invalidates caches without changing the trace's binary file format.
-        private const int PlannerRevision = 26;
+        private const int PlannerRevision = 27;
         private const double Frame = 0.0167;
         private const double NearSimultaneous = 0.003;
         private const double MinGrid = 0.000001;
@@ -155,6 +155,7 @@ namespace ADOFAIMacro.Technique
                 PreferPostHoldLead(notes, attacks, slices, startRight);
                 RefineChartRhythms(notes, attacks, slices, startRight);
                 PreferLeadAfterPickup(notes, attacks, slices, startRight);
+                RepairHalfPulseEntry(notes, attacks, slices);
                 return slices;
             }
         }
@@ -2578,6 +2579,58 @@ namespace ADOFAIMacro.Technique
             }
 
             double Time(int attack) => AttackTime(notes, attacks, attack);
+        }
+
+        internal static void RepairHalfPulseEntry(TechniqueNote[] notes, List<Attack> attacks, List<Slice> rows)
+        {
+            const double tolerance = .012;
+            int timeline = 0;
+            bool holding = false;
+            for (int seam = 3; seam + 2 < rows.Count; seam++)
+            {
+                var anchor = rows[seam];
+                var profile = attacks[anchor.Start].Profile;
+                while (timeline < attacks[rows[seam - 2].Start].Index)
+                {
+                    var kind = notes[timeline++].Kind;
+                    if (kind == NoteKind.HoldStart) holding = true;
+                    else if (kind == NoteKind.HoldEnd) holding = false;
+                }
+                double pulse = Gap(seam + 1), slow = pulse * 2;
+                if (holding || pulse < MinimumCellLength(profile.BpmLimit) ||
+                    !Near(anchor.PressWindow, slow) || !Near(Gap(seam), slow) || !Near(Gap(seam - 1), slow) ||
+                    !Near(Gap(seam + 2), pulse) || anchor.Right != rows[seam + 1].Right ||
+                    anchor.Right == rows[seam - 1].Right || rows[seam - 1].Right == rows[seam - 2].Right ||
+                    !Plain(seam - 2) || !Plain(seam - 1) || !Plain(seam) ||
+                    !(Turn(seam + 1) > 0) || !Near(Turn(seam - 1), 2 * Turn(seam)) ||
+                    !Near(Turn(seam + 1), Turn(seam))) continue;
+
+                int stop = seam + 1;
+                while (stop < rows.Count && Near(Gap(stop), pulse) && Plain(stop) && Near(Turn(stop - 1), Turn(seam))) stop++;
+                int count = stop - seam - 1;
+                if (stop == rows.Count || !Plain(stop) || Gap(stop) < slow * (1 - tolerance) || count < 2 || count == 3) continue;
+                var candidate = new List<Slice>(rows);
+                for (int index = seam + 1; index < stop; index++)
+                {
+                    var row = rows[index];
+                    bool right = anchor.Right ^ ((index - seam) % 2 != 0);
+                    candidate[index] = new Slice(row.Start, row.End, row.Length, row.PressWindow,
+                        right, row.TimeStart, row.TimeEnd);
+                }
+                double horizon = pulse * 1.05;
+                if (!MeasurePlanRisks(notes, attacks, candidate, horizon).IsSubsetOf(MeasurePlanRisks(notes, attacks, rows, horizon))) continue;
+                for (int index = seam + 1; index < stop; index++) rows[index] = candidate[index];
+                seam = stop - 1;
+
+                bool Plain(int index) => rows[index].Count == 1 &&
+                    notes[attacks[rows[index].Start].Index].Kind == NoteKind.Tap &&
+                    ReferenceEquals(attacks[rows[index].Start].Profile, profile) &&
+                    (index == seam - 2 || attacks[rows[index].Start].Index == attacks[rows[index - 1].Start].Index + 1);
+            }
+
+            double Gap(int index) => AttackTime(notes, attacks, rows[index].Start) - AttackTime(notes, attacks, rows[index - 1].Start);
+            double Turn(int index) => notes[attacks[rows[index].Start].Index].FollowingTurn;
+            static bool Near(double actual, double expected) => Math.Abs(actual - expected) <= tolerance * expected + Epsilon;
         }
 
         private static HashSet<(int From, int To, byte Key, int Mode)> MeasurePlanRisks(

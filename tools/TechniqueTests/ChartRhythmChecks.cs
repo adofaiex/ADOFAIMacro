@@ -41,8 +41,8 @@ internal static class ChartRhythmChecks
         foreach (int start in new[] { 2, 7 })
         {
             var square = plan.Assignments.Skip(start).Take(4).ToArray();
-            Check(square.All(hit => hit.Hand == square[0].Hand) && square.Select(hit => hit.Key).Distinct().Count() == 4,
-                $"a four-turn square must use a single four-key row: {Hands(plan)}");
+            Check(square.Select(hit => hit.Key).SequenceEqual(new byte[] {51, 82, 80, 187}),
+                $"a slow square must use the inner two keys on each hand in order: {string.Join(',', square.Select(hit => hit.Key))}");
         }
         VerifyPresses(notes, plan);
     }
@@ -118,6 +118,33 @@ internal static class ChartRhythmChecks
             index += counts[beat];
         }
         VerifyPresses(notes, plan);
+    }
+
+    internal static void HalfPulseEntryAlternatesAcrossTheSeam()
+    {
+        const double fast = .08810573, slow = 2 * fast, folded = .089285272;
+        foreach (int count in new[] { 1, 8 })
+        {
+            double[] gaps = [slow, slow, slow, .. Enumerable.Repeat(fast, count + (count == 1 ? 1 : 0)),
+                count == 1 ? slow : 6 * fast, slow, slow];
+            var notes = Notes(gaps.Select((_, index) => gaps.Take(index).Sum()).Append(gaps.Sum()).ToArray(),
+                gaps.Select(gap => gap == slow ? 5d / 6 : 5d / 12).Append(5d / 6).ToArray());
+            var attacks = notes.Select((note, index) => new Attack(index, Profile, folded)).ToList();
+            var rows = notes.Select((note, index) => new Slice(index, index + 1,
+                index is > 3 && index <= 3 + count ? folded : slow,
+                index is > 3 && index <= 3 + count ? folded : slow,
+                index <= 3 ? index % 2 != 0 : count == 1 && index == 5 ? false : index <= 3 + count ? index % 2 == 0 : index % 2 != 0,
+                note.Time, index + 1 < notes.Length ? notes[index + 1].Time : note.Time + slow)).ToList();
+            var original = rows.ToArray();
+            RepairHalfPulseEntry(notes, attacks, rows);
+            Check(rows[3].Right != rows[4].Right && rows[4].Right != rows[5].Right,
+                "an isolated half beat or a faster run must not inherit a duplicate hand at the seam");
+            int stop = 4 + (count == 1 ? 2 : count);
+            Check(rows.Take(4).SequenceEqual(original.Take(4)) && rows.Skip(stop).SequenceEqual(original.Skip(stop)) &&
+                rows.Zip(original).All(pair => (pair.First.Start, pair.First.End, pair.First.TimeStart, pair.First.TimeEnd) ==
+                    (pair.Second.Start, pair.Second.End, pair.Second.TimeStart, pair.Second.TimeEnd)),
+                "only the seam phase may change; keep other rows, boundaries and onsets");
+        }
     }
 
     private static TechniqueNote[] Notes(double[] onsets, double[] turns) => onsets.Select((time, index) =>
