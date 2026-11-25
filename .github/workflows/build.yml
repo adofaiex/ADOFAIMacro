@@ -45,6 +45,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Run technique regressions
+        run: dotnet run --project tools/TechniqueTests/TechniqueTests.csproj -c Release
+
       # macOS / Ubuntu 上 setup-dotnet 装不到 windows 版 Rust，这里用 rustup 官方脚本
       - name: Install Rust (MSVC)
         shell: pwsh
@@ -72,13 +75,17 @@ jobs:
             -p:CargoExe="$env:USERPROFILE\.cargo\bin\cargo.exe" `
             --nologo -v:m
 
+      - name: Verify technique profile persistence
+        shell: pwsh
+        run: ./tools/verify-technique-profiles.ps1
+
       - name: Verify packaged layout
         shell: pwsh
         run: |
           $pack = "out\Release"
           $required = @(
             "ADOFAIMacro.dll", "Info.json", "InputSystem.dll",
-            "TechniqueSimulator.dll", "System.Memory.dll",
+            "System.Memory.dll",
             "Localization\zh-CN.json", "Localization\en-US.json"
           )
           $missing = @()
@@ -90,6 +97,9 @@ jobs:
             exit 1
           }
           Get-ChildItem $pack -Recurse -File | Select-Object FullName, Length
+
+      - name: Smoke test packaged technique pipeline
+        run: dotnet run --project tools/TechniqueSmoke/TechniqueSmoke.csproj -c Release -- out/Release/ADOFAIMacro.dll
 
       - name: Upload package
         uses: actions/upload-artifact@v7

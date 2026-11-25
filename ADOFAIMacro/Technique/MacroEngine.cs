@@ -18,30 +18,6 @@ namespace ADOFAIMacro.Technique
     internal static partial class MacroEngine
     {
         // ─────────────────────────────────────────────
-        //  预处理事件
-        // ─────────────────────────────────────────────
-        internal readonly struct HitEvent(double triggerTime, byte keyCode, bool releaseOnly,
-                                          bool isHoldRelated = false, byte releaseKeyCode = 0)
-        {
-            public readonly double TriggerTime = triggerTime;
-            public readonly byte KeyCode = keyCode;
-            public readonly bool ReleaseOnly = releaseOnly;
-            public readonly bool IsHoldRelated = isHoldRelated;
-            public readonly byte ReleaseKeyCode = releaseKeyCode;
-        }
-
-        private readonly struct PieceInfo(int ec, int h, double pl, double st, double et, int es, int mult = 0)
-        {
-            public readonly int EvCount = ec;
-            public readonly int Hand = h;
-            public readonly double PieceLen = pl;
-            public readonly double StartTime = st;
-            public readonly double EndTime = et;
-            public readonly int EvStart = es;
-            public readonly int Multiplier = mult;
-        }
-
-        // ─────────────────────────────────────────────
         //  主线程专属数据
         // ─────────────────────────────────────────────
         private static scrLevelMaker? levelMaker;
@@ -67,15 +43,6 @@ namespace ADOFAIMacro.Technique
         // ─────────────────────────────────────────────
         private static readonly HitEvent[] _hitEventPool = new HitEvent[65536];
         private static int _hitEventPoolUsed;
-
-        // 复用缓冲区
-        private static readonly List<double> _evTimeRecycle = [with(4096)];
-        private static readonly List<int> _evPressRecycle = [with(4096)];
-        private static readonly List<int> _evFloorRecycle = [with(4096)];
-        // 逐地板速度倍率（scrFloor.speed）：变速谱面必须按每个音符所在楼层的
-        // 实际速度折算局部速率，否则快段仍按进关时的全局速度切片，换手全错。
-        private static readonly List<double> _evSpeedRecycle = [with(4096)];
-        private static readonly List<PieceInfo> _piecesRecycle = [with(1024)];
 
         // ─────────────────────────────────────────────
         //  时间锚点（双缓冲）
@@ -176,11 +143,6 @@ namespace ADOFAIMacro.Technique
         // ─────────────────────────────────────────────
         private static byte[] _techLeftKeys = [];
         private static byte[] _techRightKeys = [];
-        private static readonly int[][][] _techKeyOrders = [[], []];
-        private static readonly double[][] _techPressDur = [[], []];
-        private static List<Settings.TechniqueSegment>? _currentSegments;
-        // 手法配置指纹（FNV-1a）：轨迹缓存键的一半，见 ConfigParser.ComputeTechniqueFingerprint。
-        private static int _techniqueFingerprint;
 
         [ThreadStatic]
         private static SkyHookSystem.INPUT _cachedInput;
@@ -292,7 +254,7 @@ namespace ADOFAIMacro.Technique
             if (!settings.Macro || controller?.paused != false ||
                 ADOBase.sceneName == GCNS.sceneLevelSelect)
             {
-                StopWorkerIfNeeded();
+                ObservePlaybackState();
                 // 宏关闭时把 requireHolding 交还游戏（幂等，单次字段写入）
                 if (!settings.Macro) RestoreHoldBehavior();
                 return;

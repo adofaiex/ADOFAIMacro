@@ -403,3 +403,6 @@ tools/abtest/**/*.h
 tools/tmp_baseline/
 # ── Rust 构建产物（TriggerRs）──────────────────────────────
 TriggerRs/target/
+# 本地工作笔记与备份，不入库（与 tools/deploy.ps1 的部署备份目录配套）
+/.planning/
+/.deploy-backups/

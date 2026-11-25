@@ -40,7 +40,7 @@ namespace ADOFAIMacro.Technique
     /// 所以「时间比例」与「角度比例」严格线性等价，且符号相消：
     ///     frac = (angle − snappedLastAngle) / angleLength
     ///
-    /// 求解器产出的事件里：按下事件 AngleFrac 恒为 1（压线时刻就在砖的末端），
+    /// 手法规划器产出的事件里：按下事件 AngleFrac 恒为 1（压线时刻就在砖的末端），
     /// 松键事件落在这块砖的旋转区间内，FloorIndex 记的是它属于哪块砖的旋转 ——
     /// 这正是角度驱动所需的全部信息。
     /// </summary>
@@ -49,7 +49,7 @@ namespace ADOFAIMacro.Technique
         // ─────────────────────────────────────────────
         //  状态
         // ─────────────────────────────────────────────
-        /// <summary>当前轨迹；null = 没有轨迹（沿用在线贪心事件表）</summary>
+        /// <summary>当前轨迹；null = 没有轨迹（沿用在线手法事件表）</summary>
         private static TraceFile.Trace? _trace;
 
         /// <summary>角度驱动是否正在接管发键。为 false 时事件表已顶替 _hitEvents 走时间驱动</summary>
@@ -57,6 +57,7 @@ namespace ADOFAIMacro.Technique
 
         /// <summary>角度驱动：正在推进的事件下标</summary>
         private static int _anglePlayIndex = -1;
+        private static int[] _angleTieOffsets = [];
 
         /// <summary>角度驱动：本次进关是否已完成过落后快进</summary>
         private static bool _angleResynced;
@@ -71,8 +72,8 @@ namespace ADOFAIMacro.Technique
         //  · 逆运算得每个事件的【理想判定时刻】（.NET ticks 域）：
         //      hitTick* = offsetTick + (TriggerTime/pitch + songZero) * 1e7
         //    其中 songZero = dspTimeSongPosZero + calibration_i（关卡内不变）。
-        //  · TriggerTime 与游戏 entryTime 同域（求解器输入 t = fl.entryTime，
-        //    NativeTechnique.cs BuildTechniqueFloorInputs）。
+        //  · TriggerTime 与游戏 entryTime 同域（手法规划器输入 t = fl.entryTime，
+        //    TechniqueTimeline.cs 中的 TechniqueTimeline.Build）。
         // 事件时间戳 = 理想判定时刻 − 提前量，恒 ≤ 当下（到点才发）；
         // 游戏按事件时间戳回拨判定 → num7 = −lead，精确 Perfect，视觉无前跳。
         // GCS.d_oldConductor 为 public static readonly false（GCS.cs:179）→ 新 conductor
@@ -115,7 +116,7 @@ namespace ADOFAIMacro.Technique
 
         /// <summary>
         /// UI 可读：轨迹状态文本。已接线显示本局信息，否则显示加载期预热信息 ——
-        /// 预热失败时两者都空，回落到求解器层面的原因（SolveAndCacheTrace 写的）。
+        /// 预热失败时两者都空，回落到手法规划器层面的原因（SolveAndCacheTrace 写的）。
         /// </summary>
         internal static string PlaybackInfo =>
             _trace != null ? _playbackInfo
@@ -136,41 +137,6 @@ namespace ADOFAIMacro.Technique
             return TraceFile.ClearAll();
         }
 
-        /// <summary>
-        /// 运行中切换驱动方式。轨迹事件表与角度字段无关，两种驱动共用同一份缓存，
-        /// 所以这里只需要重新接线，不必重算、不必重落盘。
-        /// </summary>
-        internal static void TechniquePlaybackDriverChanged()
-        {
-            var trace = _trace;
-            if (trace == null) return;
-
-            if (Main.Settings.techniquePlaybackDriver == 1)
-            {
-                _hitEvents = [];
-                _hitEventCount = 0;
-                _angleDriverActive = true;
-                _anglePlayIndex = -1;
-                _angleResynced = false;
-                _songZeroValid = false;
-                _lastSweepFloor = long.MinValue;
-                EnsureAngleAsyncRunning();   // 运行中切到角度驱动 → 启动异步线程
-            }
-            else
-            {
-                var converted = ConvertTraceToHitEvents(trace.Events);
-                _hitEvents = converted;
-                _hitEventCount = converted.Length;
-                _angleDriverActive = false;
-                _anglePlayIndex = -1;
-                _angleResynced = false;
-                _songZeroValid = false;
-                _lastSweepFloor = long.MinValue;
-                StopAngleAsync();            // 运行中切回时间驱动 → 停异步线程
-            }
-            _staticAnchorVersion++;
-        }
-
         // ═══════════════════════════════════════════════════════════════
         //  准备（Initialize 里调用一次）
         // ═══════════════════════════════════════════════════════════════
@@ -183,7 +149,7 @@ namespace ADOFAIMacro.Technique
         /// levelMaker.MakeLevel() → ApplyEventsToFloors() →
         /// scrLevelMaker.CalculateFloorEntryTimes()，后者是纯函数，只用
         /// listFloors 自身字段 + conductor 的 pitch/bpm/countdownTicks）。
-        /// 求解器要的就是这些 —— 与玩家按不按键、有没有开始计时毫无关系。
+        /// 手法规划器要的就是这些 —— 与玩家按不按键、有没有开始计时毫无关系。
         ///
         /// 之前把求解挂在 KeyWorker.Initialize 上，而 Initialize 由
         /// MacroEngine.Update 调用、Update 只挂在 scrController.PlayerControl_Update
@@ -202,15 +168,15 @@ namespace ADOFAIMacro.Technique
 
             try
             {
-                if (!TryPrepareSolveEnv(out string why)) { _prewarmInfo = $"未预热：{why}"; return; }
+                if (!TryPrepareSolveEnv(out var source, out string why)) { _prewarmInfo = $"未预热：{why}"; return; }
 
-                var trace = SolveAndCacheTrace();
+                var trace = SolveAndCacheTrace(source!);
                 if (trace == null) return;
 
                 _prewarmedTrace = trace;
                 _prewarmedLevelPath = SafeLevelPath() ?? string.Empty;
-                _prewarmedFingerprint = _techniqueFingerprint;
-                _prewarmedFloorCount = floorCount;
+                _prewarmedFingerprint = source!.Fingerprint;
+                _prewarmedFloorCount = source!.FloorCount;
 
                 string keyText = trace.CacheKey.Length > 0 ? trace.CacheKey : "未落盘";
                 _prewarmInfo = trace.FromCache
@@ -218,13 +184,13 @@ namespace ADOFAIMacro.Technique
                     : trace.SolveMs > 0
                         ? $"加载期已求解并缓存 {trace.CacheKey}（{trace.SolveMs}ms）· {trace.Stats}"
                         : $"加载期已求解（{keyText}）· {trace.Stats}";
-                Log($"[Macro-Player] 预热 {_prewarmInfo} · 地板 {floorCount}");
+                Log($"[Macro-Player] 预热 {_prewarmInfo} · 地板 {source!.FloorCount}");
                 GameNotifier.Info($"轨迹已就绪 · {trace.Stats}");
             }
             catch (Exception ex)
             {
                 // 预热是纯增强：失败就安静放弃，进关后 PrepareTrace 会照常走
-                // 「读缓存 → 求解 → 在线贪心」这条路，绝不因此影响能不能玩。
+                // 「读缓存 → 求解 → 在线手法」这条路，绝不因此影响能不能玩。
                 _prewarmedTrace = null;
                 _prewarmInfo = "";
                 Log($"[Macro-Player] 预热失败（不影响游玩）: {ex.Message}");
@@ -235,15 +201,15 @@ namespace ADOFAIMacro.Technique
         /// 准备求解所需的环境：关卡地板快照 + conductor + 手法配置。
         ///
         /// 加载期预热与手动「离线计算」按钮**共用**这一段 —— 只有这样，两条路
-        /// 喂给求解器的输入才逐字节相同，否则「按按钮算出来的」和「自动算出来的」
+        /// 喂给手法规划器的输入才逐字节相同，否则「按按钮算出来的」和「自动算出来的」
         /// 可能是两份不同的解，缓存键也会对不上。
         /// </summary>
-        private static bool TryPrepareSolveEnv(out string whyNot)
+        private static bool TryPrepareSolveEnv(out TechniqueSource? source, out string whyNot)
         {
+            source = null;
             if (!Main.Settings.Macro) { whyNot = "宏未启用"; return false; }
             if (!Main.Settings.EnableTechniqueSimulation) { whyNot = "手法模拟未启用"; return false; }
             if (!Main.Settings.SimulateKeyPress) { whyNot = "按键模拟未启用"; return false; }
-            if (!TechniqueSimulator.SolverAvailable) { whyNot = "原生求解器不可用（TechniqueSimulator.dll 缺导出）"; return false; }
 
             var lm = scrLevelMaker.instance;
             if (lm?.listFloors == null || lm.listFloors.Count == 0)
@@ -257,11 +223,7 @@ namespace ADOFAIMacro.Technique
             try { LevelTechniqueManager.CheckAndLoadLevelConfig(); }
             catch { /* 拿不到就用全局配置，不影响 */ }
 
-            levelMaker = lm;
-            conductor = cond;
-            cachedFloors = [.. lm.listFloors];
-            floorCount = cachedFloors.Length;
-            _initializedLevelPath = SafeLevelPath();
+            source = CaptureTechniqueSource([.. lm.listFloors], cond);
 
             whyNot = string.Empty;
             return true;
@@ -269,28 +231,13 @@ namespace ADOFAIMacro.Technique
 
         /// <summary>
         /// 读缓存 / 求解 / 落盘。加载期预热与 Initialize 走的是同一段逻辑，
-        /// 两者喂给求解器的输入逐字节相同（同一份 BuildTechniqueFloorInputs）。
+        /// 两者喂给手法规划器的输入逐字节相同（同一份 TechniqueTimeline.Build）。
         /// </summary>
-        private static TraceFile.Trace? SolveAndCacheTrace()
+        private static TraceFile.Trace? SolveAndCacheTrace(TechniqueSource source)
         {
-            if (!TechniqueSimulator.SolverAvailable)
-            {
-                _playbackInfo = "离线求解器不可用（沿用在线贪心）";
-                return null;
-            }
-
-            var floors = cachedFloors;
-            if (floors == null || floors.Length == 0) return null;
-
-            // 指纹必须在**查缓存之前**算好：缓存键的一半就是它。
-            // 加载期预热是本关第一次进来，上一次关卡的指纹还留在字段里 ——
-            // 直接查缓存会用错键（永远 miss，白算一遍还可能把新解存成旧键）。
-            // ParseTechniqueConfig 是纯解析，重复调用无副作用。
-            ParseTechniqueConfig();
-
             string levelPath = SafeLevelPath() ?? "?";
-            int floorCountNow = floors.Length;
-            int techFp = _techniqueFingerprint;
+            int floorCountNow = source.FloorCount;
+            int techFp = source.Fingerprint;
 
             // ① 磁盘缓存
             var sw = Stopwatch.StartNew();
@@ -304,47 +251,26 @@ namespace ADOFAIMacro.Technique
                 return cached;
             }
 
-            // ② 求解（唯一一次重计算；此处尚未进入 NoGC 区域，安全）
-            BuildTechniqueFloorInputs();
-            var evTime = _evTimeRecycle;
-            if (evTime.Count == 0)
-            {
-                _playbackInfo = "本谱无判定事件（沿用在线贪心）";
-                return null;
-            }
-
-            PushTechniqueConfigToNative();
-
+            // The same plan used by online play, serialized with floor coordinates.
             sw.Restart();
-            bool ok = TechniqueSimulator.SolveTrace(
-                [.. evTime], [.. _evPressRecycle], [.. _evFloorRecycle], [.. _evSpeedRecycle],
-                evTime.Count,
-                conductor!.bpm, ADOBase.controller.playerOne.planetarySystem.speed,
-                out _, out var traceEvents, out var stats);
+            var plan = source.Build();
             sw.Stop();
             int solveMs = (int)sw.ElapsedMilliseconds;
-
-            if (!ok || traceEvents == null || traceEvents.Length == 0)
+            if (plan.Events.Length == 0)
             {
-                _playbackInfo = "离线求解未产出事件（沿用在线贪心）";
-                Log($"[Macro-Player] {_playbackInfo}");
+                _playbackInfo = "本谱无判定事件";
                 return null;
             }
+            var trace = TechniquePlayback.FromPlan(plan);
+            trace.SolveMs = solveMs;
 
             // ③ 落盘（失败无所谓，本次照常播）
-            string savedKey = TraceFile.TrySave(levelPath, floorCountNow, techFp, traceEvents, stats ?? TraceFile.TraceStats.Unknown, out string key)
+            string savedKey = TraceFile.TrySave(levelPath, floorCountNow, techFp, trace.Events, trace.Stats, out string key)
                 ? key : string.Empty;
 
-            var trace = new TraceFile.Trace
-            {
-                Events = traceEvents,
-                Stats = stats ?? TraceFile.TraceStats.Unknown,
-                FromCache = false,
-                SolveMs = solveMs,
-                CacheKey = savedKey,
-            };
+            trace.CacheKey = savedKey;
             _playbackInfo = savedKey.Length > 0
-                ? $"本次求解 {solveMs}ms → 已缓存 {savedKey}（{traceEvents.Length} 事件）· {trace.Stats}"
+                ? $"本次求解 {solveMs}ms → 已缓存 {savedKey}（{trace.Events.Length} 事件）· {trace.Stats}"
                 : $"本次求解 {solveMs}ms（缓存目录不可用）· {trace.Stats}";
             return trace;
         }
@@ -365,7 +291,7 @@ namespace ADOFAIMacro.Technique
             var sw = Stopwatch.StartNew();
             try
             {
-                if (!TryPrepareSolveEnv(out string why))
+                if (!TryPrepareSolveEnv(out var source, out string why))
                 {
                     _prewarmInfo = $"无法离线计算：{why}";
                     _playbackInfo = _prewarmInfo;
@@ -374,7 +300,7 @@ namespace ADOFAIMacro.Technique
                     return;
                 }
 
-                var trace = SolveAndCacheTrace();
+                var trace = SolveAndCacheTrace(source!);
                 if (trace == null)
                 {
                     _prewarmInfo = _playbackInfo.Length > 0 ? _playbackInfo : "无法离线计算：求解未产出结果";
@@ -387,8 +313,8 @@ namespace ADOFAIMacro.Technique
                 // 通过后就会直接用它。
                 _prewarmedTrace = trace;
                 _prewarmedLevelPath = SafeLevelPath() ?? string.Empty;
-                _prewarmedFingerprint = _techniqueFingerprint;
-                _prewarmedFloorCount = floorCount;
+                _prewarmedFingerprint = source!.Fingerprint;
+                _prewarmedFloorCount = source!.FloorCount;
 
                 sw.Stop();
                 string where = _trace != null
@@ -416,7 +342,7 @@ namespace ADOFAIMacro.Technique
         {
             try
             {
-                if (!TryPrepareSolveEnv(out string why))
+                if (!TryPrepareSolveEnv(out var source, out string why))
                 {
                     _prewarmInfo = $"无法导出：{why}";
                     _playbackInfo = _prewarmInfo;
@@ -424,9 +350,8 @@ namespace ADOFAIMacro.Technique
                     return;
                 }
 
-                ParseTechniqueConfig();
                 string levelPath = SafeLevelPath() ?? "?";
-                string? src = TraceFile.LocateCacheFile(levelPath, floorCount, _techniqueFingerprint);
+                string? src = TraceFile.LocateCacheFile(levelPath, source!.FloorCount, source.Fingerprint);
                 if (src == null)
                 {
                     _prewarmInfo = "没有可导出的轨迹（先点「离线计算」）";
@@ -479,7 +404,7 @@ namespace ADOFAIMacro.Technique
         {
             try
             {
-                if (!TryPrepareSolveEnv(out string why))
+                if (!TryPrepareSolveEnv(out var source, out string why))
                 {
                     _prewarmInfo = $"无法导入：{why}";
                     _playbackInfo = _prewarmInfo;
@@ -487,7 +412,6 @@ namespace ADOFAIMacro.Technique
                     return;
                 }
 
-                ParseTechniqueConfig();
                 string levelPath = SafeLevelPath() ?? "?";
 
                 string file = FileBrowser.PickFile(
@@ -502,7 +426,7 @@ namespace ADOFAIMacro.Technique
                     return;
                 }
 
-                var (ok, msg) = TraceFile.ImportFrom(file, levelPath, floorCount, _techniqueFingerprint);
+                var (ok, msg) = TraceFile.ImportFrom(file, levelPath, source!.FloorCount, source.Fingerprint);
                 if (ok)
                 {
                     // 丢掉内存预热副本，让下一次 Initialize 从缓存重读导入的轨迹。
@@ -541,29 +465,19 @@ namespace ADOFAIMacro.Technique
         ///
         /// · 时间驱动：把 TraceEvent 翻成 HitEvent 顶替 _hitEvents（角度信息留作观测）。
         /// · 角度驱动：_hitEvents 清空（工作线程无事可做），改由 AngleDriverTick 发键。
-        /// · 任何一步失败都安静回落到在线贪心事件表 —— 播放器是纯增强，
+        /// · 任何一步失败都安静回落到在线手法事件表 —— 播放器是纯增强，
         ///   绝不能成为「能不能玩」的开关。
         /// </summary>
-        private static void PrepareTrace()
+        private static bool PrepareTrace(TechniqueSource source)
         {
-            ResetTraceState();
-
             bool angleDriver = Main.Settings.techniquePlaybackDriver == 1;
-            if (!Main.Settings.EnableTechniqueSimulation) return;
-
-            var floors = cachedFloors;
-            if (floors == null || floors.Length == 0) return;
-
-            // 加载期已经算好的（关卡路径 + 手法指纹 + 地板数全一致）→ 直接复用，
-            // 进关这一刻零计算。指纹是 ParseTechniqueConfig 算出来的，而
-            // BuildTechniqueFloorInputs 也会再调一次解析，两者一致。
-            TraceFile.Trace? trace = null;
             string levelPath = SafeLevelPath() ?? "?";
-            int techFp = _techniqueFingerprint;
+            int techFp = source.Fingerprint;
+            TraceFile.Trace? trace;
             if (_prewarmedTrace != null &&
                 string.Equals(_prewarmedLevelPath, levelPath, StringComparison.Ordinal) &&
                 _prewarmedFingerprint == techFp &&
-                _prewarmedFloorCount == floors.Length)
+                _prewarmedFloorCount == source.FloorCount)
             {
                 trace = _prewarmedTrace;
                 _playbackInfo = trace.FromCache
@@ -573,14 +487,22 @@ namespace ADOFAIMacro.Technique
             }
             else
             {
-                trace = SolveAndCacheTrace();
-                if (trace == null) return;      // _playbackInfo 已由 SolveAndCacheTrace 填好
+                trace = SolveAndCacheTrace(source);
+                if (trace == null) return false;      // _playbackInfo 已由 SolveAndCacheTrace 填好
                 PlaybackFromCache = trace.FromCache;
             }
 
-            if (trace == null || trace.Events.Length == 0) return;
+            if (trace.Events.Length == 0) return false;
 
             _trace = trace;
+            if (angleDriver)
+            {
+                var events = trace.Events;
+                _angleTieOffsets = new int[events.Length];
+                for (int i = events.Length - 2; i >= 0; i--)
+                    if (events[i].TriggerTime == events[i + 1].TriggerTime)
+                        _angleTieOffsets[i] = _angleTieOffsets[i + 1] + 1;
+            }
 
             // 接线
             if (angleDriver)
@@ -595,11 +517,11 @@ namespace ADOFAIMacro.Technique
             }
             else
             {
-                var converted = ConvertTraceToHitEvents(trace.Events);
+                var converted = TechniquePlayback.TraceToHitEvents(trace.Events);
                 if (converted.Length == 0)
                 {
-                    _playbackInfo += " · 轨迹无可播事件（沿用在线贪心）";
-                    return;
+                    _playbackInfo += " · 轨迹无可播事件（改用手法事件表）";
+                    return false;
                 }
                 _hitEvents = converted;
                 _hitEventCount = converted.Length;
@@ -608,6 +530,7 @@ namespace ADOFAIMacro.Technique
 
             _staticAnchorVersion++;      // 让工作线程下一帧换到新表
             Log($"[Macro-Player] {_playbackInfo} · 驱动={(angleDriver ? "角度" : "时间")} · 事件 {_hitEventCount}/{trace.Events.Length}");
+            return true;
         }
 
         /// <summary>
@@ -618,7 +541,9 @@ namespace ADOFAIMacro.Technique
         {
             // 收尾上一局：有新数据才落一份报告（随后清零，重试重新记账）
             DeviationProbe.ReportIfAny("换关/重试");
+            ReleaseAllAngleKeys("重置轨迹");
             _trace = null;
+            _angleTieOffsets = [];
             _angleDriverActive = false;
             _anglePlayIndex = -1;
             _angleResynced = false;
@@ -630,23 +555,6 @@ namespace ADOFAIMacro.Technique
             // 异步发键线程：换关时停掉（线程退出前会松开它自己按下的键）
             StopAngleAsync();
             DeviationProbe.Reset();
-        }
-
-        /// <summary>TraceEvent → HitEvent（时间驱动：丢掉角度信息，语义与原生事件表一致）</summary>
-        private static HitEvent[] ConvertTraceToHitEvents(TraceFile.TraceEvent[] events)
-        {
-            var result = new HitEvent[events.Length];
-            for (int i = 0; i < events.Length; i++)
-            {
-                ref readonly var e = ref events[i];
-                result[i] = new HitEvent(
-                    e.TriggerTime,
-                    e.KeyCode,
-                    e.ReleaseOnly,
-                    e.IsHoldRelated,
-                    e.ReleaseKeyCode);
-            }
-            return result;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -663,10 +571,10 @@ namespace ADOFAIMacro.Technique
 
         /// <summary>
         /// 角度驱动**当前仍处于按下态的键集合**。时间驱动有 WorkerPressKey/WorkerReleaseKey
-        /// 状态机 + 事件表跑完的兜底松键，角度驱动原本两者皆无 —— 松键完全依赖求解器
+        /// 状态机 + 事件表跑完的兜底松键，角度驱动原本两者皆无 —— 松键完全依赖手法规划器
         /// 产出的 ReleaseOnly 事件；一旦它被游标跳过或 ReleaseKeyCode 与按下键对不上，
         /// 键就一直按住不放（实测日志 key=0xBB down=True 永不上报松键）。
-        /// 用集合而非单个键：求解器的松键事件按 CalculateReleaseTime 独立产出，
+        /// 用集合而非单个键：手法规划器的松键事件按 CalculateReleaseTime 独立产出，
         /// 其 ReleaseKeyCode 不保证等于对应按下事件的 KeyCode，单键追踪会漏。
         /// </summary>
         /// <summary>普通（非 hold）键的按下态集合</summary>
@@ -674,7 +582,7 @@ namespace ADOFAIMacro.Technique
 
         /// <summary>
         /// 松开所有残留按键（兜底 / 重同步 / 收尾用）。
-        /// hold 键单独记在 _holdKey/_isHoldDown（求解器同一时刻只允许一个 activeHold），
+        /// hold 键单独记在 _holdKey/_isHoldDown（手法规划器同一时刻只允许一个 activeHold），
         /// 这里连它一起松 —— 兜底路径下事件流已断，不松就是卡键。
         /// </summary>
         private static void ReleaseAllAngleKeys(string why)
@@ -751,8 +659,7 @@ namespace ADOFAIMacro.Technique
             if (controller.paused || controller.state != global::States.PlayerControl)
             {
                 // 异步路径：清空待发队列 + 让工作线程松开它按下的键（防越界发键/卡键）
-                FlushAngleAsync();
-                ReleaseAllAngleKeys(controller.paused ? "游戏暂停" : "离开游玩状态");
+                SuspendAnglePlayback(controller.paused ? "游戏暂停" : "离开游玩状态");
                 DeviationProbe.ReportOnce(controller.paused ? "游戏暂停" : "离开游玩状态");
                 return;
             }
@@ -769,7 +676,7 @@ namespace ADOFAIMacro.Technique
             if (cond == null || cond.song == null) return;
 
             // ── 轨迹下标 ↔ 游戏 seqID 的换算 ──────────────────
-            // 轨迹里的 FloorIndex 是 listFloors 的 0 基下标（BuildTechniqueFloorInputs
+            // 轨迹里的 FloorIndex 是 listFloors 的 0 基下标（TechniqueTimeline.Build
             // 填的 evFloor[i]），而 curr.seqID 是 1 基的 seqID。seqID 起点在
             // 不同关卡生成路径下不统一，运行时建映射表 O(1) 查。
             int sweepFloor = ResolveSweepFloor(curr);
@@ -784,7 +691,8 @@ namespace ADOFAIMacro.Technique
                 _angleResynced = false;
                 _songZeroValid = false;
                 // 重同步会让游标跳过区间，松键可能永不发出 —— 先把还按着的键全松开
-                FlushAngleAsync();          // 异步路径：清队列 + 让工作线程松开它的键
+                FlushAngleAsync();
+                ResumeAngleAsync();
                 ReleaseAllAngleKeys("砖序回退");
                 DeviationProbe.OnRollback(_lastSweepFloor, sweepFloor);
             }
@@ -826,15 +734,6 @@ namespace ADOFAIMacro.Technique
                 _anglePlayIndex = i;
                 _angleResynced = true;
             }
-            if (_anglePlayIndex >= count)
-            {
-                // 事件表跑完仍按着 = 卡键，兜底松开（时间驱动同款）
-                // 异步路径：先清空待发队列（表已跑完，不应再有事件发出）
-                FlushAngleAsync();
-                ReleaseAllAngleKeys("事件表跑完");
-                DeviationProbe.ReportOnce("事件表跑完");
-                return;
-            }
 
             // ── 判定时刻换算缓存 ──────────────────────────────
             // songZero = dspTimeSongPosZero + calibration_i。
@@ -851,14 +750,26 @@ namespace ADOFAIMacro.Technique
                     if (_songZeroValid)
                     {
                         Main.Log($"[Macro-Player] 歌曲时间基准漂移 {_songZeroCache:F3}→{songZeroNow:F3}（重试/跳砖），重同步判定时刻换算");
-                        _anglePlayIndex = -1;
+                        // A pause can rebase the clock without moving off this tile. Preserve
+                        // edges already sent on it, but re-time the unpublished suffix.
+                        SuspendAnglePlayback("时间基准变化");
+                        ResumeAngleAsync();
                         _angleResynced = false;
                     }
                     _pitchCache = cond.song.pitch;
                     if (_pitchCache < 0.05) _pitchCache = 1.0;   // 防零/异常 pitch
                     _songZeroCache = songZeroNow;
                     _songZeroValid = true;
+                    if (!_angleResynced) return; // Re-anchor before indexing the table.
                 }
+            }
+
+            if (_anglePlayIndex >= count)
+            {
+                // The cursor counts published edges; let the worker drain the tail.
+                ReleaseAllAngleKeys("事件表跑完");
+                DeviationProbe.ReportOnce("事件表跑完");
+                return;
             }
 
             // offsetTick 每帧都在被游戏平滑更新（scrConductor.Update →
@@ -915,7 +826,7 @@ namespace ADOFAIMacro.Technique
                 // 游戏按"当下帧"判定，与真实玩家慢了一拍的手感等价，不会灾难偏移。
                 if (ev.FloorIndex < sweepFloor)
                 {
-                    FireTraceEventAsync(ev, simulateKey, enableTechnique, 0);
+                    if (!TryFireTraceEvent(ev, simulateKey, enableTechnique, 0)) break;
                     DeviationProbe.OnCatchUp();   // 计划时刻已不可还原的补发
                     frameSends++;
                     _anglePlayIndex++;
@@ -928,18 +839,17 @@ namespace ADOFAIMacro.Technique
                 //   entryTime 同为谱面秒域。）
                 // 到点即发：hitTick* - leadTicks <= nowTicks + 100ms。
                 double songSec = ev.TriggerTime / _pitchCache + _songZeroCache;
-                double hitStar = (double)offsetTick + songSec * 1e7;
-                if (double.IsNaN(hitStar) || double.IsInfinity(hitStar)
-                    || hitStar < long.MinValue || hitStar > long.MaxValue)
+                double relativeTicks = songSec * 1e7;
+                if (!TechniqueTimeline.IsFinite(relativeTicks) || Math.Abs(relativeTicks) >= 1e18 || Math.Abs((double)offsetTick) >= 8e18)
                 {
                     if (_timingWarnSpam++ < 8)
                         Main.Log($"[Macro-Player] 事件判定时刻异常 (TriggerTime={ev.TriggerTime:F3})，按当下发");
-                    FireTraceEventAsync(ev, simulateKey, enableTechnique, 0);
+                    if (!TryFireTraceEvent(ev, simulateKey, enableTechnique, 0)) break;
                     frameSends++;
                     _anglePlayIndex++;
                     continue;
                 }
-                long hitStarTicks = (long)hitStar;
+                long hitStarTicks = offsetTick + (long)relativeTicks;
 
                 // 到点判据（含用户提前量）：还没到点 → 后面的更没到，整批等下一帧。
                 // （异步路径下这一条仍是主线程的推进闸门：只发布"已到点"的事件，
@@ -958,10 +868,10 @@ namespace ADOFAIMacro.Technique
                 DeviationProbe.OnGateEvent(hitStarTicks, nowTicks, eventTicks < minPast);
                 if (eventTicks < minPast) eventTicks = minPast;
                 if (eventTicks > nowTicks) eventTicks = nowTicks;
+                // Reserve distinct 100ns timestamps ending at the judgment time. The game
+                // may reorder events with identical timestamps, regardless of key direction.
+                eventTicks -= _angleTieOffsets[_anglePlayIndex];
 
-                // hold 链：松旧键与按新键共享同一 eventTicks 时，.NET PriorityQueue
-                // 同优先级出队顺序未定义 → 顺序颠倒会卡键。给松键 -1 tick 强制
-                // "松旧"严格先于"按新"。
                 // 【超速直判】判据=本事件到下一事件的真实间隔 <4ms（判定需求 >250/s，
                 // 超出游戏直喂判定链消化能力 ~250/s，见 The Sun 案例）→ 改走直接命中
                 // 计数通道。量真实间隔而不是 floor.speed：砖时长由角度跨度决定，speed
@@ -972,9 +882,9 @@ namespace ADOFAIMacro.Technique
                 // 且时间驱动没有对应实现 —— 两种驱动的键流因此不一致；它还会把
                 // 密集段的松键事件吞进直判计数通道（keyup 永不发出 → 卡键）。
                 // 全部删除，回到与时间驱动同构的"每个事件都发键"。
-                // 【2026-10-12 异步化】走 FireTraceEventAsync：可用时交给工作线程
+                // 【2026-10-12 异步化】走 TryFireTraceEvent：可用时交给工作线程
                 // 精确等到 eventTicks 再发（消除帧量化延迟），失败则主线程直发。
-                FireTraceEventAsync(ev, simulateKey, enableTechnique, eventTicks);
+                if (!TryFireTraceEvent(ev, simulateKey, enableTechnique, eventTicks)) break;
                 frameSends++;
                 _anglePlayIndex++;
             }
@@ -985,8 +895,6 @@ namespace ADOFAIMacro.Technique
         /// 逐行对齐（那边多一层锚点重读，这里是主线程同步执行，不需要）。
         /// eventTicks 非零 = 理想判定时刻，直喂路径的事件携带它
         /// （游戏按事件时间戳判定）；注入路径无法携带时间戳，自动退化为当下时刻。
-        /// 松键一律比按下早 1 tick 入队：.NET PriorityQueue 同优先级出队顺序
-        /// 未定义，显式错开才能保证「先松旧键、后按新键」的确定性时序。
         /// </summary>
         /// <summary>
         /// 角度驱动的发键入口（2026-10-12 异步化）。
@@ -994,26 +902,34 @@ namespace ADOFAIMacro.Technique
         /// 异步路径可用时：把事件**发布**给 AngleAsyncDriver 的工作线程，
         /// 由它精确等到 eventTicks 到点再发 —— 消除「主线程每帧才检查一次」
         /// 造成的 0~1 帧延迟（用户诊断「角度驱动不是异步的」）。
-        /// 发布失败（线程未运行/队列满）→ 退回原来的主线程直发，保证不丢键。
+        /// 队列满时保留游标；线程不可用时才由主线程直发。
         ///
         /// ★ 时间戳语义不变：eventTicks 仍由调用方按原公式算出并钳位，
         /// 工作线程只是「更早、更准地执行 SendKey」。
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void FireTraceEventAsync(in TraceFile.TraceEvent ev, bool simulateKey, bool enableTechnique, long eventTicks)
+        private static bool TryFireTraceEvent(in TraceFile.TraceEvent ev, bool simulateKey, bool enableTechnique, long eventTicks)
         {
-            if (eventTicks > 0 && _aadRunning &&
-                PublishAngleEvent(eventTicks, ev.TriggerTime, ev.KeyCode, ev.ReleaseKeyCode,
-                    ev.ReleaseOnly, ev.IsHoldRelated, simulateKey, enableTechnique))
-                return;
+            if (_aadRunning)
+                return PublishAngleEvent(_anglePlayIndex, eventTicks > 0 ? eventTicks : PreciseNow.LocalTicks(), ev.TriggerTime,
+                    ev.KeyCode, ev.ReleaseKeyCode, ev.ReleaseOnly, ev.IsHoldRelated, simulateKey, enableTechnique);
 
-            // 兜底：线程不可用或时间戳无效 → 主线程直发（原路径）
+            // A timed-out stop must not race direct injection against the old sender.
+            if (_aadThread?.IsAlive == true) return false;
             FireTraceEvent(in ev, simulateKey, enableTechnique, eventTicks);
+            return true;
+        }
+
+        private static void SuspendAnglePlayback(string reason)
+        {
+            int unsent = FlushAngleAsync();
+            if (unsent >= 0 && (_anglePlayIndex < 0 || unsent < _anglePlayIndex))
+                _anglePlayIndex = unsent;
+            ReleaseAllAngleKeys(reason);
         }
 
         private static void FireTraceEvent(in TraceFile.TraceEvent ev, bool simulateKey, bool enableTechnique, long eventTicks = 0)
         {
-            long upTicks = eventTicks > 0 ? eventTicks - 1 : 0;   // 松键时间戳（确定性排序）
 
             if (!simulateKey)
             {
@@ -1029,8 +945,8 @@ namespace ADOFAIMacro.Technique
                     byte keyToRelease = ev.IsHoldRelated
                         ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
                         : ev.ReleaseKeyCode;
-                    SendKey(keyToRelease, false, upTicks);
-                    if (keyToRelease != 0) _angleDownKeys.Remove(keyToRelease);
+                    if (ev.IsHoldRelated ? _isHoldDown && keyToRelease == _holdKey : _angleDownKeys.Remove(keyToRelease))
+                        SendKey(keyToRelease, false, eventTicks);
                     if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
                 }
                 else
@@ -1045,9 +961,9 @@ namespace ADOFAIMacro.Technique
             {
                 if (enableTechnique)
                 {
-                    if (_isHoldDown) { SendKey(_holdKey, false, upTicks); _holdKey = 0; _isHoldDown = false; }
-                    SendKey(ev.KeyCode, true, eventTicks);
-                    _holdKey = ev.KeyCode; _isHoldDown = true;
+                    if (_isHoldDown) { SendKey(_holdKey, false, eventTicks); _holdKey = 0; _isHoldDown = false; }
+                    if (SendKey(ev.KeyCode, true, eventTicks))
+                    { _holdKey = ev.KeyCode; _isHoldDown = true; }
                 }
                 else WorkerHoldKey(ev.KeyCode);
                 return;
@@ -1060,8 +976,7 @@ namespace ADOFAIMacro.Technique
                 // _angleDownKeys 只做按下态"记账"，供暂停/砖序回退/事件表跑完等
                 // 边界兜底松键用；正常播放路径绝不依据它发键（否则键流走样，
                 // 实测：预松逻辑曾把两种驱动的手法搞成两样）。
-                SendKey(ev.KeyCode, true, eventTicks);
-                _angleDownKeys.Add(ev.KeyCode);
+                if (SendKey(ev.KeyCode, true, eventTicks)) _angleDownKeys.Add(ev.KeyCode);
             }
             else WorkerPressKey(ev.KeyCode);
         }

@@ -12,10 +12,7 @@ namespace ADOFAIMacro.Technique
     /// <summary>
     /// 事件表构建：把整张谱的地板转成一条按键事件流。
     ///
-    /// 三条路径产出同一份事件表 ——
-    ///   原生 TechniqueSimulator.dll（Release 首选）
-    ///   C# 分片实现（DEBUG / DLL 不可用时回退，见 PieceBuilder.cs）
-    ///   纯轮键（不启用手法模拟时）
+    /// 手法计划由 TechniquePlanner 生成；这里仅负责关闭手法时的轮键。
     ///
     /// 终点砖、auto 砖、中旋的取舍都照抄游戏做法，源码引用见各处注释。
     /// </summary>
@@ -24,12 +21,6 @@ namespace ADOFAIMacro.Technique
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BuildHitEvents()
         {
-            if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation)
-            {
-                BuildTechniqueHitEvents();
-                return;
-            }
-
             var floors = cachedFloors!;
             int n = floors.Length;
             bool simulate = Main.Settings.SimulateKeyPress;
@@ -138,14 +129,13 @@ namespace ADOFAIMacro.Technique
         private static int SyncFloor(double currentTime)
         {
             if (_hitEvents == null || _hitEvents.Length == 0) return -1;
-            int left = 0, right = _hitEvents.Length - 1;
-            while (left <= right)
+            // Strict lower bound: equal-time release/press groups must be replayed in full.
+            int left = 0, right = _hitEvents.Length;
+            while (left < right)
             {
-                int mid = (left + right) >> 1;
-                double t = _hitEvents[mid].TriggerTime;
-                if (t < currentTime) left = mid + 1;
-                else if (t > currentTime) right = mid - 1;
-                else return mid;
+                int mid = left + (right - left) / 2;
+                if (_hitEvents[mid].TriggerTime < currentTime) left = mid + 1;
+                else right = mid;
             }
             return left - 1;
         }

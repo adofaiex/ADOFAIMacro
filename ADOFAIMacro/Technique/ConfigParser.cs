@@ -2,40 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using ADOFAIMacro;
 using ADOFAIMacro.Core;
 using ADOFAIMacro.Input;
-using Settings = ADOFAIMacro.Settings.Settings;
 
 #nullable enable
 
 namespace ADOFAIMacro.Technique
 {
-    /// <summary>
-    /// 配置解析：把设置里写的字符串（"R,3,2,Q"、"1|2,1|3,2"、"0.8,1,1.2"）
-    /// 解析成数组，按「分段配置」算出某块地板实际生效的按键/顺序/时长，
-    /// 并把速率折叠成建议 BPM。
-    ///
-    /// 纯解析，不涉及任何出手时序。
-    /// </summary>
+    /// <summary>Parses input settings and snapshots the effective technique configuration.</summary>
     internal static partial class MacroEngine
     {
         // ─────────────────────────────────────────────
-        //  按键名称 → VK 映射（internal，供 TechniqueSimulator 复用）
+        //  按键名称 → VK 映射
         // ─────────────────────────────────────────────
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static byte[] ParseTechKeyList(string? input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return [0x4A];
-            var result = new List<byte>();
-            foreach (var part in input!.Split([','], StringSplitOptions.RemoveEmptyEntries))
-            {
-                // 统一解析：单字符 / 键名 / 十六进制 0xNN（旧实现丢弃 0xNN）
-                if (KeyMap.TryParse(part, out byte code)) result.Add(code);
-            }
-            return result.Count == 0 ? [0x4A] : [.. result];
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ParseKeyCodes()
@@ -83,245 +62,104 @@ namespace ADOFAIMacro.Technique
             catch { }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  手法模拟：解析全局配置
-        // ═══════════════════════════════════════════════════════════════
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void ParseTechniqueConfig()
+        private static string? Inherit(string? value, string? fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+        private static TechniqueSource CaptureTechniqueSource(scrFloor[] floors, scrConductor conductor)
         {
-            // 优先使用关卡特定配置（不会覆盖 Settings 中的用户设置）
-            var s = Main.Settings;
-            var levelConfig = LevelTechniqueManager.GetCurrentLevelConfig();
-            if (levelConfig != null)
-            {
-                _techLeftKeys = ParseTechKeyList(levelConfig.leftHandKeys);
-                _techRightKeys = ParseTechKeyList(levelConfig.rightHandKeys);
-                _techKeyOrders[0] = ParseTechOrders(levelConfig.leftHandOrders, _techLeftKeys.Length);
-                _techKeyOrders[1] = ParseTechOrders(levelConfig.rightHandOrders, _techRightKeys.Length);
-                _techPressDur[0] = ParseTechPressTimes(levelConfig.leftHandPressTimes, _techLeftKeys.Length);
-                _techPressDur[1] = ParseTechPressTimes(levelConfig.rightHandPressTimes, _techRightKeys.Length);
-                _currentSegments = levelConfig.techniqueSegments ?? new List<Settings.TechniqueSegment>();
-                ComputeTechniqueFingerprint(s.TechniqueBpmLimit, levelConfig.handPreference);
-                return;
-            }
+            var settings = Main.Settings;
+            var level = LevelTechniqueManager.GetCurrentLevelConfig();
+            var techniqueOptions = level ?? settings.CurrentTechniqueProfile;
+            var segments = level != null ? level.techniqueSegments : settings.CurrentTechniqueProfile?.techniqueSegments;
+            int preference = level?.handPreference ?? settings.TechniqueHandPreference;
+            string strategyId = TechniquePlanner.NormalizeStrategyId(techniqueOptions?.groupingStrategyId);
+            string handPolicyId = TechniquePlanner.NormalizeHandPolicyId(techniqueOptions?.runHandPolicyId);
+            double singleFingerKps = TechniquePlanner.NormalizeSingleFingerKps(techniqueOptions?.singleFingerKps ?? 6.5);
+            var groupingStrategy = TechniquePlanner.CreateGroupingStrategy(strategyId, singleFingerKps, handPolicyId);
+            bool lazyRelease = techniqueOptions?.lazyRelease ?? false;
+            double limit = settings.TechniqueBpmLimit;
+            string? leftKeys = level == null ? settings.TechLeftHandKeys : level.leftHandKeys;
+            string? rightKeys = level == null ? settings.TechRightHandKeys : level.rightHandKeys;
+            string? leftOrders = level == null ? settings.TechLeftHandOrders : level.leftHandOrders;
+            string? rightOrders = level == null ? settings.TechRightHandOrders : level.rightHandOrders;
+            string? leftTimes = level == null ? settings.TechLeftHandPressTimes : level.leftHandPressTimes;
+            string? rightTimes = level == null ? settings.TechRightHandPressTimes : level.rightHandPressTimes;
 
-            _techLeftKeys = ParseTechKeyList(s.TechLeftHandKeys);
-            _techRightKeys = ParseTechKeyList(s.TechRightHandKeys);
-            _techKeyOrders[0] = ParseTechOrders(s.TechLeftHandOrders, _techLeftKeys.Length);
-            _techKeyOrders[1] = ParseTechOrders(s.TechRightHandOrders, _techRightKeys.Length);
-            _techPressDur[0] = ParseTechPressTimes(s.TechLeftHandPressTimes, _techLeftKeys.Length);
-            _techPressDur[1] = ParseTechPressTimes(s.TechRightHandPressTimes, _techRightKeys.Length);
-
-            var profiles = s.TechniqueProfiles;
-            if (profiles != null && profiles.Count > 0 &&
-                s.SelectedTechniqueProfileIndex >= 0 && s.SelectedTechniqueProfileIndex < profiles.Count)
-                _currentSegments = profiles[s.SelectedTechniqueProfileIndex].techniqueSegments;
-            else
-                _currentSegments = new List<Settings.TechniqueSegment>();
-
-            ComputeTechniqueFingerprint(s.TechniqueBpmLimit, s.TechniqueHandPreference);
-        }
-
-        /// <summary>
-        /// 手法配置指纹（FNV-1a 32bit）。轨迹缓存键的一半：手法设置、按键表、
-        /// 分段、bpm 上限、手性偏好任意一项变化，缓存立刻失效重算 ——
-        /// 否则会拿"旧手法配置下算的最优轨迹"去打新配置，静默劣化且无法察觉。
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void ComputeTechniqueFingerprint(float bpmLimit, int handPrefFallback)
-        {
-            unchecked
-            {
-                uint h = 2166136261;
-                void Mix(int v)
+            var left = ParseLayout(leftKeys, leftOrders, leftTimes, 0x46);
+            var right = ParseLayout(rightKeys, rightOrders, rightTimes, 0x4A);
+            var global = new TechniqueProfile(limit, left, right);
+            var resolved = new List<ConfiguredSegment>();
+            if (segments != null)
+                foreach (var segment in segments)
                 {
-                    h ^= (uint)v; h *= 16777619;
-                }
-                void MixD(double v) => Mix((int)Math.Round(v * 1e6));
-                // .NET Framework 的 string.GetHashCode() 每进程随机加盐 →
-                // 指纹在两次运行之间不稳定，缓存永远 miss。用稳定的逐字节 FNV。
-                void MixString(string? s)
-                {
-                    if (string.IsNullOrEmpty(s)) { Mix(0); return; }
-                    foreach (char c in s!) { h ^= c; h *= 16777619; }
-                    Mix(0xFF);
+                    if (segment == null || segment.endFloor < segment.startFloor) continue;
+                    var lp = ParseLayout(Inherit(segment.leftHandKeys, leftKeys), Inherit(segment.leftHandOrders, leftOrders),
+                                         Inherit(segment.leftHandPressTimes, leftTimes), 0x46);
+                    var rp = ParseLayout(Inherit(segment.rightHandKeys, rightKeys), Inherit(segment.rightHandOrders, rightOrders),
+                                         Inherit(segment.rightHandPressTimes, rightTimes), 0x4A);
+                    double segmentLimit = TechniqueTimeline.IsFinite(segment.bpmLimit) && segment.bpmLimit > 0 ? segment.bpmLimit : limit;
+                    resolved.Add(new ConfiguredSegment(segment.startFloor, segment.endFloor, new TechniqueProfile(segmentLimit, lp, rp)));
                 }
 
-                Mix((int)Math.Round(bpmLimit));
-                Mix(handPrefFallback);
-
-                foreach (byte k in _techLeftKeys) Mix(k);
-                Mix(-1);
-                foreach (byte k in _techRightKeys) Mix(k);
-                Mix(-2);
-
-                foreach (var side in _techKeyOrders)
-                    foreach (var order in side)
-                    {
-                        foreach (int idx in order) Mix(idx);
-                        Mix(-3);
-                    }
-
-                foreach (var side in _techPressDur)
-                    foreach (double d in side) MixD(d);
-
-                if (_currentSegments != null)
-                    foreach (var seg in _currentSegments)
-                    {
-                        Mix(seg.startFloor);
-                        Mix(seg.endFloor);
-                        MixD(seg.bpmLimit);
-                        MixString(seg.leftHandKeys);
-                        MixString(seg.rightHandKeys);
-                        MixString(seg.leftHandOrders);
-                        MixString(seg.rightHandOrders);
-                        MixString(seg.leftHandPressTimes);
-                        MixString(seg.rightHandPressTimes);
-                    }
-
-                _techniqueFingerprint = (int)h;
+            var tiles = new TechniqueTile?[floors.Length];
+            for (int i = 0; i < floors.Length; i++)
+                if (floors[i] != null)
+                {
+                    var f = floors[i];
+                    double turn = Math.Abs(f.angleLength) / Math.PI;
+                    tiles[i] = new TechniqueTile(f.entryTime, f.speed, f.auto, f.midSpin, f.holdLength > -1,
+                        TechniqueTimeline.IsFinite(turn) ? turn : 0);
+                }
+            double speed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 1.0;
+            var hash = new TechniqueHash();
+            bool usesTempoInputs = groupingStrategy.UsesTempoInputs;
+            hash.Add(TechniqueTimeline.Fingerprint(tiles, conductor.bpm, speed,
+                includeTempo: usesTempoInputs, includeTileSpeed: usesTempoInputs, includeTurns: strategyId == TechniquePlanner.BeatGridStrategyId));
+            hash.Add(preference != 0 ? 1 : 0);
+            hash.Add(TechniquePlanner.GroupingStrategyFingerprint(strategyId, singleFingerKps, handPolicyId));
+            if (lazyRelease) hash.Add(0x4C5A);
+            TechniquePlanner.AddProfileFingerprint(ref hash, global, strategyId);
+            hash.Add(resolved.Count);
+            foreach (var segment in resolved)
+            {
+                hash.Add(segment.Start);
+                hash.Add(segment.End);
+                TechniquePlanner.AddProfileFingerprint(ref hash, segment.Profile, strategyId);
             }
+            return new TechniqueSource(tiles, conductor.bpm, speed, preference != 0, groupingStrategy, lazyRelease,
+                global, resolved.ToArray(), hash.Value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int[][] ParseTechOrders(string? input, int keyCount)
+        private static HandLayout ParseLayout(string? keyText, string? orderText, string? ratioText, byte fallback)
         {
-            int slots = keyCount;
-            var result = new int[slots][];
-            for (int n = 0; n < slots; n++) { result[n] = new int[n + 1]; for (int i = 0; i <= n; i++) result[n][i] = i % keyCount; }
-            if (string.IsNullOrWhiteSpace(input)) return result;
+            var keys = new List<byte>();
+            if (!string.IsNullOrWhiteSpace(keyText))
+                foreach (var part in keyText!.Split(','))
+                    if (KeyMap.TryParse(part, out byte code) && code != 0) keys.Add(code);
+            if (keys.Count == 0) keys.Add(fallback);
+            // An input layout can't contain more positions than there are usable VK codes.
+            if (keys.Count > 255) keys.RemoveRange(255, keys.Count - 255);
 
-            string[] groups = input!.Split('|');
-            for (int n = 0; n < slots; n++)
+            string[] groups = (orderText ?? string.Empty).Split('|');
+            var orders = new int[keys.Count][];
+            for (int row = 0; row < orders.Length; row++)
             {
-                string group = n < groups.Length ? groups[n] : groups[groups.Length - 1];
                 var indices = new List<int>();
-                foreach (var p in group.Split([','], StringSplitOptions.RemoveEmptyEntries))
-                    if (int.TryParse(p.Trim(), out int idx))
-                        indices.Add(Math.Max(0, Math.Min(idx - 1, keyCount - 1)));
-                if (indices.Count > 0) result[n] = [.. indices];
+                foreach (var part in groups[Math.Min(row, groups.Length - 1)].Split(','))
+                    if (int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+                    {
+                        indices.Add(Math.Max(1, Math.Min(value, keys.Count)) - 1);
+                        if (indices.Count == keys.Count) break;
+                    }
+                orders[row] = indices.ToArray();
             }
-            return result;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static double[] ParseTechPressTimes(string? input, int keyCount)
-        {
-            var result = new double[keyCount];
-            for (int i = 0; i < result.Length; i++) result[i] = 0.8;
-            if (string.IsNullOrWhiteSpace(input)) return result;
-            var parts = input!.Split([','], StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < Math.Min(parts.Length, result.Length); i++)
-                if (double.TryParse(parts[i].Trim(),
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture, out double v))
-                    result[i] = v;
-            return result;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static double GetAdviceBpm(double limit)
-        {
-            // 防御死循环：limit ≤ 0 时下面第二个折叠循环 `bpm <= limit/2` 恒真
-            // （bpm 被反复乘 2 仍是 0）；speed 缺失（controller 未就绪）时 bpm 折叠到 0
-            // 同样死循环。关卡配置是磁盘上的 JSON，bpmLimit 可能被手工改成 0 或负数。
-            if (limit <= 0.0) limit = 500.0;
-            double speed = ADOBase.controller?.playerOne?.planetarySystem?.speed ?? 0.0;
-            double bpm = (double)(conductor!.bpm * speed);
-            if (bpm <= 0.0) return limit;
-            while (bpm > limit) bpm /= 2.0;
-            while (bpm <= limit / 2.0) bpm *= 2.0;
-            return bpm;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static double GetAdviceBpm() => GetAdviceBpm(Main.Settings.TechniqueBpmLimit);
-
-        /// <summary>
-        /// 按**指定速率倍率**折叠建议 BPM —— 对应原生的 GetAdviceBpm(bpm, rate, limit)。
-        /// 把 bpm×rate 按 2 的幂折叠到 (limit/2, limit]。
-        /// 上面那个重载只能用全局 speed，等价于 rate = planetarySystem.speed。
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static double GetAdviceBpm(double limit, double rate)
-        {
-            if (limit <= 0.0) limit = 500.0;
-            double bpm = (double)(conductor!.bpm * rate);
-            if (bpm <= 0.0) return limit;
-            while (bpm > limit) bpm /= 2.0;
-            while (bpm <= limit / 2.0) bpm *= 2.0;
-            return bpm;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float GetSegmentBpmLimit(int floorIdx)
-        {
-            if (_currentSegments != null)
-                foreach (var seg in _currentSegments)
-                    if (floorIdx >= seg.startFloor && floorIdx <= seg.endFloor)
-                        return seg.bpmLimit;
-            return Main.Settings.TechniqueBpmLimit;
-        }
-
-        // ─────────────────────────────────────────────
-        //  手法模拟：分段有效配置（C# 调试路径用）
-        // ─────────────────────────────────────────────
-        private readonly struct EffectiveTechConfig
-        {
-            public readonly byte[] LeftKeys;
-            public readonly byte[] RightKeys;
-            public readonly int[][] LeftOrders;
-            public readonly int[][] RightOrders;
-            public readonly double[] LeftPressTimes;
-            public readonly double[] RightPressTimes;
-
-            public EffectiveTechConfig(byte[] lk, byte[] rk,
-                int[][] lo, int[][] ro, double[] lp, double[] rp)
+            string[] parts = (ratioText ?? string.Empty).Split(',');
+            var ratios = new double[keys.Count];
+            for (int i = 0; i < ratios.Length; i++)
             {
-                LeftKeys = lk; RightKeys = rk;
-                LeftOrders = lo; RightOrders = ro;
-                LeftPressTimes = lp; RightPressTimes = rp;
+                if (i >= parts.Length || !double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out ratios[i]))
+                    ratios[i] = 0.8;
             }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static EffectiveTechConfig GetEffectiveConfig(int floorIdx)
-        {
-            if (_currentSegments != null)
-            {
-                foreach (var seg in _currentSegments)
-                {
-                    if (floorIdx < seg.startFloor || floorIdx > seg.endFloor) continue;
-                    if (!seg.HasKeyOverride) break; // BPM only — keys fall through to global
-
-                    byte[] lk = string.IsNullOrWhiteSpace(seg.leftHandKeys)
-                    ? _techLeftKeys
-                    : ParseTechKeyList(seg.leftHandKeys);
-                    byte[] rk = string.IsNullOrWhiteSpace(seg.rightHandKeys)
-                    ? _techRightKeys
-                    : ParseTechKeyList(seg.rightHandKeys);
-
-                    int[][] lo = string.IsNullOrWhiteSpace(seg.leftHandOrders)
-                    ? _techKeyOrders[0]
-                    : ParseTechOrders(seg.leftHandOrders, lk.Length);
-                    int[][] ro = string.IsNullOrWhiteSpace(seg.rightHandOrders)
-                    ? _techKeyOrders[1]
-                    : ParseTechOrders(seg.rightHandOrders, rk.Length);
-
-                    double[] lp = string.IsNullOrWhiteSpace(seg.leftHandPressTimes)
-                    ? _techPressDur[0]
-                    : ParseTechPressTimes(seg.leftHandPressTimes, lk.Length);
-                    double[] rp = string.IsNullOrWhiteSpace(seg.rightHandPressTimes)
-                    ? _techPressDur[1]
-                    : ParseTechPressTimes(seg.rightHandPressTimes, rk.Length);
-
-                    return new EffectiveTechConfig(lk, rk, lo, ro, lp, rp);
-                }
-            }
-            return new EffectiveTechConfig(
-                _techLeftKeys, _techRightKeys,
-                _techKeyOrders[0], _techKeyOrders[1],
-                _techPressDur[0], _techPressDur[1]);
+            return new HandLayout(keys.ToArray(), orders, ratios);
         }
     }
 }

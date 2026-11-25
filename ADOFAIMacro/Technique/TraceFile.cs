@@ -6,31 +6,14 @@ using ADOFAIMacro.Core;
 #nullable enable
 namespace ADOFAIMacro.Technique
 {
-    /// <summary>
-    /// 离线求解轨迹的落盘格式。
-    ///
-    /// 设计要点：
-    ///  · 缓存文件**不绑定运行期几何** —— 求解器是纯时间轴的（只认 entryTime），
-    ///    存 TriggerTime + AngleFrac∈[0,1]；回放时用当次运行的
-    ///    angleLength / isCW 权威值把 AngleFrac 还原成角度阈值。
-    ///  · 缓存键 = 关卡指纹（路径 + 地板数）+ 手法配置指纹，
-    ///    谱面或手法改动后自动失效，不会有"拿旧轨迹打新谱"的静默错误。
-    ///  · 格式自带魔数 / 版本号 / 长度校验，读坏了直接当"没有缓存"处理。
-    /// </summary>
+    /// <summary>Portable trace with a chart/profile identity and validated key transitions.</summary>
     internal static class TraceFile
     {
         private const uint Magic = 0x314D4146;   // 'FAM1'
-        // v2：2026-10-04 手法模拟整体换成时间片划分算法的忠实实现
-        //     （含变速点 restart 机制），分区结果与旧实现不同，旧 .adotr 缓存必须失效。
-        //     指纹 = levelPath + floorCount + techHash + FormatVersion，
-        //     版本号一改，旧的缓存文件在读取时会被判为不匹配而整体重算。
-        // v3：2026-10-06 片长改为「对齐到下一个判定音的间隔」（消三连音伪双押）。
-        //     指纹原本**不含原生算法版本**，于是改完 cpp 后旧的 .adotr 仍会命中，
-        //     玩家看到的是「改了跟没改一样」——这次踩的就是这个坑（见 lesson
-        //     0mux1jw1）。凡改动手法输出（尤其 TechniqueSimulator.cpp），必须同步 +1。
-        private const int FormatVersion = 3;
-        //  文件头 = 4(魔数)+4(版本)+4(条数)+16(4 个 int)+16(方差+总代价)+24(3 个代价)+4(节点) = 72
-        private const int HeaderSize = 72;
+        // Bump when planner output changes; older events must never masquerade as current.
+        private const int FormatVersion = 4;
+        private const int HeaderSize = 80; // magic, version, count, floor count, content hash, stats
+        private const int MaxEvents = 1_000_000;
         /// <summary>单事件落盘字节数：8(double)+4(float)+1+1+1+1(pad)+4(int)</summary>
         private const int EventStride = 20;
 
@@ -114,7 +97,7 @@ namespace ADOFAIMacro.Technique
             /// <summary>是否来自磁盘缓存（false = 本次刚求解出来的）</summary>
             public bool FromCache;
             /// <summary>求解耗时（毫秒）；仅 !FromCache 时有意义</summary>
-            public int SolveMs;
+            public int SolveMs { get; set; }
             /// <summary>缓存键（十六进制 8 位）；空串 = 没落盘（目录不可用）</summary>
             public string CacheKey = string.Empty;
         }
@@ -123,56 +106,13 @@ namespace ADOFAIMacro.Technique
         //  缓存键
         // ─────────────────────────────────────────────
 
-        /// <summary>
-        /// 原生求解器的身份戳（内容哈希），进缓存键。
-        ///
-        /// 为什么必须有它：手法结果**完全由 TechniqueSimulator.dll 的内部算法决定**，
-        /// 而这个值过去不在指纹里。于是「改完 cpp、重新部署、进游戏」看到的仍是
-        /// 上一版轨迹（命中旧 .adotr），表现就是「改了跟没改一样」——2026-10-06
-        /// 片长对齐修复就栽在这里（lesson 0mux1jw1）。
-        ///
-        /// 用内容哈希而非 mtime/长度：重新部署必然改内容，而开发期反复重编可能
-        /// 碰巧同长度；哈希对两者都免疫。只算一次（Lazy），300KB 读取可忽略。
-        /// 取不到文件时退回 mtime+长度，再不行用 "0"（只是少一层保险，不影响功能）。
-        /// </summary>
-        private static readonly Lazy<string> _solverStamp = new Lazy<string>(() =>
-        {
-            try
-            {
-                string modPath = Main.Mod?.Path
-                    ?? Path.GetDirectoryName(typeof(TraceFile).Assembly.Location) ?? string.Empty;
-                string dll = Path.Combine(modPath, "TechniqueSimulator.dll");
-                if (File.Exists(dll))
-                {
-                    byte[] bytes = File.ReadAllBytes(dll);
-                    return Fnv1a(Convert.ToBase64String(bytes));
-                }
-            }
-            catch (Exception ex)
-            {
-                MacroEngine.Log($"[Macro-Tech] 求解器身份戳不可用，退回时间戳: {ex.Message}");
-            }
-
-            try
-            {
-                string modPath = Main.Mod?.Path
-                    ?? Path.GetDirectoryName(typeof(TraceFile).Assembly.Location) ?? string.Empty;
-                var fi = new FileInfo(Path.Combine(modPath, "TechniqueSimulator.dll"));
-                if (fi.Exists) return $"{fi.Length:x}-{fi.LastWriteTimeUtc.Ticks:x}";
-            }
-            catch { /* 下面返回 0 */ }
-
-            return "0";
-        });
-
         private static string FingerprintOf(string levelPath, int floorCount, int techniqueHash)
         {
             var sb = new StringBuilder(128);
             sb.Append(levelPath ?? "?").Append('|')
               .Append(floorCount).Append('|')
               .Append(techniqueHash.ToString("x8")).Append('|')
-              .Append(FormatVersion).Append('|')
-              .Append(_solverStamp.Value);
+              .Append(FormatVersion);
             return Fnv1a(sb.ToString());
         }
 
@@ -208,9 +148,11 @@ namespace ADOFAIMacro.Technique
             }
         }
 
-        private static string CachePath(string key)
+        private static string CachePath(string key, string? cacheDirectory = null)
         {
-            string dir = CacheDirectory();
+            // An explicit directory lets offline hosts use the same serializer without
+            // calling Unity's native persistentDataPath getter. The caller owns that directory.
+            string dir = cacheDirectory ?? CacheDirectory();
             return string.IsNullOrEmpty(dir) ? string.Empty : Path.Combine(dir, $"trace_{key}.adotr");
         }
 
@@ -221,58 +163,12 @@ namespace ADOFAIMacro.Technique
         /// 读缓存。命中返回 Trace（FromCache=true），任何异常/校验不过都返回 null
         /// —— 缓存永远只是加速手段，绝不能成为正确性的前提。
         /// </summary>
-        internal static Trace? TryLoad(string levelPath, int floorCount, int techniqueHash)
+        internal static Trace? TryLoad(string levelPath, int floorCount, int techniqueHash,
+                                       string? cacheDirectory = null)
         {
             string key = FingerprintOf(levelPath, floorCount, techniqueHash);
-            string path = CachePath(key);
-            if (string.IsNullOrEmpty(path)) return null;
-
-            try
-            {
-                if (!File.Exists(path)) return null;
-
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var r = new BinaryReader(fs, Encoding.UTF8);
-
-                if (r.ReadUInt32() != Magic) return null;
-                if (r.ReadInt32() != FormatVersion) return null;
-
-                int count = r.ReadInt32();
-                if (count < 0 || count > 1_000_000) return null;
-
-                var stats = new TraceStats(
-                    r.ReadInt32(), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
-                    r.ReadDouble(), r.ReadDouble(),
-                    r.ReadDouble(), r.ReadDouble(), r.ReadDouble(),
-                    r.ReadInt32());
-
-                long expected = (long)HeaderSize + (long)count * EventStride;
-                if (fs.Length != expected)
-                {
-                    MacroEngine.Log($"[Macro-Tech] 轨迹缓存长度不符（{fs.Length} != {expected}），忽略");
-                    return null;
-                }
-
-                var events = new TraceEvent[count];
-                for (int i = 0; i < count; i++)
-                {
-                    double t = r.ReadDouble();
-                    float frac = r.ReadSingle();
-                    byte vk = r.ReadByte();
-                    byte flags = r.ReadByte();
-                    byte rel = r.ReadByte();
-                    _ = r.ReadByte();                     // 15: pad
-                    int floor = r.ReadInt32();
-                    events[i] = new TraceEvent(t, frac, vk, flags, rel, floor);
-                }
-
-                return new Trace { Events = events, Stats = stats, FromCache = true, CacheKey = key };
-            }
-            catch (Exception ex)
-            {
-                MacroEngine.Log($"[Macro-Tech] 轨迹缓存读取失败，按未命中处理: {ex.Message}");
-                return null;
-            }
+            string path = CachePath(key, cacheDirectory);
+            return path.Length == 0 ? null : ReadTrace(path, key, floorCount, techniqueHash, out _);
         }
 
         // ─────────────────────────────────────────────
@@ -280,16 +176,17 @@ namespace ADOFAIMacro.Technique
         // ─────────────────────────────────────────────
         /// <summary>落盘（先写 .tmp 再原子改名，避免半截文件被当成有效缓存）</summary>
         internal static bool TrySave(string levelPath, int floorCount, int techniqueHash,
-                                    TraceEvent[] events, TraceStats stats, out string cacheKey)
+                                    TraceEvent[] events, TraceStats stats, out string cacheKey,
+                                    string? cacheDirectory = null)
         {
             cacheKey = string.Empty;
-            if (events == null || events.Length == 0) return false;
+            if (events.Length == 0 || events.Length > MaxEvents) return false;
 
             string key = FingerprintOf(levelPath, floorCount, techniqueHash);
-            string path = CachePath(key);
+            string path = CachePath(key, cacheDirectory);
             if (string.IsNullOrEmpty(path)) return false;
 
-            string tmp = path + ".tmp";
+            string tmp = $"{path}.{Guid.NewGuid():N}.tmp";
             try
             {
                 using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -298,6 +195,8 @@ namespace ADOFAIMacro.Technique
                     w.Write(Magic);
                     w.Write(FormatVersion);
                     w.Write(events.Length);
+                    w.Write(floorCount);
+                    w.Write(techniqueHash);
                     w.Write(stats.FragmentCount);
                     w.Write(stats.LongestSameHand);
                     w.Write(stats.DroppedNotes);
@@ -322,8 +221,8 @@ namespace ADOFAIMacro.Technique
                     }
                 }
 
-                if (File.Exists(path)) File.Delete(path);
-                File.Move(tmp, path);
+                if (File.Exists(path)) File.Replace(tmp, path, null);
+                else File.Move(tmp, path);
                 cacheKey = key;
                 return true;
             }
@@ -395,93 +294,76 @@ namespace ADOFAIMacro.Technique
             }
         }
 
-        /// <summary>
-        /// 导入：把 .adofaitrace 文件读进内存校验，通过后作为该关卡+手法指纹的
-        /// 官方缓存落盘。返回 (成功, 状态统计文本)。
-        ///
-        /// 校验分两层：
-        ///  ① 文件本身有效（Magic/版本/长度/条数合法）→ 用 TryLoadCore；
-        ///  ② 文件的指纹与当前关卡匹配 → levelPath/floorCount/techniqueHash
-        ///     重新算 key 与调用者传入的一致（否则是"拿别的谱的轨迹打这张谱"）。
-        /// 导入成功后写盘，之后的 TryLoad 自然命中 —— 无需任何特殊接线。
-        /// </summary>
         internal static (bool ok, string message) ImportFrom(
             string importFile, string levelPath, int floorCount, int techniqueHash)
         {
-            string expectedKey = FingerprintOf(levelPath, floorCount, techniqueHash);
-            try
-            {
-                if (!File.Exists(importFile))
-                    return (false, "文件不存在");
-
-                var trace = TryLoadFile(importFile, expectedKey);
-                if (trace == null)
-                    return (false, "文件无效（魔数/版本/长度校验未通过）");
-
-                // 指纹匹配已由调用方保证（expectedKey 就是当前关卡的键）。
-                // 落盘：写到缓存目录的 trace_<key>.adotr，TryLoad 以后自然命中。
-                string path = CachePath(expectedKey);
-                if (string.IsNullOrEmpty(path))
-                    return (false, "缓存目录不可用");
-
-                if (File.Exists(path)) File.Delete(path);
-                File.Copy(importFile, path, overwrite: true);
-
-                return (true, $"{trace.Events.Length} 事件 · {trace.Stats}");
-            }
-            catch (Exception ex)
-            {
-                return (false, $"导入失败: {ex.Message}");
-            }
+            string key = FingerprintOf(levelPath, floorCount, techniqueHash);
+            var trace = ReadTrace(importFile, key, floorCount, techniqueHash, out string error);
+            if (trace == null) return (false, error);
+            // Write the validated snapshot, not the source file again. Importing the cache
+            // itself or changing the source after validation cannot erase the valid cache.
+            return TrySave(levelPath, floorCount, techniqueHash, trace.Events, trace.Stats, out _)
+                ? (true, $"{trace.Events.Length} 事件 · {trace.Stats}")
+                : (false, "无法写入轨迹缓存");
         }
 
-        /// <summary>读指定路径的 .adotr 文件（TryLoad 的路径参数化版本）</summary>
-        private static Trace? TryLoadFile(string path, string expectedKey)
+        private static Trace? ReadTrace(string path, string key, int floorCount, int techniqueHash, out string error)
         {
+            error = "轨迹文件无效或已损坏";
             try
             {
-                if (!File.Exists(path)) return null;
-
+                if (!File.Exists(path)) { error = "文件不存在"; return null; }
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var r = new BinaryReader(fs, Encoding.UTF8);
-
-                if (r.ReadUInt32() != Magic) return null;
-                if (r.ReadInt32() != FormatVersion) return null;
-
+                if (fs.Length < HeaderSize || r.ReadUInt32() != Magic) return null;
+                if (r.ReadInt32() != FormatVersion) { error = "轨迹版本不兼容，请重新生成"; return null; }
                 int count = r.ReadInt32();
-                if (count < 0 || count > 1_000_000) return null;
-
-                var stats = new TraceStats(
-                    r.ReadInt32(), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
-                    r.ReadDouble(), r.ReadDouble(),
-                    r.ReadDouble(), r.ReadDouble(), r.ReadDouble(),
-                    r.ReadInt32());
-
-                long expected = (long)HeaderSize + (long)count * EventStride;
-                if (fs.Length != expected)
+                if (count <= 0 || count > MaxEvents || fs.Length != HeaderSize + (long)count * EventStride) return null;
+                if (r.ReadInt32() != floorCount || r.ReadInt32() != techniqueHash)
                 {
-                    MacroEngine.Log($"[Macro-Tech] 导入文件长度不符（{fs.Length} != {expected}），拒绝");
+                    error = "轨迹与当前谱面或手法配置不匹配";
                     return null;
                 }
+                var stats = new TraceStats(
+                    r.ReadInt32(), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
+                    r.ReadDouble(), r.ReadDouble(), r.ReadDouble(), r.ReadDouble(), r.ReadDouble(), r.ReadInt32());
 
                 var events = new TraceEvent[count];
+                var down = new byte[256];
+                int held = 0, lastFloor = -1;
+                double lastTime = double.NegativeInfinity;
                 for (int i = 0; i < count; i++)
                 {
-                    double t = r.ReadDouble();
-                    float frac = r.ReadSingle();
-                    byte vk = r.ReadByte();
-                    byte flags = r.ReadByte();
-                    byte rel = r.ReadByte();
-                    _ = r.ReadByte();
+                    double time = r.ReadDouble();
+                    float fraction = r.ReadSingle();
+                    byte keyDown = r.ReadByte(), flags = r.ReadByte(), keyUp = r.ReadByte();
+                    if (r.ReadByte() != 0) return null;
                     int floor = r.ReadInt32();
-                    events[i] = new TraceEvent(t, frac, vk, flags, rel, floor);
+                    if (!TechniqueTimeline.IsFinite(time) || time < lastTime || floor < 0 || floor < lastFloor || floor >= floorCount ||
+                        float.IsNaN(fraction) || fraction < 0 || fraction > 1 || (flags & ~3) != 0) return null;
+                    byte expected = (byte)((flags & 2) != 0 ? 2 : 1);
+                    if ((flags & 1) != 0)
+                    {
+                        if (keyDown != 0 || keyUp == 0 || down[keyUp] != expected) return null;
+                        down[keyUp] = 0;
+                        held--;
+                    }
+                    else
+                    {
+                        if (keyUp != 0 || keyDown == 0 || down[keyDown] != 0) return null;
+                        down[keyDown] = expected;
+                        held++;
+                    }
+                    events[i] = new TraceEvent(time, fraction, keyDown, flags, keyUp, floor);
+                    lastTime = time;
+                    lastFloor = floor;
                 }
-
-                return new Trace { Events = events, Stats = stats, FromCache = true, CacheKey = expectedKey };
+                if (held != 0) return null;
+                return new Trace { Events = events, Stats = stats, FromCache = true, CacheKey = key };
             }
             catch (Exception ex)
             {
-                MacroEngine.Log($"[Macro-Tech] 导入文件读取失败: {ex.Message}");
+                MacroEngine.Log($"[Macro-Tech] 轨迹文件读取失败: {ex.Message}");
                 return null;
             }
         }

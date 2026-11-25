@@ -38,6 +38,10 @@ namespace ADOFAIMacro.Settings
         public string leftHandPressTimes = "0.8,0.8";
         public string rightHandPressTimes = "0.8,0.8";
         public int handPreference = 1; // 0=左手优先, 1=右手优先
+        public string groupingStrategyId = TechniquePlanner.BeatGridStrategyId;
+        public string runHandPolicyId = TechniquePlanner.AlternatingHandPolicyId;
+        public float singleFingerKps = 6.5f;
+        public bool lazyRelease = false;
         // 【2026-10-03】speedChangeTolerance 字段随变速容差整条移除。
         // 旧的关卡 JSON 里若仍有该键，Json.NET 默认忽略未知成员，不会报错。
         public List<TechniqueSegment> techniqueSegments = [];
@@ -56,6 +60,10 @@ namespace ADOFAIMacro.Settings
                 leftHandPressTimes = this.leftHandPressTimes,
                 rightHandPressTimes = this.rightHandPressTimes,
                 handPreference = this.handPreference,
+                groupingStrategyId = this.groupingStrategyId,
+                runHandPolicyId = this.runHandPolicyId,
+                singleFingerKps = this.singleFingerKps,
+                lazyRelease = this.lazyRelease,
                 techniqueSegments = [.. this.techniqueSegments.Select(s => new TechniqueSegment {
                     startFloor          = s.startFloor,
                     endFloor            = s.endFloor,
@@ -461,6 +469,7 @@ namespace ADOFAIMacro.Settings
         private (string input, bool focused) _techRightPressTimesState = (string.Empty, false);
         private (string input, bool focused) _techLeftOrdersState = (string.Empty, false);
         private (string input, bool focused) _techRightOrdersState = (string.Empty, false);
+        private (string input, bool focused) _techSingleFingerKpsState = (string.Empty, false);
 
         // ── 配置列表 ──────────────────────────────────
         private List<TechniqueProfile> _techniqueProfiles = [];
@@ -506,6 +515,7 @@ namespace ADOFAIMacro.Settings
             _techRightOrdersState = (string.Empty, false);
             _techLeftPressTimesState = (string.Empty, false);
             _techRightPressTimesState = (string.Empty, false);
+            _techSingleFingerKpsState = (string.Empty, false);
         }
 
         /// <summary>
@@ -534,6 +544,7 @@ namespace ADOFAIMacro.Settings
             TechLeftHandPressTimes = p.leftHandPressTimes;
             TechRightHandPressTimes = p.rightHandPressTimes;
             TechniqueHandPreference = p.handPreference;
+            _techSingleFingerKpsState = (string.Empty, false);
         }
 
         private void SaveCurrentToProfile(int index)
@@ -572,6 +583,7 @@ namespace ADOFAIMacro.Settings
         }
 
 #if DEBUG
+        // 仅保留旧版 Debug 设置的序列化兼容；托管手法核心不读取此值。
         private bool _useCppTechniqueInDebug = true;
         public bool UseCppTechniqueInDebug
         {
@@ -584,8 +596,7 @@ namespace ADOFAIMacro.Settings
         // 开启后发键线程的触发判定（锚点外推/等待决策）走 TriggerRs Rust DLL，
         // 发键本身仍在 C#（DirectPushKey 依赖 Unity 托管事件）。
         // DLL 缺失/连续异常时自动回退 C# 路径（见 TriggerRsHost）。
-        // Release 版同样可开（TriggerRs 与 TechniqueSimulator 互不替代：
-        // 一个管"何时发"，一个管"发什么"）。
+        // Release 版同样可开；只改变何时发键，不改变托管核心生成的手法。
         //
         // ★【2026-10-12 修 bug】原为 static 字段 + static 属性 —— UMM 的设置
         //   序列化只遍历**实例**成员（BindingFlags.Instance），static 成员既不
@@ -1186,53 +1197,6 @@ namespace ADOFAIMacro.Settings
             GUILayout.Label(LocalizationManager.Get("tab.technique_simulation"), UIUtils.HeaderStyle);
             GUILayout.Space(2);
 
-            bool dllLoaded = TechniqueSimulator.IsDllLoaded();
-
-            GUILayout.BeginHorizontal();
-#if DEBUG
-            GUILayout.BeginVertical();
-            GUILayout.BeginHorizontal();
-            GUIStyle verStyle = UIUtils.LabelStyleVariant(0.3f, 0.6f, 1f, 0.8f);
-            string debugStatus = dllLoaded
-            ? LocalizationManager.Get("tech.dll_available")
-            : LocalizationManager.Get("tech.dll_unavailable");
-            GUILayout.Label(string.Format(LocalizationManager.Get("tech.debug_mode"), debugStatus), verStyle);
-            GUILayout.EndHorizontal();
-
-            if (dllLoaded)
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Space(20);
-                bool newUseCpp = UIUtils.M3Switch(UseCppTechniqueInDebug, LocalizationManager.Get("tech.use_cpp_version"));
-                if (newUseCpp != UseCppTechniqueInDebug)
-                {
-                    UseCppTechniqueInDebug = newUseCpp;
-                    ADOFAIMacro.Technique.MacroEngine.Log($"[Technique] 手法模拟切换到{(newUseCpp ? "C++" : "C#")}版本");
-                }
-                GUILayout.EndHorizontal();
-            }
-            else
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Space(20);
-                GUIStyle warnStyle = UIUtils.LabelStyleVariant(0.8f, 0.5f, 0.5f, 0.8f, 10);
-                GUILayout.Label(LocalizationManager.Get("tech.dll_unavailable_notice"), warnStyle);
-                GUILayout.EndHorizontal();
-            }
-            GUILayout.EndVertical();
-#else
-            string dllStatus = dllLoaded
-            ? LocalizationManager.Get("tech.dll_available")
-            : LocalizationManager.Get("tech.dll_unavailable");
-            if (!dllLoaded) Main.Settings.EnableTechniqueSimulation = false;
-            GUIStyle statusStyle = dllLoaded
-            ? UIUtils.LabelStyleVariant(0.3f, 0.8f, 0.3f, 1f)
-            : UIUtils.LabelStyleVariant(0.8f, 0.3f, 0.3f, 1f);
-            GUILayout.Label(dllStatus, statusStyle);
-#endif
-            GUILayout.EndHorizontal();
-            GUILayout.Space(4);
-
             // ── 关卡特定配置管理 ─────────────────────────────
             GUILayout.BeginVertical();
             GUILayout.Label(LocalizationManager.Get("tech.level_config"), UIUtils.LabelStyle);
@@ -1295,32 +1259,9 @@ namespace ADOFAIMacro.Settings
             GUILayout.EndVertical();
             // ────────────────────────────────────────────────────────
 
-            bool oldEnabled = GUI.enabled;
-#if !DEBUG
-            if (!dllLoaded) GUI.enabled = false;
-#endif
-            bool newEnable = UIUtils.M3Switch(EnableTechniqueSimulation,
+            EnableTechniqueSimulation = UIUtils.M3Switch(EnableTechniqueSimulation,
                 LocalizationManager.Get("tech.enable_technique"));
-            GUI.enabled = oldEnabled;
 
-#if !DEBUG
-            if (dllLoaded && newEnable != EnableTechniqueSimulation)
-            EnableTechniqueSimulation = newEnable;
-#else
-            if (newEnable != EnableTechniqueSimulation)
-                EnableTechniqueSimulation = newEnable;
-#endif
-
-#if !DEBUG
-            if (!dllLoaded)
-            {
-                GUILayout.Space(4);
-                GUIStyle warnStyle = UIUtils.LabelStyleVariant(0.8f, 0.3f, 0.3f, 0.8f, 11, wordWrap: true);
-                GUILayout.Label(LocalizationManager.Get("tech.dll_missing_notice"), warnStyle);
-                GUILayout.EndVertical();
-                return;
-            }
-#endif
             if (!EnableTechniqueSimulation) { GUILayout.EndVertical(); return; }
 
             if (_techniqueProfiles.Count == 0)
@@ -1390,17 +1331,89 @@ namespace ADOFAIMacro.Settings
             GUILayout.EndHorizontal();
             GUILayout.Space(8);
 
-            // ── 全局 BPM 阈值 ────────────────────────────────
-            GUILayout.BeginHorizontal();
-            TechniqueBpmLimit = UIUtils.M3HorizontalSliderWithLabelAndInput(
-                LocalizationManager.Get("tech.global_bpm_limit"),
-                TechniqueBpmLimit, 50f, 2000f,
-                ref _techBpmState.input, ref _techBpmState.focused,
-                "F0", 140, 220, 70);
-            GUILayout.EndHorizontal();
-
+            // ── 击键分组策略 ─────────────────────────────────
             GUIStyle tipStyle = UIUtils.LabelStyleVariant(0.7f, 0.7f, 0.7f, 0.8f, 10, wordWrap: true);
-            GUILayout.Label(LocalizationManager.Get("tech.bpm_explanation"), tipStyle);
+            var techniqueProfile = _techniqueProfiles[SelectedTechniqueProfileIndex];
+            string[] groupingNames =
+            [
+                LocalizationManager.Get("tech.strategy_beat_grid"),
+                LocalizationManager.Get("tech.strategy_kps"),
+                LocalizationManager.Get("tech.strategy_tempo_window"),
+                LocalizationManager.Get("tech.strategy_piece_fallback")
+            ];
+            int groupingMode = TechniquePlanner.IsKpsAlternatingStrategy(techniqueProfile.groupingStrategyId) ? 1
+                : TechniquePlanner.IsTempoWindowStrategy(techniqueProfile.groupingStrategyId) ? 2
+                : TechniquePlanner.IsPieceFallbackStrategy(techniqueProfile.groupingStrategyId) ? 3 : 0;
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(LocalizationManager.Get("tech.grouping_strategy"), UIUtils.LabelStyle, GUILayout.Width(140));
+            int newGroupingMode = UIUtils.M3SelectionGrid(groupingMode, groupingNames, 2, GUILayout.ExpandWidth(true));
+            if (newGroupingMode != groupingMode)
+                techniqueProfile.groupingStrategyId = newGroupingMode switch
+                {
+                    1 => TechniquePlanner.KpsAlternatingStrategyId,
+                    2 => TechniquePlanner.TempoWindowStrategyId,
+                    3 => TechniquePlanner.PieceFallbackStrategyId,
+                    _ => TechniquePlanner.BeatGridStrategyId
+                };
+            GUILayout.EndHorizontal();
+            GUILayout.Label(LocalizationManager.Get("tech.grouping_strategy_hint"), tipStyle);
+            if (newGroupingMode == 3) GUILayout.Label(LocalizationManager.Get("tech.piece_fallback_hint"), tipStyle);
+            if (newGroupingMode == 1 || newGroupingMode == 2)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(LocalizationManager.Get("tech.run_hand_policy"), UIUtils.LabelStyle, GUILayout.Width(140));
+                string[] handPolicyNames =
+                [
+                    LocalizationManager.Get("tech.hand_policy_alternating"),
+                    LocalizationManager.Get("tech.hand_policy_preferred")
+                ];
+                int handMode = TechniquePlanner.NormalizeHandPolicyId(techniqueProfile.runHandPolicyId) ==
+                    TechniquePlanner.RecoveredPreferredHandPolicyId ? 1 : 0;
+                int newHandMode = UIUtils.M3SelectionGrid(handMode, handPolicyNames, 2, GUILayout.ExpandWidth(true));
+                if (newHandMode != handMode)
+                    techniqueProfile.runHandPolicyId = newHandMode == 1
+                        ? TechniquePlanner.RecoveredPreferredHandPolicyId : TechniquePlanner.AlternatingHandPolicyId;
+                GUILayout.EndHorizontal();
+                GUILayout.Label(LocalizationManager.Get("tech.run_hand_policy_hint"), tipStyle);
+            }
+            if (newGroupingMode == 1)
+            {
+                GUILayout.BeginHorizontal();
+                float currentKps = (float)TechniquePlanner.NormalizeSingleFingerKps(techniqueProfile.singleFingerKps);
+                float newKps = UIUtils.M3HorizontalSliderWithLabelAndInput(
+                    LocalizationManager.Get("tech.single_finger_kps"),
+                    currentKps, 0.5f, 30f,
+                    ref _techSingleFingerKpsState.input, ref _techSingleFingerKpsState.focused,
+                    "F1", 180, 220, 70, "TechSingleFingerKps");
+                if (newKps != techniqueProfile.singleFingerKps) techniqueProfile.singleFingerKps = newKps;
+                GUILayout.EndHorizontal();
+                GUILayout.Label(LocalizationManager.Get("tech.single_finger_kps_hint"), tipStyle);
+            }
+            GUILayout.Space(8);
+
+            bool newLazy = UIUtils.M3Switch(techniqueProfile.lazyRelease, LocalizationManager.Get("tech.lazy_release"));
+            if (newLazy != techniqueProfile.lazyRelease) techniqueProfile.lazyRelease = newLazy;
+            GUILayout.Label(LocalizationManager.Get("tech.lazy_release_hint"), tipStyle);
+            GUILayout.Space(8);
+            // ── 全局 BPM 阈值 ────────────────────────────────
+            if (newGroupingMode != 1)
+            {
+                GUILayout.BeginHorizontal();
+                TechniqueBpmLimit = UIUtils.M3HorizontalSliderWithLabelAndInput(
+                    LocalizationManager.Get("tech.global_bpm_limit"),
+                    TechniqueBpmLimit, 50f, 2000f,
+                    ref _techBpmState.input, ref _techBpmState.focused,
+                    "F0", 140, 220, 70);
+                GUILayout.EndHorizontal();
+
+                GUILayout.Label(LocalizationManager.Get(newGroupingMode == 0
+                    ? "tech.bpm_explanation"
+                    : "tech.tempo_window_bpm_hint"), tipStyle);
+            }
+            else
+            {
+                GUILayout.Label(LocalizationManager.Get("tech.kps_bpm_hint"), tipStyle);
+            }
             GUILayout.Space(10);
 
             // ── Rust 触发器（阶段 2：并行开关，默认关）────────────
@@ -1423,7 +1436,6 @@ namespace ADOFAIMacro.Settings
             if (newDriver != techniquePlaybackDriver)
             {
                 techniquePlaybackDriver = newDriver;
-                MacroEngine.TechniquePlaybackDriverChanged();
             }
             GUILayout.EndHorizontal();
             GUILayout.Label(LocalizationManager.Get("tech.player_driver_hint"), tipStyle);
@@ -1485,9 +1497,6 @@ namespace ADOFAIMacro.Settings
             if (_traceCacheClearMsg.Length > 0) GUILayout.Label(_traceCacheClearMsg, tipStyle);
             GUILayout.EndHorizontal();
             GUILayout.Space(8);
-
-            // 【2026-10-03】"变速容差"滑条整条移除。片长现在只由逐片速度决定，
-            // 没有窗口/限幅/死区/几何修补可调。详见 TechniqueSimulator.cpp 同名注释。
 
             // ── 变速分段 ─────────────────────────────────────
             DrawTechniqueSegments();
@@ -1737,6 +1746,13 @@ namespace ADOFAIMacro.Settings
             else if (_selectedTechniqueProfileIndex < 0 || _selectedTechniqueProfileIndex >= _techniqueProfiles.Count)
             {
                 _selectedTechniqueProfileIndex = 0;
+            }
+            foreach (var profile in _techniqueProfiles)
+            {
+                if (profile == null) continue;
+                profile.groupingStrategyId = TechniquePlanner.NormalizeStrategyId(profile.groupingStrategyId);
+                profile.runHandPolicyId = TechniquePlanner.NormalizeHandPolicyId(profile.runHandPolicyId);
+                profile.singleFingerKps = (float)TechniquePlanner.NormalizeSingleFingerKps(profile.singleFingerKps);
             }
         }
 

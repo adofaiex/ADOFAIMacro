@@ -9,7 +9,7 @@
 
 [中文说明](README.md)
 
-**ADOFAIMacro** is a UnityModManager mod for **A Dance of Fire and Ice (ADOFAI)**: it parses level floor timestamps and fires keys with microsecond-precision timing from a dedicated high-priority thread. From "direct judge triggering" to "system-level key simulation" to "two-hand technique simulation", it covers everything from fully automated clears to realistic hand-play styles.
+**ADOFAIMacro** is a UnityModManager mod for **A Dance of Fire and Ice (ADOFAI)**: it parses level floor timestamps and fires keys with microsecond-precision timing from a dedicated high-priority thread, with direct judge triggering, system-level key simulation, and configurable two-hand key-organization policies.
 
 > ⚠️ **Two hard rules, up front:**
 > - **Do not modify `Info.json`** — the mod ships with tamper detection; modifying it makes the game quit on enable.
@@ -37,8 +37,8 @@
 
 - **Auto triggering**: level timestamps → precision-timed key events; double-buffered time anchors sync the main and worker threads, lock-free with zero waiting.
 - **Four input paths**: direct judge / SendInput / SkyHook low-level injection (NtInject / NtSendInput) / virtual async keyboard direct-feed (bypasses system injection, sub-microsecond jitter).
-- **Technique simulation**: left/right hand alternation, automatic time-slice subdivision above a BPM threshold (multi-finger single-hand streams), configurable keys / orders / press durations (per-slice accent "strong–weak" patterns), speed segments, per-level configs; the core algorithm runs in a native C++ DLL with offline solving and trace caching, plus an optional Rust trigger kernel (embedded in the main DLL — no extra files to ship).
-- **Trace player**: the whole chart's technique is solved and cached during level loading (zero computation when you hit Start); export / import `.adofaitrace` files for sharing, with time-driven / angle-driven playback; angle-driven mode moves waiting and key-firing onto the worker thread, eliminating the 0–1 frame firing latency.
+- **Technique simulation**: selectable half-beat grid, fixed single-finger KPS runs, or tempo-window grouping; configurable hand assignment, keys / orders / press durations (per-slice accent "strong–weak" patterns), speed segments, per-level configs; one C# core generates and caches technique traces. The optional Rust trigger kernel handles key timing only (embedded in the main DLL — no extra files to ship).
+- **Trace player**: the whole chart’s trace is generated and cached during level loading; export / import `.adofaitrace` files for sharing, with time-driven / angle-driven playback; angle-driven mode moves waiting and key-firing onto the worker thread, eliminating the 0–1 frame firing latency.
 - **Timing fine-tuning**: ±100 ms offset, adjustable in-game with arrow keys; automatic judge-error calibration (closed-loop, cancels speed-section offsets).
 - **Key filtering**: blacklist / whitelist, independent sync (KeyCode) and async (VK code) filters; passes through the 4 special keys the game hard-blocks (PrintScreen / F12 / LAlt / Super).
 - **Extras**: auto keypress on death, GC pause suppression during play, out-of-focus guard, macro status badge (HIT / VIRT / NT / SI) with on-screen virtual keys, English/Chinese UI.
@@ -50,7 +50,7 @@
 **Prerequisites**: ADOFAI installed, [UnityModManager](https://www.nexusmods.com/site/mods/21) (≥ 0.27.0).
 
 1. Download the archive from [Releases](https://github.com/adofaiex/ADOFAIMacro/releases) and install via UMM, or manually extract it into the game's `Mods/ADOFAIMacro/` folder.
-   - The folder should contain: `ADOFAIMacro.dll`, `Info.json`, `InputSystem.dll`, `TechniqueSimulator.dll`, `System.Memory.dll`, and `Localization/` (zh-CN / en-US).
+   - The folder should contain: `ADOFAIMacro.dll`, `Info.json`, `InputSystem.dll`, `System.Memory.dll`, and `Localization/` (zh-CN / en-US).
 2. Launch the game, open the UMM mod window, and enable **ADOFAIMacro**.
 3. In the **Macro** tab, check **Enable Macro**.
 4. The defaults (key simulation off = direct judge) will auto-play the level. If hits feel consistently early/late, adjust **Offset (ms)** in the **Offset Settings** tab, or tap <kbd>←</kbd>/<kbd>→</kbd> in-game.
@@ -149,32 +149,39 @@ Organized by UMM panel tab. "Internal name" is the field used in the config file
 
 ## Technique Simulation Guide
 
-When enabled (requires **Key simulation**), the macro stops simply rotating the key list and instead simulates two human hands: time is divided into slices, each slice is assigned to one hand, alternating left/right. When event density exceeds the **Speed Threshold (BPM)**, slices are subdivided so one hand plays multiple events in a row — single-hand multi-finger streams.
+When enabled (requires **Key simulation**), the macro stops simply rotating the key list. The default half-beat grouping policy uses per-floor speed and the **Speed Threshold (BPM)** to build a base grid that alternates hands. One hand can play multiple notes in a slice; slices are subdivided when they exceed that hand’s capacity.
+
+The panel offers three policies: **Half-beat groups** (the default, preserving the current grid rule), **KPS-threshold groups** (fixed single-finger window), and **Tempo Window** (estimates a one-hand run window from per-floor speed and the BPM threshold). The latter two also cap run length at the hand's available keys. They are rule prototypes for gameplay comparison, not measured human limits or claims that one is easier for every chart or player.
 
 ### Basic parameters
 
 | Panel item | Default | Description |
 |---|---|---|
-| Enable Technique Simulation (L/R alternation) | off | Master switch (requires Key simulation; Release builds also require `TechniqueSimulator.dll`). |
+| Enable Technique Simulation | off | Master switch (requires Key simulation). |
 | Starting Hand | Right | Which hand plays the first slice. |
-| Global · Speed Threshold (BPM) | 500 | Subdivide slices above this BPM (range 50 ~ 2000). |
+| Attack grouping | Half-beat groups | Switch between the half-beat grid, fixed KPS runs, or Tempo Window. |
+| Run hand choice | Alternate groups | KPS/Tempo Window only; optionally reuse the starting hand after one current grouping window since its last attack, otherwise alternate. |
+| Single-finger threshold (KPS) | 6.5 | Shown in KPS mode; attacks join while first-to-current span is less than `1/(2×KPS)` seconds. |
+| Global · Speed Threshold (BPM) | 500 | Used by half-beat grid and Tempo Window (range 50–2000); unused by fixed KPS. |
 | L/R Keys | `D,F` / `J,K` | Keys available to each hand; presets DF/JK, DS/JK, ASDF/JKL. |
 | L/R Order | empty | See format below; empty = default rotation. |
-| L/R Ratio | `0.8,0.8` | Press-duration ratio (0 ~ 1): how much of the slice a key stays held; hold notes are handled automatically. |
+| L/R Ratio | `0.8,0.8` | Scales the duration of ordinary key presses; hold notes follow the chart automatically. |
 
 **Order format**: pipe separates key-count groups, commas separate 1-based indices. Example `1,2 | 1,2 | 1,2,1`: one-key slices alternate keys 1 and 2, three-key slices play 1→2→1. Empty = default order.
 
 **The "strong–weak" accent mechanism**: the order row is picked **by the number of events in the slice** — a slice containing N events uses row N of the order table (clamped to the last row), and every key in that row carries its own press-duration ratio. Dense runs therefore produce a natural strong→weak accent cycle (e.g. a 3-event slice plays `50→1.2 / 51→1 / 82→0.8`). This is why the order table has multiple rows: with only row 1 filled in, multi-event slices have no accent layer.
 
-**Boundary guard (fake-jump fix)**: adjacent notes across a cross-hand slice boundary with a gap under one frame (~16.7 ms) are merged into the earlier slice (capped by that hand's key count, never emptied out of the next slice, never merged across speed-change points), eliminating triplets played as synchronized two-hand hits while preserving the next slice's multi-event nature — the accent pattern survives. Slice length itself is determined purely by per-floor speed (the old "Speed Change Tolerance" has been removed); slice boundaries align to the time grid so the same rhythm pattern keeps a stable starting hand.
+**Boundary adjustments**: at the same speed and with the same settings, the planner can merge or move closely spaced notes across a slice boundary when hand capacity permits. This avoids some unintended two-hand hits. Slice length uses per-floor speed; there is no “Speed Change Tolerance” setting.
 
 ### Profiles
 
-Save multiple complete technique parameter sets (keys, orders, durations, starting hand, segments); create / delete / switch from the panel.
+Save multiple complete technique parameter sets (grouping policy, KPS threshold, keys, orders, durations, starting hand, segments); create / delete / switch from the panel.
+
+The run hand policy is saved with the profile. Missing fields in older profiles default to the half-beat strategy; run policies default to alternation. See the [technique design and reference comparison](docs/technique-design.md) for the algorithm boundaries and offline comparison procedure (Chinese with English summary).
 
 ### Speed Segments
 
-Override global settings within a floor range: each segment can set its own **BPM limit** and **L/R keys / orders / ratios** (empty fields inherit global). Hand order resets and cross-segment holds are released at segment boundaries.
+Override global settings within a floor range: each segment can set its own **BPM limit** (used by half-beat grouping and Tempo Window) and **L/R keys / orders / ratios** (empty fields inherit global). A settings change reanchors the grid without resetting to the starting hand.
 
 ### Level-specific Configs
 
@@ -188,16 +195,12 @@ Useful for smaller key sets on high-BPM sections, custom orders for specific pat
 
 ### Trace Player & Trace Cache
 
-The bottom of the technique panel is the **Trace Player**. With technique simulation enabled, the whole chart's technique is solved and cached during level loading — ready before you press Start; entering the same chart again reads the cache with zero computation. The solve fingerprint covers chart + full technique config + a content hash of the solver DLL — change anything and it automatically re-solves, never reusing stale caches.
+The bottom of the technique panel is the **Trace Player**. With technique simulation enabled, the whole chart’s trace is **generated and cached during level loading**. On re-entry, a cache is reused only if the chart, technique settings, and trace version match.
 
 - **Driver**: time-driven (default, uses the original time-anchor chain) / angle-driven (triggers by the angle the planet has swept across the current tile, immune to clock jitter; quantized by frame rate so it can be one frame late — compensate with "Angle lead (ms)", range −200 ~ 400).
-- **Solve now**: manually re-solve the current level at any time.
-- **Export / import trace**: exports the current chart's `.adofaitrace` file for sharing; importing validates that it is the same chart + same technique config (fingerprint check), then applies after re-entering the level.
+- **Generate trace offline**: manually prepare a trace for the loaded level, or reuse a matching cache.
+- **Export / import trace**: exports the current chart's `.adofaitrace` file for sharing; importing validates that it is the same chart and technique settings, and that the trace version is compatible, then applies after re-entering the level.
 - **Clear trace cache**: caches live under the game's `persistentDataPath/ADOFAIMacro/trace/`, clearable with one click.
-
-### Notes
-
-- The core algorithm runs in the native `TechniqueSimulator.dll` — make sure it is in `Mods/ADOFAIMacro/`. **Release builds produce no technique output without the DLL** (debug builds fall back to the C# implementation).
 
 ---
 
@@ -235,8 +238,8 @@ Confirm the filter is enabled; confirm the mode (black/whitelist) matches your i
 **Q7: The game quits right after enabling the mod**
 `Info.json` was modified (tamper detection) — restore it; or BaseMacro is installed (mutually exclusive) — remove it.
 
-**Q8: Technique simulation produces nothing / DLL unavailable**
-Place `TechniqueSimulator.dll` in `Mods/ADOFAIMacro/`; Release builds generate no technique events without the DLL.
+**Q8: Technique simulation produces no key events**
+Make sure Enable Macro, Key simulation, and Enable Technique Simulation are on. After loading a level, choose Generate trace offline and check the trace status and logs.
 
 **Q9: Judgement drifts when first entering the game**
 Auto judge-error calibration keeps converging during play; usually no manual action is needed. For a persistent offset, compensate manually with "Offset (ms)". Larger error on the very first run is normal (calibration samples come from the current run and are not carried across runs).
@@ -249,9 +252,9 @@ When filing an issue, please include: game version, mod version, key settings sc
 
 - Environment: .NET SDK 10 (bundles a C# 14 Roslyn), .NET Framework 4.8.1, C# preview; Rust stable (Release only, builds the `TriggerRs` trigger kernel).
 - C# side: `ADOFAIMacro/ADOFAIMacro-Dev.csproj` is an SDK-style project (NuGet via `PackageReference`, restored automatically); game assemblies are referenced through the `$(GameManaged)` property pointing at your local ADOFAI install — you need the game's `Assembly-CSharp.dll`, `UnityEngine*.dll`, `SkyHook.Unity.dll`, `UnityModManager.dll`, plus `Newtonsoft.Json.dll` (used by the localization system). Either `dotnet build -c Release` or MSBuild works.
-- Native side: run `cmd /c build_cpp.bat` at the repo root to build both C++ projects (`TechniqueSimulator` / `InputSystem`, each Debug + Release). **After changing native code you must fully rebuild (`/t:Rebuild`) — incremental builds may pick up stale artifacts.** CI has no v145 C++ toolchain and falls back to the checked-in `native/prebuilt/` binaries.
+- Native input: run `cmd /c build_cpp.bat` at the repo root to build `InputSystem` (x64 Debug + Release). **After changing native code you must fully rebuild (`/t:Rebuild`) — incremental builds may pick up stale artifacts.** CI uses `native/prebuilt/InputSystem.dll`.
 - Rust trigger kernel: Release builds run `cargo build --release` automatically (path overridable with `-p:CargoExe=`); the resulting `macro_trigger.dll` is embedded into the main DLL, falling back to an existing artifact when cargo is unavailable.
-- Deploy to `Mods/ADOFAIMacro/`: `ADOFAIMacro.dll` + `Info.json` + `Localization/` + `InputSystem.dll` + `TechniqueSimulator.dll` + `System.Memory.dll`. `out/Release/` is the single source of truth for the package layout.
+- Deploy to `Mods/ADOFAIMacro/`: `ADOFAIMacro.dll` + `Info.json` + `Localization/` + `InputSystem.dll` + `System.Memory.dll`. `out/Release/` is the single source of truth for the package layout.
 
 ---
 
@@ -260,7 +263,7 @@ When filing an issue, please include: game version, mod version, key settings sc
 ```text
 ADOFAIMacro/                    # C# mod (namespaces mirror directories)
 ├─ Core/
-│  ├─ Main.cs                   # Entry point: mod lifecycle, DLL loading, tamper detection
+│  ├─ Main.cs                   # Entry point: mod lifecycle, input initialization, tamper detection
 │  ├─ Patches.cs                # All Harmony patches (input chain, judge-error feedback, special-key passthrough…)
 │  ├─ MacroPatch.cs / MacroPatchHub.cs  # Multi-version Harmony adaptation (patch guards + mounting)
 │  ├─ GuardFactory.cs           # IL guard code generation
@@ -278,8 +281,10 @@ ADOFAIMacro/                    # C# mod (namespaces mirror directories)
 │  └─ KeyMap.cs                 # Key name → virtual-key code mapping
 ├─ Technique/
 │  ├─ MacroEngine.cs            # Technique main flow (partial: judging / calibration / event generation)
-│  ├─ NativeTechnique.cs        # Native DLL calls + per-floor input compression
-│  ├─ PieceBuilder.cs           # C# fallback implementation (debug builds only)
+│  ├─ TechniqueIntegration.cs   # Connects game floors and settings to the managed core
+│  ├─ TechniquePlanner.cs       # Managed technique planning
+│  ├─ TechniqueTimeline.cs      # Maps floors to the judgment timeline
+│  ├─ TechniquePlayback.cs      # Pure plan / trace / playback event adapters
 │  ├─ EventBuilder.cs           # Key event assembly
 │  ├─ ConfigParser.cs           # Order / duration / key string parsing
 │  ├─ KeyWorker.cs              # High-priority key-firing thread (time anchors)
@@ -287,7 +292,6 @@ ADOFAIMacro/                    # C# mod (namespaces mirror directories)
 │  ├─ TriggerRsHost.cs          # Rust trigger kernel host (FFI + C# fallback)
 │  ├─ EmbeddedNative.cs         # Runtime extraction + LoadLibrary of embedded native DLLs
 │  ├─ Clock.cs / Lifecycle.cs   # Clock & lifecycle
-│  ├─ TechniqueSimulator.cs     # Native ABI wrapper (struct layout must match the C++ side exactly)
 │  ├─ TraceFile.cs / TracePlayer.cs  # Trace cache (.adotr) and trace player (.adofaitrace import/export)
 │  └─ LevelTechniqueManager.cs  # Level-specific technique configs (*.adofaimacro.json)
 ├─ Calibration/Calibration.cs   # Closed-loop judge-error auto calibration
@@ -300,11 +304,10 @@ ADOFAIMacro/                    # C# mod (namespaces mirror directories)
 └─ Platform/
    ├─ Windows.cs / Linux.cs     # Platform high-resolution timing
    └─ BaseSelect.cs             # Platform selection
-TechniqueSimulator/             # C++ technique algorithm (greedy online slicing + beam-search offline solver)
 InputSystem/                    # C++ low-level input injection (NtInject / NtSendInput)
 TriggerRs/                      # Rust trigger kernel (cdylib, embedded into the main DLL)
-native/prebuilt/                # Prebuilt native DLLs for CI (runner has no v145 C++ toolchain)
-build_cpp.bat                   # One-click build for both native projects
+native/prebuilt/                # CI uses the prebuilt InputSystem.dll
+build_cpp.bat                   # Builds InputSystem
 tools/                          # Offline evaluation / regression tooling
 .github/workflows/build.yml     # CI: build → package → tag-triggered release
 ```

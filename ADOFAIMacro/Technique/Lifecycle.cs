@@ -24,6 +24,8 @@ namespace ADOFAIMacro.Technique
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ResetState(scrController? controller)
         {
+            InvalidatePlaybackAnchor();
+
             initialized = false;
             _hitEvents = null;
             _hitEventCount = 0;
@@ -32,17 +34,13 @@ namespace ADOFAIMacro.Technique
             conductor = null;
             _initializedLevelPath = null;
 
-            // 轨迹播放器：清状态并让它回到「在线贪心」这条兜底路上
+            // 轨迹播放器：清理上一局的游标、队列和按键状态
             ResetTraceState();
 
             Volatile.Write(ref _workerLastTriggeredFloor, -1);
             Interlocked.Exchange(ref _workerNeedsHit, 0);
             // 该 -1 是"重建中"的中间态，必须先宣告未就绪，工作线程才不会把它当作
             // 入场索引锁存（否则会从事件表第 0 个事件重放整首）。
-            Volatile.Write(ref _syncFloorReady, false);
-            Volatile.Write(ref _anchorA.validFlag, 0);
-            Volatile.Write(ref _anchorB.validFlag, 0);
-            Interlocked.Increment(ref _resetVersion);
 
             // 闭环校准：测量状态重置（纯单局控制器，无跨局状态）
             _autoOffsetMs = 0;
@@ -60,6 +58,37 @@ namespace ADOFAIMacro.Technique
 
             if (skyHookInitialized) Input.AsyncInputManager.ClearQueue();
             if (controller != null) ApplyHoldBehavior(controller);
+        }
+
+        private static void InvalidatePlaybackAnchor()
+        {
+            Volatile.Write(ref _syncFloorReady, false);
+            Volatile.Write(ref _anchorA.validFlag, 0);
+            Volatile.Write(ref _anchorB.validFlag, 0);
+            Interlocked.Increment(ref _resetVersion);
+        }
+
+        // The persistent mod host still updates while scrController's own Update is disabled.
+        internal static void ObservePlaybackState()
+        {
+            if (!initialized && !_workerRunning) return;
+            var controller = ADOBase.controller;
+            if (!Main.IsEnabled || !Main.Settings.Macro || controller == null || ADOBase.sceneName == GCNS.sceneLevelSelect)
+            {
+                StopPlayback(controller);
+                return;
+            }
+            if (_angleDriverActive && (controller.paused || controller.state != global::States.PlayerControl))
+                SuspendAnglePlayback(controller.paused ? "游戏暂停" : "离开游玩状态");
+            // In angle mode the paused worker still needs the current input backend
+            // to release its owned keys. There are no timed events to stop in this mode.
+            if (controller.paused && !_angleDriverActive) StopWorkerIfNeeded();
+        }
+
+        internal static void StopPlayback(scrController? controller = null)
+        {
+            ResetState(controller);
+            StopWorkerIfNeeded();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

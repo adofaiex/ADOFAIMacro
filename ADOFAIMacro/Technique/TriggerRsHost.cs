@@ -19,8 +19,8 @@ namespace ADOFAIMacro.Technique
     ///     → 标记不可用）；
     ///   - 事件表指针只在锚点有效期内有效（C# 侧 events 数组由锚点持有），
     ///     Rust 侧只读、不缓存指针——版本切换时 C# 必须换新锚点，指针自然失效；
-    ///   - Rust 侧 panic=abort：若 Rust 真崩了，整个游戏崩（与原生
-    ///     TechniqueSimulator.dll 同等风险面，FreezeTest 兜底）。
+    ///   - Rust 侧 panic=abort：若 Rust 真崩了，整个游戏崩（与早先随模组发布的
+    ///     原生手法库同等风险面，FreezeTest 兜底）。
     /// </summary>
     internal static unsafe class TriggerRsHost
     {

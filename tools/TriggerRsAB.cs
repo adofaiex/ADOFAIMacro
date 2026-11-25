@@ -93,7 +93,7 @@ static class TriggerRsAB
         double stepMs = args.Length > 1 ? double.Parse(args[1]) : 0.1;
         if (!File.Exists(td)) { Console.WriteLine("timedata 不存在: " + td); return 2; }
 
-        // ── 构造事件表（与 NativeTechnique.BuildTechniqueFloorInputs 同语义：
+        // ── 构造事件表（A/B 工装的简化模型：
         //    每块判定砖一个按下，时刻 = 下一块判定砖的 entryTime；长按尾 → 松开）──
         var raw = new List<(double t, int type)>();
         foreach (var line in File.ReadAllLines(td))

@@ -48,7 +48,7 @@
   <!--
     源文件按职责分目录组织，与 JipperKeyViewer 的分层风格一致：
       Core/         入口、生命周期、Harmony 补丁
-      Technique/    ★ 手法模拟核心（分片算法、事件表、原生绑定）
+      Technique/    ★ 手法模拟核心（托管规划、事件表、轨迹播放）
       Input/        按键注入、虚拟键盘、SkyHook
       Timing/       高精度时钟
       Calibration/  判定校准与诊断统计
@@ -76,14 +76,15 @@
     <Compile Include="Technique\MacroEngine.cs" />
     <Compile Include="Technique\ConfigParser.cs" />
     <Compile Include="Technique\EventBuilder.cs" />
-    <Compile Include="Technique\NativeTechnique.cs" />
-    <Compile Include="Technique\PieceBuilder.cs" />
+    <Compile Include="Technique\TechniqueIntegration.cs" />
+    <Compile Include="Technique\TechniquePlanner.cs" />
+    <Compile Include="Technique\TechniquePlayback.cs" />
+    <Compile Include="Technique\TechniqueTimeline.cs" />
     <Compile Include="Technique\KeyWorker.cs" />
     <Compile Include="Technique\TriggerRsHost.cs" />
     <Compile Include="Technique\EmbeddedNative.cs" />
     <Compile Include="Technique\Clock.cs" />
     <Compile Include="Technique\Lifecycle.cs" />
-    <Compile Include="Technique\TechniqueSimulator.cs" />
     <Compile Include="Technique\TraceFile.cs" />
     <Compile Include="Technique\TracePlayer.cs" />
     <Compile Include="Technique\AngleAsyncDriver.cs" />
@@ -280,12 +281,6 @@
     </EmbeddedResource>
   </ItemGroup>
 
-    <!--
-    把原生 TechniqueSimulator.dll / InputSystem.dll 收集到统一输出目录。
-    C++ 项目在仓库根的 TechniqueSimulator\ 与 InputSystem\ 下（与托管项目
-    分开，因为 vcxproj 不能放进 SDK 项目的目录树里）。
-    打包目录 out\<Cfg>\ 是部署布局的单一来源。
-  -->
   <!--
       必须挂 PrepareResources 而不是 Build：Build 依赖 CoreBuild（编译在其内），
       BeforeTargets="Build" 实际在编译之后才执行。本机因 DLL 早已存在而不报错，
@@ -320,17 +315,17 @@
 
   <Target Name="CopyNativeDlls" AfterTargets="Build">
     <PropertyGroup>
-      <_TechSimDll>$(RepoRoot)TechniqueSimulator\x64\$(Configuration)\TechniqueSimulator.dll</_TechSimDll>
-      <!-- CI 没有 v145 C++ 工具链（也编不了本机未入库的源码改动），
-           回退到入库的预编译 DLL —— 与发布包内二进制一致。 -->
-      <_TechSimDll Condition="!Exists('$(_TechSimDll)')">$(RepoRoot)native\prebuilt\TechniqueSimulator.dll</_TechSimDll>
+      <!-- CI 没有 v145 C++ 工具链，回退到入库的预编译 InputSystem.dll。 -->
       <_InputSysDll>$(RepoRoot)InputSystem\x64\$(Configuration)\InputSystem.dll</_InputSysDll>
       <_InputSysDll Condition="!Exists('$(_InputSysDll)')">$(RepoRoot)native\prebuilt\InputSystem.dll</_InputSysDll>
       <_PackDir>$(RepoRoot)out\$(Configuration)\</_PackDir>
+      <_PackDir Condition="'$(PackageOutputPath)' != ''">$([MSBuild]::EnsureTrailingSlash('$(PackageOutputPath)'))</_PackDir>
     </PropertyGroup>
 
+    <!-- 清理增量构建残留，避免旧手法 DLL 被打进 out 的整目录发布包。 -->
+    <Delete Files="$(OutDir)TechniqueSimulator.dll;$(_PackDir)TechniqueSimulator.dll" />
+
     <!-- 先落在 bin\<Cfg>\ —— 那是本项目的正常输出目录 -->
-    <Copy SourceFiles="$(_TechSimDll)"  DestinationFolder="$(OutDir)" Condition="Exists('$(_TechSimDll)')" />
     <Copy SourceFiles="$(_InputSysDll)" DestinationFolder="$(OutDir)" Condition="Exists('$(_InputSysDll)')" />
 
     <!-- 再汇总到打包目录 -->
@@ -338,7 +333,6 @@
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(_PackDir)" />
     <!-- Info.json 在项目目录下（RepoRoot 是仓库根，之前写错导致打包目录漏掉它）。 -->
     <Copy SourceFiles="$(MSBuildThisFileDirectory)Info.json" DestinationFolder="$(_PackDir)" Condition="Exists('$(MSBuildThisFileDirectory)Info.json')" />
-    <Copy SourceFiles="$(OutDir)TechniqueSimulator.dll" DestinationFolder="$(_PackDir)" Condition="Exists('$(OutDir)TechniqueSimulator.dll')" />
     <Copy SourceFiles="$(OutDir)InputSystem.dll"        DestinationFolder="$(_PackDir)" Condition="Exists('$(OutDir)InputSystem.dll')" />
     <Copy SourceFiles="$(OutDir)System.Memory.dll"     DestinationFolder="$(_PackDir)" Condition="Exists('$(OutDir)System.Memory.dll')" />
     <Copy SourceFiles="Localization\zh-CN.json" DestinationFolder="$(_PackDir)Localization" />

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../ADOFAIMacro/Technique/TechniquePlanner.cs" Link="TechniquePlanner.cs" />
+    <Compile Include="../../ADOFAIMacro/Technique/TechniqueTimeline.cs" Link="TechniqueTimeline.cs" />
+    <Compile Include="../../ADOFAIMacro/Technique/TraceFile.cs" Link="TraceFile.cs" />
+    <Compile Include="../../ADOFAIMacro/Technique/AngleAsyncDriver.cs" Link="AngleAsyncDriver.cs" />
+    <Compile Include="../../ADOFAIMacro/Technique/KeyWorker.cs" Link="KeyWorker.cs" />
+    <Compile Include="../../ADOFAIMacro/Technique/TechniquePlayback.cs" Link="TechniquePlayback.cs" />
+    <None Include="../potatoab/main.timedata" Link="main.timedata" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

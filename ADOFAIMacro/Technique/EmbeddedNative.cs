@@ -12,7 +12,7 @@ namespace ADOFAIMacro.Technique
     ///
     /// 为什么不用内存直接加载（ManualMap）：
     ///   - 需要手工解析 PE 重定位/导入表，病毒误报率极高；
-    ///   - 本项目已有「解压+绝对路径 LoadLibrary」的成熟先例（TechniqueSimulator）。
+    ///   - 本项目早先已有「解压+绝对路径 LoadLibrary」的成熟先例（不再随模组发布的原生手法库即采用过同一做法）。
     ///
     /// 提取目标选 %LOCALAPPDATA% 而非 Mods 目录：UMM 更新是整目录覆盖，
     /// 写 Mods 会被下次更新/校验踩掉；临时目录只写一次、版本不匹配时重写。

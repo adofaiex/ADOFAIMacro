@@ -12,7 +12,7 @@ namespace ADOFAIMacro.Technique
     /// 手法表摘要与日志出口。
     ///
     /// 这些都与「按出手法」无关 —— 手法本身在 Technique\MacroEngine.cs 与
-    /// 原生 TechniqueSimulator.dll 里。全部走 Main.Log，受日志总开关控制。
+    /// 手法规划器 TechniquePlanner.cs 里。全部走 Main.Log，受日志总开关控制。
     ///
     /// ⚠️ 本文件是 partial class MacroEngine 的一部分，与 Technique\ 下的其余
     ///    7 个文件同属 ADOFAIMacro.Technique 命名空间 —— partial 的所有部分

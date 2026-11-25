@@ -6,7 +6,7 @@ namespace ADOFAIMacro.Input
 {
     /// <summary>
     /// 统一的按键名称到虚拟键码映射
-    /// 避免在 Macro.cs 和 TechniqueSimulator.cs 中重复定义
+    /// 避免在多处各自维护一份按键名称表
     /// </summary>
     internal static class KeyMap
     {

@@ -54,6 +54,7 @@ namespace ADOFAIMacro.UI
         {
             // 每帧更新 AudioDSPManager
             DSPTimeSimulater.Update();
+            Technique.MacroEngine.ObservePlaybackState();
         }
         public void OnGUI()
         {

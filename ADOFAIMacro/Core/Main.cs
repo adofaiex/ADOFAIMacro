@@ -91,15 +91,6 @@ namespace ADOFAIMacro.Core
                 LogStartup("[InputSystem] 当前使用传统输入模拟");
             }
 
-            if (TechniqueSimulator.LoadTechniqueDll())
-            {
-                LogStartup("[TechniqueSimulator] 技巧模拟器 DLL 加载成功");
-            }
-            else
-            {
-                LogStartup("[TechniqueSimulator] 技巧模拟器 DLL 加载失败");
-            }
-
             modEntry.OnToggle = OnToggle;
             modEntry.OnGUI = Settings.OnGUI;
             modEntry.OnSaveGUI = Settings.OnSaveGUI;
@@ -111,6 +102,8 @@ namespace ADOFAIMacro.Core
 
         public static bool Unload(UnityModManager.ModEntry modEntry)
         {
+            MacroEngine.StopPlayback();
+            MacroEngine.RestoreHoldBehavior();
             Harmony?.UnpatchAll(modEntry.Info.Id);
             Harmony = null;
 
@@ -214,12 +207,6 @@ namespace ADOFAIMacro.Core
                     Harmony!.CreateClassProcessor(t).Patch();
                 }
 
-                // 关闭模组时 OnToggle(false) 会 FreeLibrary 手法模拟 DLL；再次启用必须
-                // 重载，否则手法模拟在本次游戏会话内永久失效（IsDllLoaded() 恒 false，
-                // Release 面板还会据此强制关闭"启用手法模拟"）。
-                if (!TechniqueSimulator.IsDllLoaded() && !TechniqueSimulator.LoadTechniqueDll())
-                    Main.Log("[TechniqueSimulator] 技巧模拟器 DLL 重新加载失败");
-
                 // ★ 用户「重新启用模组」= 有意重试：解除 Rust 触发器的进程级熔断
                 // （熔断后换关/重开工作线程不会自动恢复，见 TriggerRsHost 字段注释）。
                 Technique.TriggerRsHost.ResetTrip();
@@ -234,6 +221,7 @@ namespace ADOFAIMacro.Core
             else
             {
                 IsEnabled = false;
+                MacroEngine.StopPlayback();
                 // 先清 Hub 状态（AutoDisabled/失败汇总/限流窗口），再整体卸载 ——
                 // owner 相同，Harmony.UnpatchAll 会把 MacroPatch 与 Transpiler 一起下。
                 MacroPatchHub.UnpatchAll(modEntry.Info.Id);
@@ -243,7 +231,6 @@ namespace ADOFAIMacro.Core
                 // requireHolding 交还游戏（否则禁用宏后长按地板判定一直是"不需要按住"）
                 MacroEngine.RestoreHoldBehavior();
                 InputSystem.EmergencyStop();
-                TechniqueSimulator.Unload();
                 // 覆盖层必须销毁：ShowText 的 _showMacroText 跟的是"启用宏"开关而不是
                 // 模组启用状态，禁用模组后它会继续在屏幕上画"宏已开启！"，并且
                 // 每帧继续推 DSPTimeSimulater.Update()。销毁后再次启用会走

@@ -29,6 +29,7 @@ namespace ADOFAIMacro.Technique
             Log("[Macro-Worker] 工作线程启动");
             timeBeginPeriod(1);
             bool rustTrigger = false;
+            var techniqueDown = new HashSet<byte>();
             try
             {
                 _startSignal.Wait();
@@ -54,11 +55,6 @@ namespace ADOFAIMacro.Technique
                 {
                     var anchor = Volatile.Read(ref _currentAnchor);
 
-                    if (!anchor.valid || anchor.hitEvents == null || anchor.hitEventCount == 0)
-                    {
-                        Thread.Sleep(1); continue;
-                    }
-
                     int curResetVer = Volatile.Read(ref _resetVersion);
                     if (curResetVer != localResetVer)
                     {
@@ -67,8 +63,13 @@ namespace ADOFAIMacro.Technique
                         // 若在此锁存 -1，等新锚点发布时 version 已被消费、不会再次重同步，
                         // 结果是从事件表第 0 个事件重放整首（大规模误触发）。
                         // 改为挂起，等主线程发布"入场索引已就绪"后再取。
+                        ReleaseTechniqueKeys();
                         localResetVer = curResetVer;
                         needsResync = true;
+                    }
+                    if (!anchor.valid || anchor.hitEvents == null || anchor.hitEventCount == 0)
+                    {
+                        Thread.Sleep(1); continue;
                     }
                     if (needsResync)
                     {
@@ -108,6 +109,7 @@ namespace ADOFAIMacro.Technique
                     {
                         if (Volatile.Read(ref _resetVersion) != localResetVer) goto WriteBack;
 
+                        bool technique = simulateKey && Main.Settings.EnableTechniqueSimulation;
                         bool hp = _cachedHighPrecision;
                         long qpcNow = GetRawTicks();
 
@@ -152,33 +154,33 @@ namespace ADOFAIMacro.Technique
                                         break;
 
                                     case TriggerRsHost.ACTION_PRESS:
-                                        SendKey(events[i].KeyCode, true);
+                                        if (technique) FireTechniqueEdge(in events[i]);
+                                        else SendKey(events[i].KeyCode, true);
                                         RecordFireError(-wait.DeltaSec);
                                         localLastFloor = i++;
                                         triggered = true;
                                         break;
 
                                     case TriggerRsHost.ACTION_HOLD_PRESS:
-                                        if (_isHoldDown) { SendKey(_holdKey, false); _holdKey = 0; _isHoldDown = false; }
-                                        SendKey(events[i].KeyCode, true);
-                                        _holdKey = events[i].KeyCode; _isHoldDown = true;
+                                        if (technique) FireTechniqueEdge(in events[i]);
+                                        else WorkerHoldKey(events[i].KeyCode);
                                         RecordFireError(-wait.DeltaSec);
                                         localLastFloor = i++;
                                         triggered = true;
                                         break;
 
                                     case TriggerRsHost.ACTION_RELEASE:
-                                        byte rk = events[i].IsHoldRelated
-                                            ? (events[i].ReleaseKeyCode != 0 ? events[i].ReleaseKeyCode : _holdKey)
-                                            : events[i].ReleaseKeyCode;
-                                        SendKey(rk, false);
-                                        if (events[i].IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
+                                        // A mode toggle does not transfer ownership of an already-down key.
+                                        if (technique || techniqueDown.Contains(events[i].ReleaseKeyCode)) FireTechniqueEdge(in events[i]);
+                                        else if (events[i].IsHoldRelated) WorkerReleaseHoldKey();
+                                        else WorkerReleaseKey(events[i].ReleaseKeyCode);
                                         RecordFireError(-wait.DeltaSec);
                                         localLastFloor = i++;
                                         triggered = true;
                                         break;
 
                                     case TriggerRsHost.ACTION_FINISHED:
+                                        ReleaseTechniqueKeys();
                                         if (_isKeyDown) WorkerReleaseKey();
                                         if (_isHoldDown) WorkerReleaseHoldKey();
                                         goto WriteBack;
@@ -203,6 +205,8 @@ namespace ADOFAIMacro.Technique
                         // Patches 里的 MacroEngine.Update 根本不被调用、StopWorkerIfNeeded 也不会执行），
                         // 继续外推会把 audioNow 推到很远 → 一次性触发掉大量剩余事件，且解除暂停后
                         // 宏会认为这些地板"已处理"（后续全部漏判）。超过阈值即停止外推、等新锚点。
+                        // Stale timing suspends advancement, not the keys owned by this playback.
+                        // Reset/stop still release them; a fresh anchor resumes the scheduled hold end.
                         if (elapsed > AnchorStaleSec) { Thread.Sleep(1); break; }
 
                         // 方案4：audioNow = 锚点位置 + QPC 真实流逝 × pitch（DSP 估计已退出外推链路）
@@ -234,59 +238,18 @@ namespace ADOFAIMacro.Technique
 
                         ref readonly var ev = ref events[i];
                         RecordFireError(audioNow - triggerAt);
-                        bool enableTechnique = Main.Settings.EnableTechniqueSimulation;
 
-                        if (!simulateKey)
-                        {
-                            hitCount++;
-                            LogVerbose($"[Macro-Worker] 请求 Hit() EventIndex={i}");
-                        }
+                        // Release through the original owner even if input/technique was toggled.
+                        if (ev.ReleaseOnly && techniqueDown.Contains(ev.ReleaseKeyCode)) FireTechniqueEdge(in ev);
+                        else if (!simulateKey) hitCount++;
+                        else if (technique) FireTechniqueEdge(in ev);
                         else if (ev.ReleaseOnly)
                         {
-                            if (enableTechnique)
-                            {
-                                byte keyToRelease = ev.IsHoldRelated
-                                ? (ev.ReleaseKeyCode != 0 ? ev.ReleaseKeyCode : _holdKey)
-                                : ev.ReleaseKeyCode;
-                                SendKey(keyToRelease, false);
-                                if (ev.IsHoldRelated) { _holdKey = 0; _isHoldDown = false; }
-                                LogVerbose($"[Macro-Worker] 直接释放 key=0x{keyToRelease:X2} EventIndex={i} audioNow={audioNow:F6}");
-                            }
-                            else
-                            {
-                                if (ev.IsHoldRelated) WorkerReleaseHoldKey();
-                                else WorkerReleaseKey(ev.ReleaseKeyCode);
-                                LogVerbose($"[Macro-Worker] 松键(hold={ev.IsHoldRelated} key=0x{ev.ReleaseKeyCode:X2}) EventIndex={i}");
-                            }
+                            if (ev.IsHoldRelated) WorkerReleaseHoldKey();
+                            else WorkerReleaseKey(ev.ReleaseKeyCode);
                         }
-                        else if (ev.IsHoldRelated)
-                        {
-                            if (enableTechnique)
-                            {
-                                if (_isHoldDown) { SendKey(_holdKey, false); _holdKey = 0; _isHoldDown = false; }
-                                SendKey(ev.KeyCode, true);
-                                _holdKey = ev.KeyCode; _isHoldDown = true;
-                                LogVerbose($"[Macro-Worker] 直接长按 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
-                            }
-                            else
-                            {
-                                WorkerHoldKey(ev.KeyCode);
-                                LogVerbose($"[Macro-Worker] Hold 按下 0x{ev.KeyCode:X2} EventIndex={i}");
-                            }
-                        }
-                        else
-                        {
-                            if (enableTechnique)
-                            {
-                                SendKey(ev.KeyCode, true);
-                                LogVerbose($"[Macro-Worker] 直接按下 0x{ev.KeyCode:X2} EventIndex={i} audioNow={audioNow:F6}");
-                            }
-                            else
-                            {
-                                WorkerPressKey(ev.KeyCode);
-                                LogVerbose($"[Macro-Worker] 按下 0x{ev.KeyCode:X2} EventIndex={i}");
-                            }
-                        }
+                        else if (ev.IsHoldRelated) WorkerHoldKey(ev.KeyCode);
+                        else WorkerPressKey(ev.KeyCode);
 
                         localLastFloor = i++;
                         triggered = true;
@@ -311,6 +274,7 @@ namespace ADOFAIMacro.Technique
 
                     if (localLastFloor >= evCount - 1)
                     {
+                        ReleaseTechniqueKeys();
                         if (_isKeyDown) WorkerReleaseKey();
                         if (_isHoldDown) WorkerReleaseHoldKey();
                     }
@@ -327,11 +291,28 @@ namespace ADOFAIMacro.Technique
             {
                 timeEndPeriod(1);
                 if (rustTrigger) TriggerRsHost.Shutdown();
-                if (Main.Settings.EnableTechniqueSimulation)
-                { if (_isHoldDown) SendKey(_holdKey, false); }
-                else
-                { WorkerReleaseKey(); WorkerReleaseHoldKey(); }
+                ReleaseTechniqueKeys();
+                WorkerReleaseKey();
+                if (!_angleDriverActive) WorkerReleaseHoldKey();
                 Log("[Macro-Worker] 工作线程退出");
+            }
+
+            void FireTechniqueEdge(in HitEvent ev)
+            {
+                if (ev.ReleaseOnly)
+                {
+                    if (techniqueDown.Remove(ev.ReleaseKeyCode)) SendKey(ev.ReleaseKeyCode, false);
+                }
+                else
+                {
+                    if (SendKey(ev.KeyCode, true)) techniqueDown.Add(ev.KeyCode);
+                }
+            }
+
+            void ReleaseTechniqueKeys()
+            {
+                foreach (byte key in techniqueDown) SendKey(key, false);
+                techniqueDown.Clear();
             }
         }
 
@@ -343,14 +324,14 @@ namespace ADOFAIMacro.Technique
         {
             if (_isKeyDown && _pendingKey != keyCode) WorkerReleaseKey();
             if (_isHoldDown && _holdKey == keyCode) return;
-            if (!_isKeyDown) { SendKey(keyCode, isDown: true); _pendingKey = keyCode; _isKeyDown = true; }
+            if (!_isKeyDown && SendKey(keyCode, isDown: true)) { _pendingKey = keyCode; _isKeyDown = true; }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WorkerHoldKey(byte keyCode)
         {
             if (_isHoldDown) WorkerReleaseHoldKey();
-            SendKey(keyCode, isDown: true);
+            if (!SendKey(keyCode, isDown: true)) return;
             _holdKey = keyCode; _isHoldDown = true;
             LogVerbose($"[Macro-Worker] Hold 按下 0x{keyCode:X2}");
         }
@@ -387,7 +368,7 @@ namespace ADOFAIMacro.Technique
         private static bool _keyPathProbeDone;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void SendKey(byte keyCode, bool isDown, long eventTicks = 0)
+        private static unsafe bool SendKey(byte keyCode, bool isDown, long eventTicks = 0)
         {
             // 一次性路径探针：定位镜像链路断点（每次会话首键输出）
             // 注意用 UMM Logger 直调——MacroEngine.Log 是 [Conditional("DEBUG")]，Release 会整体剥除
@@ -399,7 +380,9 @@ namespace ADOFAIMacro.Technique
                     $"focus={IsGameWindowFocused()} key=0x{keyCode:X2} down={isDown}");
             }
 
-            if (Main.Settings.BlockInputWhenUnfocused && !IsGameWindowFocused()) return;
+            // Focus protection blocks new downs into another application, never the up
+            // of a key already owned by playback (scheduled release, stop or reset).
+            if (isDown && Main.Settings.BlockInputWhenUnfocused && !IsGameWindowFocused()) return false;
 
             // L0 偏差探针：统计实际发出去的键（三路发键共用此口；被上面拦下的不算发出）。
             DeviationProbe.OnKeySent(keyCode, isDown, eventTicks);
@@ -413,7 +396,7 @@ namespace ADOFAIMacro.Technique
                 bool sent = eventTicks != 0
                     ? VirtualAsyncInput.SendAtTicks(keyCode, isDown, eventTicks)
                     : VirtualAsyncInput.Send(keyCode, isDown);
-                if (sent) return;
+                if (sent) return true;
             }
 
             // 直喂未接管 → 这次按键会经系统注入回流到游戏的 HookCallback，
@@ -427,6 +410,7 @@ namespace ADOFAIMacro.Technique
                 int r = Input.AsyncInputManager.DirectPushKey(keyCode, isDown);
                 if (r != 0) Log($"[Macro-Worker] PushKeyEvent 失败 result={r} key=0x{keyCode:X2}");
                 LogVerbose($"[Macro-Worker] SkyHook direct key=0x{keyCode:X2} down={isDown}");
+                return r == 0;
             }
             else
             {
@@ -434,9 +418,11 @@ namespace ADOFAIMacro.Technique
                 _cachedInput.u.ki.wVk = keyCode;
                 _cachedInput.u.ki.wScan = scanCodeCache[keyCode];
                 _cachedInput.u.ki.dwFlags = isDown ? KEYEVENTF_KEYDOWN : KEYEVENTF_KEYUP;
+                uint sent;
                 fixed (SkyHookSystem.INPUT* ptr = &_cachedInput)
-                    SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
+                    sent = SendInput(1, (IntPtr)ptr, sizeof(SkyHookSystem.INPUT));
                 LogVerbose($"[Macro-Worker] SendInput key=0x{keyCode:X2} down={isDown}");
+                return sent == 1;
             }
         }
 
@@ -476,13 +462,20 @@ namespace ADOFAIMacro.Technique
             floorCount = cachedFloors.Length;
             _initializedLevelPath = SafeLevelPath();
 
+            ResetTraceState();
             ParseKeyCodes();
-            BuildHitEvents();
-
-            // 离线求解出的轨迹（若有）：时间驱动下顶替 _hitEvents，角度驱动下改由
-            // 主线程 AngleDriverTick 发键。失败一律安静回落 —— BuildHitEvents 的表还在。
-            BuildFloorIndexMap();
-            PrepareTrace();
+            if (Main.Settings.SimulateKeyPress && Main.Settings.EnableTechniqueSimulation)
+            {
+                LevelTechniqueManager.CheckAndLoadLevelConfig();
+                var source = CaptureTechniqueSource(cachedFloors, conductor);
+                source.PublishKeyDiagnostics();
+                BuildFloorIndexMap();
+                bool prepared = false;
+                try { prepared = PrepareTrace(source); }
+                catch (Exception ex) { Log($"[Macro-Player] 轨迹不可用，改走在线事件表：{ex.Message}"); }
+                if (!prepared) BuildTechniqueHitEvents(source);
+            }
+            else BuildHitEvents();
 
             initialized = true;
             _staticAnchorVersion++;

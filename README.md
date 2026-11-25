@@ -9,7 +9,7 @@
 
 [English README](README.en.md)
 
-**ADOFAIMacro** 是《A Dance of Fire and Ice》(ADOFAI) 的 UnityModManager 模组：解析谱面地板时间戳，由独立高优先级线程微秒级定时发送按键。从"直接判定触发"到"系统级按键模拟"再到"左右手手法模拟"，覆盖纯自动过谱到拟真手法的各种场景。
+**ADOFAIMacro** 是《A Dance of Fire and Ice》(ADOFAI) 的 UnityModManager 模组：解析谱面地板时间戳，由独立高优先级线程微秒级定时发送按键；提供直接判定、系统级按键模拟和可配置的左右手击键编排策略。
 
 > ⚠️ **两条红线，先说清楚：**
 > - **不要修改 `Info.json`** —— 模组带防篡改检测，改动后启用时会直接退出游戏。
@@ -37,8 +37,8 @@
 
 - **自动触发**：谱面时间戳 → 高精度定时按键；双缓冲时间锚点同步主线程与工作线程，无锁零等待。
 - **四种输入路径**：直接判定 / SendInput / SkyHook 底层注入（NtInject / NtSendInput）/ 虚拟异步键盘直喂（跳过系统注入，亚微秒抖动）。
-- **手法模拟**：左右手交替、BPM 阈值自动细分时间片（单手多指连打）、可配置按键 / 顺序 / 按压时长（多音片重音"强弱拍"）、变速分段覆盖、每关独立配置；核心算法在 C++ 原生 DLL 中运行，离线求解 + 轨迹缓存，另有 Rust 触发内核可选加速（内嵌在主 DLL 中，无需额外分发）。
-- **轨迹播放器**：关卡加载期即求解并缓存轨迹（进图零计算）；支持导出 / 导入 `.adofaitrace` 分享，时间驱动 / 角度驱动两种回放方式；角度驱动把等待与发键搬到工作线程，消除 0~1 帧发键延迟。
+- **手法模拟**：可选半拍网格、固定单指 KPS 连段或节奏窗策略；按配置分配左右手、键序和按压时长，支持变速分段与每关独立配置；由同一个 C# 核心生成手法轨迹并缓存；可选的 Rust 触发内核只负责发键时机（内嵌在主 DLL 中，无需额外分发）。
+- **轨迹播放器**：关卡加载期即生成并缓存轨迹；支持导出 / 导入 `.adofaitrace` 分享，时间驱动 / 角度驱动两种回放方式；角度驱动把等待与发键搬到工作线程，消除 0~1 帧发键延迟。
 - **时间微调**：±100 ms 偏移，游戏内方向键实时调节；判定误差自动校准（闭环，自动消除变速段偏移）。
 - **按键过滤**：黑 / 白名单，同步（KeyCode）与异步（VK 码）独立过滤；放行游戏硬编码屏蔽的 4 个特殊键（PrintScreen / F12 / LAlt / Super）。
 - **其他**：死亡后自动按键、游玩期 GC 停顿抑制、窗口失焦拦截、宏状态角标（HIT / VIRT / NT / SI）与虚拟按键屏显、中英双语 UI。
@@ -50,7 +50,7 @@
 **前置**：已安装 ADOFAI 和 [UnityModManager](https://www.nexusmods.com/site/mods/21)（≥ 0.27.0）。
 
 1. 从 [Releases](https://github.com/adofaiex/ADOFAIMacro/releases) 下载压缩包，用 UMM 安装；或手动解压到游戏的 `Mods/ADOFAIMacro/` 目录。
-   - 目录内应包含：`ADOFAIMacro.dll`、`Info.json`、`InputSystem.dll`、`TechniqueSimulator.dll`、`System.Memory.dll`、`Localization/`（zh-CN / en-US）。
+   - 目录内应包含：`ADOFAIMacro.dll`、`Info.json`、`InputSystem.dll`、`System.Memory.dll`、`Localization/`（zh-CN / en-US）。
 2. 启动游戏，打开 UMM 模组窗口，启用 **ADOFAIMacro**。
 3. 「宏」选项卡 → 勾选 **启用宏**。
 4. 默认配置（按键模拟关闭 = 直接判定）即可自动过谱；判定整体偏早/偏晚时，到「延迟设置」调整 **延迟 (ms)**，或游戏内按 <kbd>←</kbd>/<kbd>→</kbd> 微调。
@@ -149,32 +149,39 @@
 
 ## 手法模拟指南
 
-开启后（需同时开启 **按键模拟**），宏不再简单轮转按键序列，而是模拟真人双手打谱：时间按"片"划分，每片交给一只手，片间左右交替；当事件密度超过 **速度阈值 (BPM)** 时自动细分时间片，同一只手连续承担多个事件——即单手多指连打。
+开启后（需同时开启 **按键模拟**），宏不再简单轮转按键。默认半拍分组策略根据逐地板速度和 **速度阈值 (BPM)** 划分基础时间片，左右手按时间网格交替；同一片可以由一只手连续打多个音，超出该手容量时再细分。
+
+面板现在可选三种策略：**半拍分组**（默认，沿用当前时间网格规则）、**KPS 阈值分组**（按固定单指阈值分组）和 **节奏窗**（根据逐地板速度及 BPM 阈值估算单手连段窗口）。后两者均受每只手可用键数限制，都是待实机比较的规则原型，不代表人体极限速度，也不承诺对所有谱面或玩家都更顺手。
 
 ### 基本参数
 
 | 面板项 | 默认 | 说明 |
 |---|---|---|
-| 启用手法模拟（左右手交替） | 关 | 总开关（需按键模拟；Release 版还需 `TechniqueSimulator.dll`）。 |
+| 启用手法模拟 | 关 | 总开关（需按键模拟）。 |
 | 起始手 | 右手 | 第一个时间片交给哪只手。 |
-| 全局·速度阈值 (BPM) | 500 | 超过此 BPM 自动细分时间片（范围 50 ~ 2000）。 |
+| 击键分组策略 | 半拍分组 | 可切换半拍网格、固定 KPS 连段或节奏窗策略。 |
+| 连段用手 | 组间交替 | 仅 KPS/节奏窗；可选距起始手上次击键达到一个当前分组窗口时优先用它，否则交替。 |
+| 单指阈值 (KPS) | 6.5 | 仅 KPS 模式显示；连段首击到当前击键跨度小于 `1/(2×KPS)` 秒时归入同组。 |
+| 全局·速度阈值 (BPM) | 500 | 半拍网格和节奏窗使用的速度阈值（范围 50 ~ 2000）；固定 KPS 模式不使用。 |
 | 左/右手按键 | `D,F` / `J,K` | 每只手可用的键，内置预设 DF/JK、DS/JK、ASDF/JKL。 |
 | 左/右手顺序 | 空 | 见下方格式说明，留空 = 默认轮转。 |
-| 左/右手时长 | `0.8,0.8` | 按压时长比例（0 ~ 1），决定按下到松开占时间片的比例；长按（hold）谱面自动处理。 |
+| 左/右手时长 | `0.8,0.8` | 调整普通按键时长的比例；长按（hold）按谱面自动处理。 |
 
 **按键顺序格式**：用 `|` 分隔不同按键数的片，逗号分隔 1-based 键序号。例如 `1,2 | 1,2 | 1,2,1`：单键片按第 1、2 键轮转，三键片按 1→2→1。留空 = 默认顺序。
 
 **"强弱拍"机制**：片内顺序表按**片内音数选行**——含 N 个音的片使用顺序表的第 N 行（行不够时取最后一行），行内每个键再各绑一档按压时长。于是连续快速段会自然出现"强→弱"的重音循环（例如 3 音片 `50→1.2 / 51→1 / 82→0.8`）。这就是顺序表要多写几行的原因：只写第 1 行的话，多音片就没有重音层次。
 
-**片界守卫（伪双押修复）**：跨手片界上间隔小于一帧（~16.7 ms）的相邻音会被并入前一片（不超过该手键数、不掏空下一片、变速点不合并），消除"三连音被打成双手同步"的伪双押；同时保住下一片的多音性，强弱拍样式不被削。片长本身完全由逐地板速度决定（旧版"变速容差"已移除），片界对齐时间网格，同一节奏型的起手手性稳定。
+**片界调整**：同一速度和配置下，规划器在手部容量允许时可合并或移动片界附近的紧邻音，减少伪双押。片长参考逐地板速度，不需要设置旧版的「变速容差」。
 
 ### 配置（Profiles）
 
-可保存多套完整手法参数（按键、顺序、时长、起始手、分段），面板上一键新建 / 删除 / 切换。
+可保存多套完整手法参数（分组策略、KPS 阈值、按键、顺序、时长、起始手、分段），面板上一键新建 / 删除 / 切换。
+
+连段用手规则也保存在配置中。新增字段缺省时继续采用半拍分组和原有起手手；KPS/节奏窗的用手规则缺省时采用组间交替。算法分层、两套参考的差异与离线对照方法见 [手法重构说明](docs/technique-design.md)。
 
 ### 变速分段
 
-在某个 floor 区间内覆盖全局设置：每段可独立指定 **BPM 阈值** 与 **左右手按键 / 顺序 / 时长**（留空字段继承全局）。段边界处自动重置手序、释放跨段长按键。
+在某个 floor 区间内覆盖全局设置：每段可独立指定 **BPM 阈值**（半拍分组和节奏窗使用）与 **左右手按键 / 顺序 / 时长**（留空字段继承全局）。半拍策略遇配置变化会重新对齐时间网格，但不会强制切回起始手；固定 KPS 不会仅因 BPM 阈值变化而切断连段。
 
 ### 关卡特定配置
 
@@ -188,16 +195,12 @@
 
 ### 轨迹播放器与轨迹缓存
 
-手法面板底部是 **轨迹播放器**。开启手法模拟后，整张谱的手法在**关卡加载完成时就会离线求解并缓存**，按开始前已就绪；下次进同一张谱直接读缓存，零计算。求解指纹包含谱面 + 完整手法配置 + 求解器 DLL 的内容哈希——改任何一项都会自动重新求解，不会误用旧缓存。
+手法面板底部是 **轨迹播放器**。开启手法模拟后，**关卡加载完成时会生成并缓存整张谱的轨迹**。重进时，如果谱面、手法配置和轨迹版本匹配，则直接读取缓存。
 
 - **驱动方式**：时间驱动（默认，走原有时间锚点链路）/ 角度驱动（按行星在当前砖上已扫过的角度触发，不受时钟抖动影响；触发被帧率量化，最坏晚一帧，可用"角度提前量 (ms)"补偿，范围 −200 ~ 400）。
-- **离线计算**：随时可手动重新求解当前关卡。
-- **导出 / 导入轨迹**：导出当前谱的 `.adofaitrace` 文件分享给别人；导入时校验必须是同一张谱 + 同一套手法配置（指纹校验），成功后重进关卡生效。
+- **离线计算**：可为已加载的关卡手动准备轨迹；如果已有匹配缓存，则直接复用。
+- **导出 / 导入轨迹**：导出当前谱的 `.adofaitrace` 文件分享给别人；导入时校验必须是同一张谱 + 同一套手法配置，且轨迹版本兼容，成功后重进关卡生效。
 - **清除轨迹缓存**：缓存位于游戏 `persistentDataPath/ADOFAIMacro/trace/`，可一键清空。
-
-### 注意
-
-- 核心算法在原生 `TechniqueSimulator.dll` 中运行，请确保它位于 `Mods/ADOFAIMacro/` 目录。**Release 版本没有 DLL 就没有手法模拟输出**（调试版可回退 C# 实现）。
 
 ---
 
@@ -235,8 +238,8 @@
 **Q7：启用模组后游戏直接退出**
 `Info.json` 被修改过（防篡改检测），还原它；或装了 BaseMacro（互斥），卸载之。
 
-**Q8：手法模拟没输出 / 提示 DLL 不可用**
-把 `TechniqueSimulator.dll` 放到 `Mods/ADOFAIMacro/` 目录；Release 版缺 DLL 时手法模拟无事件输出。
+**Q8：手法模拟没输出**
+确认已开启「启用宏」「按键模拟」和「启用手法模拟」；加载关卡后点「离线计算」，查看轨迹状态与日志。
 
 **Q9：刚进游戏判定飘**
 自动校准判定（面板「自动校准判定」）会在游玩中持续收敛，一般无需手动干预；若仍有固定偏移，可在面板用「延迟 (ms)」手动补偿。首次游玩误差较大属正常（校准数据从本局实测中采集，不跨运行保留）。
@@ -249,9 +252,9 @@
 
 - 环境：.NET SDK 10（自带 C# 14 Roslyn），.NET Framework 4.8.1，C# preview；Rust stable（仅 Release 需要，编译 `TriggerRs` 触发内核）。
 - C# 侧：`ADOFAIMacro/ADOFAIMacro-Dev.csproj` 是 SDK 风格项目（NuGet 走 `PackageReference`，自动还原）；游戏程序集通过 `$(GameManaged)` 属性引用本机 ADOFAI 安装目录——需要游戏自带的 `Assembly-CSharp.dll`、`UnityEngine*.dll`、`SkyHook.Unity.dll`、`UnityModManager.dll`、`Newtonsoft.Json.dll`。`dotnet build -c Release` 或 MSBuild 均可。
-- 原生侧：仓库根目录 `cmd /c build_cpp.bat` 一键构建两个 C++ 工程（`TechniqueSimulator` / `InputSystem`，各 Debug + Release）。**改动原生代码后必须全量重建（`/t:Rebuild`），增量构建可能吃旧产物。** CI 环境没有 v145 C++ 工具链，会自动回退到入库的 `native/prebuilt/` 二进制。
+- 底层输入：仓库根目录 `cmd /c build_cpp.bat` 构建 `InputSystem`（x64 Debug + Release）。**改动原生代码后必须全量重建（`/t:Rebuild`），增量构建可能吃旧产物。** CI 使用 `native/prebuilt/InputSystem.dll`。
 - Rust 触发内核：Release 构建会自动跑 `cargo build --release`（路径可用 `-p:CargoExe=` 覆盖），产物 `macro_trigger.dll` 作为嵌入资源打进主 DLL；cargo 不可用时会回退到既有产物。
-- 部署产物到 `Mods/ADOFAIMacro/`：`ADOFAIMacro.dll` + `Info.json` + `Localization/` + `InputSystem.dll` + `TechniqueSimulator.dll` + `System.Memory.dll`。`out/Release/` 是打包布局的单一来源。
+- 部署产物到 `Mods/ADOFAIMacro/`：`ADOFAIMacro.dll` + `Info.json` + `Localization/` + `InputSystem.dll` + `System.Memory.dll`。`out/Release/` 是打包布局的单一来源。
 
 ---
 
@@ -260,7 +263,7 @@
 ```text
 ADOFAIMacro/                    # C# 模组（命名空间与目录一一对齐）
 ├─ Core/
-│  ├─ Main.cs                   # 入口：模组生命周期、DLL 加载、防篡改检测
+│  ├─ Main.cs                   # 入口：模组生命周期、输入初始化、防篡改检测
 │  ├─ Patches.cs                # 全部 Harmony 补丁（输入链路、判定误差回灌、特殊键放行等）
 │  ├─ MacroPatch.cs / MacroPatchHub.cs  # Harmony 多版本适配体系（补丁守卫 + 挂载）
 │  ├─ GuardFactory.cs           # IL 守卫代码生成
@@ -278,8 +281,10 @@ ADOFAIMacro/                    # C# 模组（命名空间与目录一一对齐�
 │  └─ KeyMap.cs                 # 按键名 → 虚拟键码映射
 ├─ Technique/
 │  ├─ MacroEngine.cs            # 手法主流程（partial：判定/校准/事件生成）
-│  ├─ NativeTechnique.cs        # 原生 DLL 调用 + 逐地板输入压缩
-│  ├─ PieceBuilder.cs           # C# 回退实现（仅调试版）
+│  ├─ TechniqueIntegration.cs   # 游戏地板与设置接入托管手法核心
+│  ├─ TechniquePlanner.cs       # 托管手法规划
+│  ├─ TechniqueTimeline.cs      # 地板到判定时间线的映射
+│  ├─ TechniquePlayback.cs      # 规划/缓存到播放器事件的纯转换
 │  ├─ EventBuilder.cs           # 按键事件装配
 │  ├─ ConfigParser.cs           # 顺序/时长/按键字符串解析
 │  ├─ KeyWorker.cs              # 高优先级发键线程（时间锚点）
@@ -287,7 +292,6 @@ ADOFAIMacro/                    # C# 模组（命名空间与目录一一对齐�
 │  ├─ TriggerRsHost.cs          # Rust 触发内核宿主（FFI + C# 回退）
 │  ├─ EmbeddedNative.cs         # 嵌入的原生 DLL 运行期解压 + LoadLibrary
 │  ├─ Clock.cs / Lifecycle.cs   # 时钟与生命周期
-│  ├─ TechniqueSimulator.cs     # 原生 ABI 封装（结构体布局与 C++ 侧严格一致）
 │  ├─ TraceFile.cs / TracePlayer.cs  # 轨迹缓存（.adotr）与轨迹播放器（.adofaitrace 导入导出）
 │  └─ LevelTechniqueManager.cs  # 关卡特定手法配置（*.adofaimacro.json）
 ├─ Calibration/Calibration.cs   # 判定误差闭环自动校准
@@ -300,11 +304,10 @@ ADOFAIMacro/                    # C# 模组（命名空间与目录一一对齐�
 └─ Platform/
    ├─ Windows.cs / Linux.cs     # 平台高精度计时
    └─ BaseSelect.cs             # 平台选择
-TechniqueSimulator/             # C++ 手法算法（贪心在线分片 + 束搜索离线求解）
 InputSystem/                    # C++ 底层输入注入（NtInject / NtSendInput）
 TriggerRs/                      # Rust 触发内核（cdylib，嵌入主 DLL 分发）
-native/prebuilt/                # CI 用预编译原生 DLL（runner 无 v145 C++ 工具链）
-build_cpp.bat                   # 一键构建两个原生工程
+native/prebuilt/                # CI 使用预编译 InputSystem.dll
+build_cpp.bat                   # 构建 InputSystem
 tools/                          # 离线评测 / 回归测试工装
 .github/workflows/build.yml     # CI：build → package → tag 触发 release
 ```

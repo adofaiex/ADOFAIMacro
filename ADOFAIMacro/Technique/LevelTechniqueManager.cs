@@ -142,6 +142,10 @@ namespace ADOFAIMacro.Technique
                     leftHandPressTimes = config.leftHandPressTimes,
                     rightHandPressTimes = config.rightHandPressTimes,
                     handPreference = config.handPreference,
+                    groupingStrategyId = config.groupingStrategyId,
+                    runHandPolicyId = config.runHandPolicyId,
+                    singleFingerKps = config.singleFingerKps,
+                    lazyRelease = config.lazyRelease,
                     techniqueSegments = CloneTechniqueSegments(config.techniqueSegments)
                 });
                 settings.SelectedTechniqueProfileIndex = 0;
@@ -158,6 +162,10 @@ namespace ADOFAIMacro.Technique
                 current.leftHandPressTimes = config.leftHandPressTimes;
                 current.rightHandPressTimes = config.rightHandPressTimes;
                 current.handPreference = config.handPreference;
+                current.groupingStrategyId = config.groupingStrategyId;
+                current.runHandPolicyId = config.runHandPolicyId;
+                current.singleFingerKps = config.singleFingerKps;
+                current.lazyRelease = config.lazyRelease;
 
                 // 如果配置文件有分段，则覆盖当前分段（包括空列表表示清除）
                 if (config.techniqueSegments != null)
@@ -176,6 +184,9 @@ namespace ADOFAIMacro.Technique
         /// </summary>
         private static void SanitizeConfig(Settings.TechniqueProfile config)
         {
+            config.groupingStrategyId = TechniquePlanner.NormalizeStrategyId(config.groupingStrategyId);
+            config.runHandPolicyId = TechniquePlanner.NormalizeHandPolicyId(config.runHandPolicyId);
+            config.singleFingerKps = (float)TechniquePlanner.NormalizeSingleFingerKps(config.singleFingerKps);
             if (config.techniqueSegments == null) return;
             foreach (var seg in config.techniqueSegments)
             {
@@ -236,6 +247,10 @@ namespace ADOFAIMacro.Technique
                     leftHandPressTimes = currentProfile.leftHandPressTimes,
                     rightHandPressTimes = currentProfile.rightHandPressTimes,
                     handPreference = currentProfile.handPreference,
+                    groupingStrategyId = currentProfile.groupingStrategyId,
+                    runHandPolicyId = currentProfile.runHandPolicyId,
+                    singleFingerKps = currentProfile.singleFingerKps,
+                    lazyRelease = currentProfile.lazyRelease,
                     techniqueSegments = CloneTechniqueSegments(currentProfile.techniqueSegments)
                 };
 
