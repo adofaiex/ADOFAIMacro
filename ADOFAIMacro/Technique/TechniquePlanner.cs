@@ -96,8 +96,9 @@ namespace ADOFAIMacro.Technique
         internal const string PieceFallbackStrategyId = "pieceFallback";
         // Bump when grouping, hand choice, key mapping or derived statistics change;
         // this invalidates caches without changing the trace's binary file format.
-        private const int PlannerRevision = 27;
+        private const int PlannerRevision = 31;
         private const double Frame = 0.0167;
+        private const double MinimumRepeatSafety = .0825;
         private const double NearSimultaneous = 0.003;
         private const double MinGrid = 0.000001;
         private const double Epsilon = 1e-9;
@@ -120,7 +121,7 @@ namespace ADOFAIMacro.Technique
         }
 
         internal readonly struct Slice(int start, int end, double length, double pressWindow, bool right,
-                                       double timeStart = double.NaN, double timeEnd = double.NaN)
+                                       double timeStart = double.NaN, double timeEnd = double.NaN, bool reverseKeyOrder = false)
         {
             internal readonly int Start = start;
             internal readonly int End = end;
@@ -131,6 +132,9 @@ namespace ADOFAIMacro.Technique
             internal readonly double TimeStart = timeStart;
             internal readonly double TimeEnd = timeEnd;
             internal int Count => End - Start;
+            internal readonly bool ReverseKeyOrder = reverseKeyOrder;
+            internal int PreferredIndex(HandLayout layout, int attack) =>
+                layout.PreferredIndex(Count, ReverseKeyOrder ? End - 1 - attack : attack - Start);
         }
 
         internal interface IGroupingStrategy
@@ -156,6 +160,9 @@ namespace ADOFAIMacro.Technique
                 RefineChartRhythms(notes, attacks, slices, startRight);
                 PreferLeadAfterPickup(notes, attacks, slices, startRight);
                 RepairHalfPulseEntry(notes, attacks, slices);
+                // Validate the measured groups against the final neighbors; an
+                // upstream edit can change which seams later repairs choose.
+                RefineChartRhythms(notes, attacks, slices, startRight, measuredPhrases: true);
                 return slices;
             }
         }
@@ -2184,7 +2191,8 @@ namespace ADOFAIMacro.Technique
             }
         }
 
-        internal static void RefineChartRhythms(TechniqueNote[] notes, List<Attack> attacks, List<Slice> rows, bool preferredRight)
+        internal static void RefineChartRhythms(TechniqueNote[] notes, List<Attack> attacks, List<Slice> rows, bool preferredRight,
+            bool measuredPhrases = false)
         {
             if (attacks.Count < 5) return;
             var plain = new bool[attacks.Count];
@@ -2213,7 +2221,20 @@ namespace ADOFAIMacro.Technique
                 {
                     double gap = Gap(start);
                     int stop = start;
-                    if (start >= begin + 3 && start + 7 < end && gap is >= .039 and <= .05 &&
+                    int note = attacks[start].Index;
+                    if (!measuredPhrases && start == begin && start > 0 && note > 0 && notes[note - 1].Kind == NoteKind.HoldEnd &&
+                        Time(start) - notes[note - 1].Time < Frame && gap >= Frame &&
+                        Near(Gap(start + 1), gap, .1) && Time(start + 2) - Time(start) < attacks[start].CellLength &&
+                        Gap(start + 2) > 4 * attacks[start].CellLength)
+                    {
+                        double width = attacks[start].CellLength;
+                        if (TryApply([(start, start + 3, width, 1)], profile, !rows[Find(start - 1)].Right))
+                        {
+                            start += 3;
+                            continue;
+                        }
+                    }
+                    if (!measuredPhrases && start >= begin + 3 && start + 7 < end && gap is >= .039 and <= .05 &&
                         Note(start).FollowingTurn >= .6 && Gap(start + 1) < .014 &&
                         Near(Time(start + 3) - Time(start), 2 * gap, .012) &&
                         Near(Gap(start - 1), 2 * gap, .012) && Near(Gap(start - 2), 2 * gap, .012) &&
@@ -2228,13 +2249,20 @@ namespace ADOFAIMacro.Technique
                         }
                         if (TryApply(groups, profile)) { start = cursor; continue; }
                     }
-                    if (gap >= .025 && gap <= .075 && Near(Note(start).FollowingTurn, .5, .02))
+                    if ((measuredPhrases || gap is >= .025 and <= .075) && gap > 0 && Near(Note(start).FollowingTurn, .5, .02))
                     {
+                        if (measuredPhrases && TryChangingQuarterTurns(start, end, profile, out int quarterEnd))
+                        { start = quarterEnd; continue; }
                         while (stop + 1 < end && Near(Gap(stop), gap, .012) && Near(Note(stop).FollowingTurn, .5, .02)) stop++;
-                        bool closedSquare = start > begin && stop + 1 < end && stop - start == 4 &&
+                        bool closedSquare = (measuredPhrases || gap is >= .025 and <= .075) && start > begin && stop + 1 < end && stop - start == 4 &&
                             Near(Gap(start - 1), 2 * gap, .025) && Near(Gap(stop), 2 * gap, .025) &&
                             Near(Note(start - 1).FollowingTurn, 1, .035) && Near(Note(stop).FollowingTurn, 1, .035);
-                        if (stop - start >= 6 || closedSquare)
+                        if (closedSquare && (measuredPhrases || gap >= .05))
+                        {
+                            if (TryApply([(start, start + 2, 2 * gap, 1), (start + 2, start + 4, 2 * gap, 1)],
+                                profile, false, reverseRightPair: true)) { start += 4; continue; }
+                        }
+                        if (stop - start >= 6 || !measuredPhrases && closedSquare)
                         {
                             var groups = new List<(int Start, int End, double Width, int Beats)>();
                             for (int attack = start; attack + 4 <= stop + 1; attack += 4)
@@ -2244,35 +2272,50 @@ namespace ADOFAIMacro.Technique
                                 int cursor = groups[groups.Count - 1].End;
                                 if (!closedSquare && cursor + 2 < end && Near(Gap(cursor - 1), gap, .012) && Gap(cursor) <= gap * .5 && Gap(cursor + 1) > 2 * gap)
                                     groups.Add((cursor, cursor + 2, 4 * gap, 1));
+                                else if (measuredPhrases && !closedSquare && cursor == stop && cursor + 1 < end &&
+                                    Near(Gap(cursor - 1), gap, .012) && Near(Gap(cursor), 4 * gap, .025) &&
+                                    Near(Note(cursor).FollowingTurn, 2, .035))
+                                    groups.Add((cursor, cursor + 1, 4 * gap, 1));
                                 if (TryApply(groups, profile)) { start = groups[groups.Count - 1].End; continue; }
                             }
                         }
                     }
 
+                    if (measuredPhrases && TryEvenThirds(begin, start, end, profile, out int thirdsEnd))
+                    { start = thirdsEnd; continue; }
+
                     bool matched = false;
                     for (int size = 3; size <= 4 && start + 3 * size <= end; size++)
                     {
                         double period = Time(start + size) - Time(start);
-                        if (!(Note(start).FollowingTurn > 0) || Gap(start) > .014 || period < .045 || period > .10 ||
-                            Time(start + size - 1) - Time(start) > period * .55 || Gap(start + size - 1) < period * .45) continue;
+                        if (!(Note(start).FollowingTurn > 0) ||
+                            (measuredPhrases
+                                ? Gap(start) > period * .20 || Time(start + size - 1) - Time(start) > period * .40 || Gap(start + size - 1) < period * .60
+                                : Gap(start) > .014 || period < .045 || period > .10 ||
+                                    Time(start + size - 1) - Time(start) > period * .55 || Gap(start + size - 1) < period * .45)) continue;
                         bool Cycle(int attack)
                         {
                             for (int offset = 0; offset < size - 1; offset++)
                                 if (!Near(Gap(attack + offset), Gap(start + offset), .035)) return false;
                             return true;
                         }
+                        var groups = new List<(int Start, int End, double Width, int Beats)> { (start, start + size, period, 1) };
                         stop = start + size;
-                        while (stop + size <= end && Near(Time(stop) - Time(stop - size), period, .012) && Cycle(stop)) stop += size;
-                        if (stop - start < 3 * size) continue;
-                        var groups = new List<(int Start, int End, double Width, int Beats)>();
-                        for (int attack = start; attack < stop; attack += size) groups.Add((attack, attack + size, period, 1));
+                        while (stop + size <= end && Cycle(stop))
+                        {
+                            double elapsed = Time(stop) - Time(groups[groups.Count - 1].Start);
+                            int step = measuredPhrases ? BeatStep(elapsed, period) : Near(elapsed, period, .012) ? 1 : 0;
+                            if (step == 0) break;
+                            groups.Add((stop, stop + size, period, step));
+                            stop += size;
+                        }
+                        if (groups.Count < 3) continue;
                         int cursor = stop;
                         int limit = Math.Min(end, stop + 192);
                         while (cursor < limit)
                         {
-                            double ratio = (Time(cursor) - Time(groups[groups.Count - 1].Start)) / period;
-                            int steps = (int)Math.Round(Math.Min(ratio, 5));
-                            if (steps is < 1 or > 4 || Math.Abs(ratio - steps) > .018) break;
+                            int steps = BeatStep(Time(cursor) - Time(groups[groups.Count - 1].Start), period);
+                            if (steps == 0) break;
                             if (cursor + 2 < end && Near(Gap(cursor), 2 * period, .018) &&
                                 Near(Gap(cursor + 1), 2 * period, .018)) break;
                             int next = cursor + 1;
@@ -2293,6 +2336,36 @@ namespace ADOFAIMacro.Technique
                         break;
                     }
                     if (matched) continue;
+                    if (measuredPhrases)
+                    {
+                        if (TryMixedPulse(start, end, profile, out int next)) { start = next; continue; }
+                        start++;
+                        continue;
+                    }
+
+                    // A measured pair can open a new pulse after the two slower beats.
+                    // Group by the pair's onset, not by the earlier folded grid cells.
+                    if (start >= begin + 2 && gap <= .02 && Note(start).FollowingTurn is > 0 and <= .25 &&
+                        Gap(start + 2) <= .02)
+                    {
+                        double pulse = Time(start + 2) - Time(start);
+                        if (pulse is >= .097 and <= .19 && Near(Gap(start - 1), 2 * pulse, .025) &&
+                            Near(Gap(start - 2), 2 * pulse, .025))
+                        {
+                            var groups = new List<(int Start, int End, double Width, int Beats)>();
+                            int cursor = start, pairs = 0;
+                            while (cursor < end && Near(Time(cursor) - Time(start), groups.Count * pulse, .012))
+                            {
+                                int next = cursor + 1;
+                                if (next < end && Near(Gap(cursor), gap, .12)) next++;
+                                if (next < end && Time(next) - Time(cursor) < pulse * .7) break;
+                                groups.Add((cursor, next, pulse, 1));
+                                if (next - cursor == 2) pairs++;
+                                cursor = next;
+                            }
+                            if (pairs >= 4 && TryApply(groups, profile, preferredRight)) { start = cursor; continue; }
+                        }
+                    }
 
                     if (gap >= .097 && gap <= .19 && Near(Note(start).FollowingTurn, .5, .035))
                     {
@@ -2309,21 +2382,212 @@ namespace ADOFAIMacro.Technique
                             if (steps == 1) direct++;
                             cursor = next;
                         }
-                        if (direct >= 4 && TryApply(groups, profile)) { start = cursor; continue; }
+                        bool slowEntry = start >= begin + 2 && Near(Gap(start - 1), 2 * gap, .025) &&
+                            Near(Note(start - 1).FollowingTurn, 1, .035) &&
+                            Note(start - 2).FollowingTurn > 0 &&
+                            Gap(start - 2) / Note(start - 2).FollowingTurn <= gap * .75 &&
+                            Gap(start - 2) >= MinimumCellLength(profile.BpmLimit) * 1.1;
+                        if (direct >= 4 && TryApply(groups, profile, slowEntry ? preferredRight : null))
+                        { start = cursor; continue; }
                     }
                     start++;
                 }
                 begin = end;
             }
 
-            bool TryApply(List<(int Start, int End, double Width, int Beats)> groups, TechniqueProfile profile)
+            bool TryChangingQuarterTurns(int start, int end, TechniqueProfile profile, out int stop)
+            {
+                stop = start;
+                var groups = new List<(int Start, int End, double Width, int Beats)>();
+                int cursor = start;
+                bool changed = false;
+                while (cursor + 4 < end)
+                {
+                    double unit = Gap(cursor);
+                    bool fits = unit > 0;
+                    for (int i = cursor; i < cursor + 4 && fits; i++)
+                        fits = Near(Gap(i), unit, .025) && Near(Note(i).FollowingTurn, .5, .02);
+                    if (!fits) break;
+                    double width = 4 * unit;
+                    changed |= groups.Count > 0 && !Near(width, groups[groups.Count - 1].Width, .025);
+                    groups.Add((cursor, cursor + 4, width, 1));
+                    cursor += 4;
+                }
+                if (!changed || groups.Count < 3) return false;
+                double tailWidth = groups[groups.Count - 1].Width;
+                if (cursor + 1 < end && Near(Note(cursor).FollowingTurn, 2, .035) && Near(Gap(cursor), tailWidth, .025))
+                {
+                    groups.Add((cursor, cursor + 1, tailWidth, 1));
+                    cursor++;
+                }
+                stop = cursor;
+                return TryApply(groups, profile);
+            }
+
+            bool TryEvenThirds(int begin, int start, int end, TechniqueProfile profile, out int stop)
+            {
+                stop = start;
+                if (!Near(Note(start).FollowingTurn, 1d / 3, .035)) return false;
+                double firstPulse = 3 * Gap(start);
+                double entryPulse = start >= begin + 2 ? Gap(start - 2) : firstPulse;
+                int entrySteps = start >= begin + 2 && IsFullBeat(start - 2, entryPulse)
+                    ? FullSteps(start - 1, entryPulse) : 0;
+                bool entry = entrySteps != 0;
+                if (!entry && start != 0) return false;
+
+                // Check each metric beat against its own onsets. A tempo change at a
+                // downbeat changes the width, but does not restart the hand sequence.
+                var groups = new List<(int Start, int End, double Width, int Beats)>();
+                int cursor = start, steps = entry ? entrySteps : 1;
+                while (cursor + 2 < end)
+                {
+                    double third = Gap(cursor);
+                    if (!IsThird(cursor, third) || !IsThird(cursor + 1, third)) break;
+                    double pulse = 3 * third;
+                    int nextSteps = 0;
+                    if (cursor + 3 < end)
+                    {
+                        nextSteps = BeatStep(Time(cursor + 3) - Time(cursor), pulse);
+                        if (nextSteps == 0 || !Near(Note(cursor + 2).FollowingTurn, nextSteps - 2d / 3, .035)) break;
+                    }
+                    else if (end != attacks.Count) break;
+                    groups.Add((cursor, cursor + 3, pulse, steps));
+                    steps = nextSteps;
+                    cursor += 3;
+                }
+                if (groups.Count == 0) return false;
+                double lastPulse = groups[groups.Count - 1].Width;
+                double exitPulse = lastPulse;
+                bool exit = IsFullBeat(cursor, exitPulse);
+                if (!exit && cursor + 2 < end)
+                {
+                    // The downbeat ending the thirds may start a slower or faster
+                    // clock. Require consecutive whole beats on the new side.
+                    double nextPulse = Gap(cursor);
+                    if (IsFullBeat(cursor, nextPulse) && IsFullBeat(cursor + 1, nextPulse))
+                    {
+                        exit = true;
+                        exitPulse = nextPulse;
+                    }
+                }
+                if (entry ? !exit && (cursor != end || end != attacks.Count) : !exit || !IsFullBeat(cursor + 1, lastPulse))
+                    return false;
+                if (exit)
+                {
+                    do
+                    {
+                        groups.Add((cursor, cursor + 1, exitPulse, steps));
+                        steps = 1;
+                        cursor++;
+                    } while (cursor < end && IsFullBeat(cursor - 1, exitPulse));
+                }
+                stop = cursor;
+                if (entry)
+                {
+                    // A folded grid can have the wrong phase even on the plain beats
+                    // before a rest. Include their confirmed clock when it is split.
+                    int anchor = start - 1;
+                    while (anchor > begin && IsFullBeat(anchor - 1, entryPulse)) anchor--;
+                    bool folded = false;
+                    for (int a = anchor; a < start && !folded; a++)
+                    {
+                        int row = Find(a);
+                        folded = rows[row].Start != a || rows[row].End != a + 1 ||
+                            a > anchor && rows[row].Right == rows[Find(a - 1)].Right;
+                    }
+                    if (folded)
+                    {
+                        var prefix = new List<(int Start, int End, double Width, int Beats)>();
+                        for (int a = anchor; a < start; a++) prefix.Add((a, a + 1, entryPulse, 1));
+                        groups.InsertRange(0, prefix);
+                        return TryApply(groups, profile);
+                    }
+                    return TryApply(groups, profile, rows[Find(start - 1)].Right ^ ((entrySteps & 1) != 0));
+                }
+                return TryApply(groups, profile);
+
+                bool IsThird(int attack, double third) => Near(Note(attack).FollowingTurn, 1d / 3, .035) && Near(Gap(attack), third, .025);
+                bool IsFullBeat(int attack, double pulse) => FullSteps(attack, pulse) == 1;
+                int FullSteps(int attack, double pulse)
+                {
+                    if (attack + 1 >= end) return 0;
+                    int elapsed = BeatStep(Gap(attack), pulse);
+                    return elapsed != 0 && Near(Note(attack).FollowingTurn, elapsed, .035) ? elapsed : 0;
+                }
+            }
+
+            bool TryMixedPulse(int start, int end, TechniqueProfile profile, out int stop)
+            {
+                stop = start;
+                double turn = Note(start).FollowingTurn;
+                if (turn is <= 0 or > .5) return false;
+                double secondsPerTurn = Gap(start) / turn;
+                foreach (double beatTurn in new[] { 1d, 2d })
+                {
+                    double pulse = secondsPerTurn * beatTurn;
+                    if (pulse < MinimumRepeatSafety || pulse > 4 * MinimumCellLength(profile.BpmLimit)) continue;
+                    var groups = new List<(int Start, int End, double Width, int Beats)>();
+                    int cursor = start, steps = 1, sizes = 0, decorated = 0, direct = 0;
+                    while (cursor < end)
+                    {
+                        int next = cursor + 1;
+                        while (next < end && Time(next) - Time(cursor) <= pulse * .40 + Epsilon) next++;
+                        int count = next - cursor;
+                        if (count > 4) break;
+                        double angle = 0;
+                        bool fits = true;
+                        for (int attack = cursor; attack < Math.Min(next, end - 1); attack++)
+                        {
+                            double part = Note(attack).FollowingTurn;
+                            if (!(part > 0) || !Near(Gap(attack), part * secondsPerTurn, .025)) { fits = false; break; }
+                            angle += part;
+                        }
+                        if (!fits) break;
+                        groups.Add((cursor, next, pulse, steps));
+                        sizes |= 1 << count;
+                        if (count > 1) decorated++;
+                        if (steps == 1) direct++;
+                        if (next < end)
+                        {
+                            steps = BeatStep(Time(next) - Time(cursor), pulse);
+                            if (steps == 0 || !Near(angle, steps * beatTurn, .025)) break;
+                        }
+                        cursor = next;
+                    }
+                    // Mixed sizes and repeated decorated beats distinguish this clock
+                    // from an arbitrary grouping of evenly spaced single notes.
+                    if (groups.Count < 6 || direct < 5 || decorated < 3 || (sizes & (sizes - 1)) == 0) continue;
+                    stop = groups[groups.Count - 1].End;
+                    if (TryApply(groups, profile)) return true;
+                }
+                return false;
+            }
+
+            bool TryApply(List<(int Start, int End, double Width, int Beats)> groups, TechniqueProfile profile,
+                bool? requiredLead = null, bool reverseRightPair = false)
             {
                 int start = groups[0].Start, stop = groups[groups.Count - 1].End;
                 int first = Find(start), last = Find(stop - 1);
                 var head = rows[first];
                 var tail = rows[last];
                 double horizon = MinimumCellLength(profile.BpmLimit) * 1.1;
-                if (start == head.Start && stop == tail.End && groups.Count == last - first + 1)
+                if (measuredPhrases) horizon = Math.Max(MinimumRepeatSafety, horizon);
+                if (measuredPhrases && !requiredLead.HasValue && start > 0)
+                {
+                    var previous = rows[Find(start - 1)];
+                    double width = groups[0].Width;
+                    if (previous.End == start && plain[previous.Start] &&
+                        ReferenceEquals(attacks[previous.Start].Profile, profile) && Near(previous.PressWindow, width, .025))
+                    {
+                        int steps = BeatStep(Time(start) - Time(previous.Start), width);
+                        if (steps != 0) requiredLead = previous.Right ^ ((steps & 1) != 0);
+                    }
+                }
+                bool? exitLead = measuredPhrases && !requiredLead.HasValue && stop == tail.End
+                    ? LeadFromFollowingPhrase(groups, last + 1, profile) : null;
+                bool? anchoredLead = requiredLead ?? exitLead;
+                if (start == head.Start && stop == tail.End && groups.Count == last - first + 1 &&
+                    (!anchoredLead.HasValue || head.Right == anchoredLead.Value))
                 {
                     bool matches = true;
                     for (int index = 0; index < groups.Count && matches; index++)
@@ -2331,6 +2595,7 @@ namespace ADOFAIMacro.Technique
                         var group = groups[index];
                         var row = rows[first + index];
                         matches = row.Start == group.Start && row.End == group.End &&
+                            row.ReverseKeyOrder == (reverseRightPair && row.Right) &&
                             (index == 0 || (row.Right != rows[first + index - 1].Right) == ((group.Beats & 1) != 0));
                     }
                     if (matches) return true;
@@ -2338,17 +2603,18 @@ namespace ADOFAIMacro.Technique
                 if (start > head.Start && !CanCut(start) || stop < tail.End && !CanCut(stop)) return false;
                 if (!plain[head.Start] || !plain[tail.End - 1]) return false;
                 bool lead = head.Right;
-                if (first > 0 && start == head.Start && Near(Time(start) - Time(rows[first - 1].Start), groups[0].Width, .025))
+                if (requiredLead.HasValue) lead = requiredLead.Value;
+                else if (first > 0 && start == head.Start && Near(Time(start) - Time(rows[first - 1].Start), groups[0].Width, .025))
                     lead = !rows[first - 1].Right;
                 else if (start == 0 || Time(start) - Time(start - 1) >= 4 * Math.Max(groups[0].Width, rows[Math.Max(0, first - 1)].PressWindow))
                     lead = preferredRight;
                 HashSet<(int From, int To, byte Key, int Mode)>? original = null;
-                for (int phase = 0; phase < (start == 0 ? 1 : 2); phase++)
+                for (int phase = 0; phase < (requiredLead.HasValue || start == 0 && !exitLead.HasValue ? 1 : 2); phase++)
                 {
                     var replacement = new List<Slice>();
                     if (start > head.Start)
                         replacement.Add(new Slice(head.Start, start, head.Length, head.PressWindow, head.Right, head.TimeStart, Time(start)));
-                    bool right = lead ^ (phase != 0);
+                    bool right = (exitLead ?? lead) ^ (phase != 0);
                     bool fits = true;
                     foreach (var group in groups)
                     {
@@ -2357,27 +2623,71 @@ namespace ADOFAIMacro.Technique
                         double boundary = group.End < attacks.Count ? Time(group.End) : onset + group.Width;
                         double finish = Math.Min(boundary, Math.Max(onset + group.Width, Time(group.End - 1) + Frame));
                         if (group.End - group.Start > profile.Layout(right).Capacity || finish <= Time(group.End - 1)) { fits = false; break; }
-                        replacement.Add(new Slice(group.Start, group.End, group.Width, group.Width, right, onset, finish));
+                        replacement.Add(new Slice(group.Start, group.End, group.Width, group.Width, right, onset, finish,
+                            reverseRightPair && right));
                     }
                     if (!fits) continue;
                     if (stop < tail.End)
                         replacement.Add(new Slice(stop, tail.End, tail.Length, tail.PressWindow, tail.Right, Time(stop), tail.TimeEnd));
                     if (replacement.Count == last - first + 1 && replacement.TrueForAll(row =>
-                        rows[Find(row.Start)].Start == row.Start && rows[Find(row.Start)].End == row.End && rows[Find(row.Start)].Right == row.Right))
+                        rows[Find(row.Start)].Start == row.Start && rows[Find(row.Start)].End == row.End &&
+                        rows[Find(row.Start)].Right == row.Right && rows[Find(row.Start)].ReverseKeyOrder == row.ReverseKeyOrder))
                         return true;
-                    original ??= MeasurePlanRisks(notes, attacks, rows, horizon);
+                    original ??= MeasurePlanRisks(notes, attacks, rows, horizon, measuredPhrases);
                     var candidate = new List<Slice>(rows);
                     candidate.RemoveRange(first, last - first + 1);
                     candidate.InsertRange(first, replacement);
-                    if (!MeasurePlanRisks(notes, attacks, candidate, horizon).IsSubsetOf(original)) continue;
+                    int nextIndex = first + replacement.Count;
+                    if (reverseRightPair && stop == tail.End && nextIndex < candidate.Count)
+                    {
+                        var next = candidate[nextIndex];
+                        double onset = Time(next.Start);
+                        // The next occupied grid cell can start before the square has finished.
+                        // Use its actual attack boundary so it cannot cap the square's last release early.
+                        if (next.TimeStart < replacement[replacement.Count - 1].TimeEnd &&
+                            next.TimeStart < onset && onset < next.TimeEnd && plain[next.Start] &&
+                            ReferenceEquals(attacks[next.Start].Profile, profile))
+                            candidate[nextIndex] = new Slice(next.Start, next.End, next.Length, next.PressWindow,
+                                next.Right, onset, next.TimeEnd, next.ReverseKeyOrder);
+                    }
+                    if (!MeasurePlanRisks(notes, attacks, candidate, horizon, measuredPhrases).IsSubsetOf(original)) continue;
                     rows.RemoveRange(first, last - first + 1);
                     rows.InsertRange(first, replacement);
+                    if (nextIndex < rows.Count) rows[nextIndex] = candidate[nextIndex];
                     return true;
                 }
                 return false;
 
                 bool CanCut(int attack) => Time(attack) - Time(attack - 1) >= Math.Min(.02, groups[0].Width * .25) &&
                     plain[attack - 1] && plain[attack] && ReferenceEquals(attacks[attack - 1].Profile, attacks[attack].Profile);
+            }
+
+            bool? LeadFromFollowingPhrase(List<(int Start, int End, double Width, int Beats)> groups,
+                int next, TechniqueProfile profile)
+            {
+                if (groups.Count < 3 || next + 2 >= rows.Count) return null;
+                var last = groups[groups.Count - 1];
+                var entry = rows[next];
+                double width = entry.PressWindow;
+                // Use an established change of rhythm as an exit anchor. A lone
+                // grid row, an unmeasured gap or a different layout is not an anchor.
+                int steps = BeatStep(Time(entry.Start) - Time(last.Start), last.Width);
+                if (steps == 0 || entry.Count < 2 ||
+                    entry.Count == last.End - last.Start && Near(width, last.Width, .08) ||
+                    attacks[entry.Start].Index != attacks[last.End - 1].Index + 1) return null;
+                for (int i = next; i < next + 3; i++)
+                {
+                    var row = rows[i];
+                    if (!Near(row.PressWindow, width, .025) || row.Count != entry.Count ||
+                        Time(row.End - 1) - Time(row.Start) > width * .40 ||
+                        i > next && (row.Right == rows[i - 1].Right ||
+                            !Near(Time(row.Start) - Time(rows[i - 1].Start), width, .025))) return null;
+                    for (int a = row.Start; a < row.End; a++)
+                        if (!plain[a] || !ReferenceEquals(attacks[a].Profile, profile) ||
+                            attacks[a].Index != attacks[a - 1].Index + 1) return null;
+                }
+                for (int i = 1; i < groups.Count; i++) steps ^= groups[i].Beats;
+                return entry.Right ^ ((steps & 1) != 0);
             }
 
             int Find(int attack)
@@ -2393,6 +2703,12 @@ namespace ADOFAIMacro.Technique
             TechniqueNote Note(int attack) => notes[attacks[attack].Index];
             double Time(int attack) => Note(attack).Time;
             double Gap(int attack) => Time(attack + 1) - Time(attack);
+            static int BeatStep(double gap, double period)
+            {
+                double ratio = gap / period;
+                int steps = (int)Math.Round(Math.Min(ratio, 5));
+                return steps is >= 1 and <= 4 && Math.Abs(ratio - steps) <= .018 ? steps : 0;
+            }
             static bool Near(double actual, double expected, double tolerance) => Math.Abs(actual - expected) <= expected * tolerance + Epsilon;
         }
 
@@ -2634,7 +2950,7 @@ namespace ADOFAIMacro.Technique
         }
 
         private static HashSet<(int From, int To, byte Key, int Mode)> MeasurePlanRisks(
-            TechniqueNote[] notes, List<Attack> attacks, List<Slice> rows, double horizon)
+            TechniqueNote[] notes, List<Attack> attacks, List<Slice> rows, double horizon, bool ignoreFixedLazyTail = false)
         {
             var risks = new HashSet<(int, int, byte, int)>();
             var strokes = AssignKeySlots(notes, attacks, rows);
@@ -2649,7 +2965,12 @@ namespace ADOFAIMacro.Technique
                     double down = notes[stroke.Down].Time;
                     int prior = last[stroke.Key];
                     if (prior >= 0 && down - notes[prior].Time < horizon) risks.Add((prior, stroke.Down, stroke.Key, mode));
-                    if (!stroke.Hold && stroke.ReleaseAt - down < Frame) risks.Add((stroke.Down, -1, stroke.Key, mode));
+                    // The lazy tail deliberately releases 15 ms after the chart ends,
+                    // independent of which key is used for that final attack.
+                    bool lazyFinalAttack = ignoreFixedLazyTail && mode != 0 && stroke.Down == notes.Length - 1 &&
+                        stroke.ReleaseAt == down + LazyFinalReleaseDelay;
+                    if (!stroke.Hold && !lazyFinalAttack && stroke.ReleaseAt - down < Frame)
+                        risks.Add((stroke.Down, -1, stroke.Key, mode));
                     last[stroke.Key] = stroke.Down;
                 }
             }
@@ -3155,7 +3476,7 @@ namespace ADOFAIMacro.Technique
                     int index = attacks[pos].Index;
                     var note = notes[index];
                     bool hold = note.Kind == NoteKind.HoldStart;
-                    int keyIndex = layout.PreferredIndex(slice.Count, pos - slice.Start);
+                    int keyIndex = slice.PreferredIndex(layout, pos);
                     strokes.Add(new Stroke(index, slice.Right, keyIndex, keyIndex, slice.PressWindow, hold, sliceIndex));
                 }
             }
